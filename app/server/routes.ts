@@ -176,17 +176,21 @@ authRouter.post('/totp/disable', requireAuth, writeLimiter, wrap((req, res) => {
 /* Mounted behind requireAuth in index.ts. */
 export const tenantRouter = express.Router();
 
-function stackRows(tid: number) {
-  return (getDb().prepare(
-    `SELECT * FROM user_tech_stack WHERE tenant_id = ? ORDER BY technology COLLATE NOCASE, version`
-  ).all(tid) as any[]).map((row) => ({
+function stackItem(row: any) {
+  return {
     id: row.id,
     technology: row.technology,
     version: row.version || undefined,
     vendor: row.vendor || undefined,
     category: row.category || undefined,
     createdAt: row.created_at,
-  }));
+  };
+}
+
+function stackRows(tid: number) {
+  return (getDb().prepare(
+    `SELECT * FROM user_tech_stack WHERE tenant_id = ? ORDER BY technology COLLATE NOCASE, version`
+  ).all(tid) as any[]).map(stackItem);
 }
 
 tenantRouter.get('/tech-stack', requireTenant, wrap((req, res) => {
@@ -205,12 +209,27 @@ tenantRouter.post('/tech-stack', ...requireTenantAdmin, writeLimiter, wrap((req,
     `INSERT INTO user_tech_stack (tenant_id, technology, version, vendor, category) VALUES (?, ?, ?, ?, ?)`
   ).run(tenantId(req), technology, version, optStr(req.body?.vendor, 100), optStr(req.body?.category, 100));
   const row = db.prepare(`SELECT * FROM user_tech_stack WHERE id = ?`).get(result.lastInsertRowid) as any;
-  res.status(201).json({
-    item: {
-      id: row.id, technology: row.technology, version: row.version || undefined,
-      vendor: row.vendor || undefined, category: row.category || undefined, createdAt: row.created_at,
-    },
-  });
+  res.status(201).json({ item: stackItem(row) });
+}));
+
+/* Edit one row in place. All four fields are sent; empty optional fields are
+   cleared. Same duplicate rule as create, ignoring the row being edited. */
+tenantRouter.put('/tech-stack/:id', ...requireTenantAdmin, writeLimiter, wrap((req, res) => {
+  const id = idParam(req);
+  const tid = tenantId(req);
+  const technology = str(req.body?.technology, 100);
+  if (!technology) return res.status(400).json({ error: 'technology is required (max 100 characters)' });
+  const version = optStr(req.body?.version, 100);
+  const db = getDb();
+  const current = db.prepare(`SELECT id FROM user_tech_stack WHERE id = ? AND tenant_id = ?`).get(id, tid);
+  if (!current) return res.status(404).json({ error: 'Tech stack item not found' });
+  const clash = (db.prepare(`SELECT technology, version FROM user_tech_stack WHERE tenant_id = ? AND id != ?`).all(tid, id) as any[])
+    .some((r) => stackKey(r) === stackKey({ technology, version }));
+  if (clash) return res.status(409).json({ error: 'That technology and version are already in the stack' });
+  db.prepare(
+    `UPDATE user_tech_stack SET technology = ?, version = ?, vendor = ?, category = ? WHERE id = ? AND tenant_id = ?`
+  ).run(technology, version, optStr(req.body?.vendor, 100), optStr(req.body?.category, 100), id, tid);
+  res.json({ item: stackItem(db.prepare(`SELECT * FROM user_tech_stack WHERE id = ?`).get(id)) });
 }));
 
 tenantRouter.delete('/tech-stack/:id', ...requireTenantAdmin, writeLimiter, wrap((req, res) => {

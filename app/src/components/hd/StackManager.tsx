@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Download, FileUp, Plus, Server, Trash2, Upload } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { Check, Download, FileUp, Pencil, Plus, Server, Trash2, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { fetchTechStack, createTechStackItem, deleteTechStackItem, type TechStackItem } from '@/services/apiService';
+import { fetchTechStack, createTechStackItem, deleteTechStackItem, updateTechStackItem, type TechStackItem } from '@/services/apiService';
 import { stackApi, type ImportSummary } from '@/services/hdApi';
 import { Panel, EmptyState, Badge } from './ui';
 import { inputCls, notifyError } from './helpers';
@@ -16,6 +16,8 @@ export default function StackManager({ canEdit, onChanged }: { canEdit: boolean;
   const [form, setForm] = useState({ technology: '', version: '', vendor: '', category: '' });
   const [adding, setAdding] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [editing, setEditing] = useState<{ id: number; technology: string; version: string; vendor: string; category: string } | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -49,6 +51,39 @@ export default function StackManager({ canEdit, onChanged }: { canEdit: boolean;
     } finally {
       setAdding(false);
     }
+  };
+
+  const startEdit = (item: TechStackItem) => setEditing({
+    id: item.id,
+    technology: item.technology,
+    version: item.version ?? '',
+    vendor: item.vendor ?? '',
+    category: item.category ?? '',
+  });
+
+  const saveEdit = async () => {
+    if (!editing || !editing.technology.trim() || saving) return;
+    setSaving(true);
+    try {
+      const item = await updateTechStackItem(editing.id, {
+        technology: editing.technology.trim(),
+        version: editing.version.trim(),
+        vendor: editing.vendor.trim(),
+        category: editing.category.trim(),
+      });
+      setStack((s) => s.map((x) => (x.id === item.id ? item : x)));
+      setEditing(null);
+      onChanged?.();
+    } catch (err) {
+      notifyError(err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const editKeys = (e: KeyboardEvent) => {
+    if (e.key === 'Enter') { e.preventDefault(); void saveEdit(); }
+    if (e.key === 'Escape') { e.preventDefault(); setEditing(null); }
   };
 
   const remove = async (item: TechStackItem) => {
@@ -117,18 +152,59 @@ export default function StackManager({ canEdit, onChanged }: { canEdit: boolean;
                 <th className="px-3 py-2 font-medium">Version</th>
                 <th className="px-3 py-2 font-medium">Vendor</th>
                 <th className="px-3 py-2 font-medium">Category</th>
-                {canEdit && <th className="px-3 py-2 w-10"><span className="sr-only">Actions</span></th>}
+                {canEdit && <th className="px-3 py-2 w-20"><span className="sr-only">Actions</span></th>}
               </tr>
             </thead>
             <tbody>
-              {visible.map((item) => (
+              {visible.map((item) => editing?.id === item.id ? (
+                <tr key={item.id} className="border-t border-border-default bg-bg-elevated/50">
+                  {(['technology', 'version', 'vendor', 'category'] as const).map((field) => (
+                    <td key={field} className="px-2 py-1.5">
+                      <Input
+                        value={editing[field]}
+                        onChange={(e) => setEditing({ ...editing, [field]: e.target.value })}
+                        onKeyDown={editKeys}
+                        aria-label={field[0].toUpperCase() + field.slice(1)}
+                        placeholder={field === 'technology' ? 'Technology *' : ''}
+                        className={`${inputCls} h-8 text-sm`}
+                        maxLength={100}
+                        autoFocus={field === 'technology'}
+                      />
+                    </td>
+                  ))}
+                  <td className="px-2 py-1.5 text-right whitespace-nowrap">
+                    <button
+                      onClick={() => void saveEdit()}
+                      disabled={saving || !editing.technology.trim()}
+                      className="p-1.5 rounded text-text-tertiary hover:text-accent hover:bg-accent/10 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      aria-label="Save changes"
+                    >
+                      <Check size={14} />
+                    </button>
+                    <button
+                      onClick={() => setEditing(null)}
+                      className="p-1.5 rounded text-text-tertiary hover:text-text-primary hover:bg-bg-elevated cursor-pointer"
+                      aria-label="Cancel editing"
+                    >
+                      <X size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ) : (
                 <tr key={item.id} className="border-t border-border-default hover:bg-bg-elevated/50">
                   <td className="px-3 py-2 text-text-primary font-medium">{item.technology}</td>
                   <td className="px-3 py-2 text-text-secondary font-jetbrains text-xs">{item.version ?? '—'}</td>
                   <td className="px-3 py-2 text-text-secondary">{item.vendor ?? '—'}</td>
                   <td className="px-3 py-2 text-text-secondary">{item.category ?? '—'}</td>
                   {canEdit && (
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-3 py-2 text-right whitespace-nowrap">
+                      <button
+                        onClick={() => startEdit(item)}
+                        className="p-1.5 rounded text-text-tertiary hover:text-accent hover:bg-accent/10 cursor-pointer"
+                        aria-label={`Edit ${item.technology}`}
+                      >
+                        <Pencil size={14} />
+                      </button>
                       <button
                         onClick={() => void remove(item)}
                         className="p-1.5 rounded text-text-tertiary hover:text-critical hover:bg-critical/10 cursor-pointer"

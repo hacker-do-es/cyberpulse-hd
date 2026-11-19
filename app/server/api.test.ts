@@ -150,11 +150,32 @@ describe('multitenant API', () => {
     expect(stack).toEqual(['Exchange', 'FortiOS']);
   });
 
+  it('edits a stack row in place', async () => {
+    const [exchange, forti] = (await adminA.req('GET', '/api/tech-stack')).body.stack;
+    const edited = await adminA.req('PUT', `/api/tech-stack/${exchange.id}`,
+      { technology: 'Exchange Server', version: '2019', vendor: 'Microsoft', category: 'Email' });
+    expect(edited.status).toBe(200);
+    expect(edited.body.item).toMatchObject({ id: exchange.id, technology: 'Exchange Server', version: '2019', vendor: 'Microsoft', category: 'Email' });
+    // empty optional fields clear the value
+    const cleared = await adminA.req('PUT', `/api/tech-stack/${exchange.id}`, { technology: 'Exchange Server', version: '', vendor: '  ', category: 'Email' });
+    expect(cleared.body.item.version).toBeUndefined();
+    expect(cleared.body.item.vendor).toBeUndefined();
+    // saving a row unchanged is not a duplicate of itself; colliding with another row is
+    expect((await adminA.req('PUT', `/api/tech-stack/${exchange.id}`, { technology: 'exchange server', category: 'Email' })).status).toBe(200);
+    expect((await adminA.req('PUT', `/api/tech-stack/${exchange.id}`, { technology: forti.technology, version: forti.version })).status).toBe(409);
+    expect((await adminA.req('PUT', `/api/tech-stack/${exchange.id}`, { technology: '' })).status).toBe(400);
+    expect((await adminA.req('PUT', '/api/tech-stack/999999', { technology: 'X' })).status).toBe(404);
+    expect((await adminA.req('PUT', `/api/tech-stack/${exchange.id}`, { technology: 'Y' }, { csrf: false })).status).toBe(403);
+    const stack = (await adminA.req('GET', '/api/tech-stack')).body.stack.map((s: any) => s.technology);
+    expect(stack).toEqual(['exchange server', 'FortiOS']);
+  });
+
   it('isolates companies from each other', async () => {
     await adminB.login('bob', PW);
     expect((await adminB.req('GET', '/api/tech-stack')).body.stack).toHaveLength(0);
     const itemA = (await adminA.req('GET', '/api/tech-stack')).body.stack[0];
     expect((await adminB.req('DELETE', `/api/tech-stack/${itemA.id}`)).status).toBe(404);
+    expect((await adminB.req('PUT', `/api/tech-stack/${itemA.id}`, { technology: 'Hijacked' })).status).toBe(404);
     expect((await adminA.req('GET', '/api/tech-stack')).body.stack).toHaveLength(2);
     expect((await adminA.req('GET', '/api/admin/tenants')).status).toBe(403);
     expect((await adminA.req('POST', '/api/auth/active-tenant', { tenantId: tenantB })).status).toBe(403);
@@ -166,6 +187,8 @@ describe('multitenant API', () => {
     await memberA.login('mike', PW);
     expect((await memberA.req('GET', '/api/tech-stack')).status).toBe(200);
     expect((await memberA.req('POST', '/api/tech-stack', { technology: 'X' })).status).toBe(403);
+    const anyItem = (await memberA.req('GET', '/api/tech-stack')).body.stack[0];
+    expect((await memberA.req('PUT', `/api/tech-stack/${anyItem.id}`, { technology: 'X' })).status).toBe(403);
     expect((await memberA.req('GET', '/api/channels')).status).toBe(403);
     expect((await memberA.req('GET', '/api/tenant/settings')).status).toBe(403);
   });

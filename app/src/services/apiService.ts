@@ -258,6 +258,25 @@ export async function createTechStackItem(item: CreateTechStackParams): Promise<
   return data.item;
 }
 
+export async function updateTechStackItem(id: number, item: CreateTechStackParams): Promise<TechStackItem> {
+  const res = await fetch(`/api/tech-stack/${id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...cyberpulseHeaders(),
+    },
+    body: JSON.stringify(item),
+  });
+  const data = (await res.json().catch(() => ({}))) as { item?: TechStackItem; error?: string };
+  if (!res.ok) {
+    throw new Error(data.error || `Update tech stack item failed (${res.status})`);
+  }
+  if (!data.item) {
+    throw new Error('Invalid update tech stack response');
+  }
+  return data.item;
+}
+
 export async function deleteTechStackItem(id: number): Promise<void> {
   const res = await fetch(`/api/tech-stack/${id}`, {
     method: 'DELETE',
