@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* Regenerates the "Built-in RSS sources" section of both READMEs from
-   server/seeds.ts, so the documented URLs cannot drift from the shipped ones.
+   server/services/seeds.ts, so the documented URLs cannot drift from the shipped ones.
    Run with: npm run docs:sources */
 
 import { readFileSync, writeFileSync } from 'fs';
@@ -10,7 +10,7 @@ import { fileURLToPath } from 'url';
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '../..');
 
-const seeds = readFileSync(resolve(here, '../server/seeds.ts'), 'utf8');
+const seeds = readFileSync(resolve(here, '../server/services/seeds.ts'), 'utf8');
 
 const entry =
   /\{\s*name:\s*'((?:[^'\\]|\\.)*)',\s*rssUrl:\s*'([^']*)',\s*category:\s*'([^']*)'([^}]*)\}/g;
@@ -42,7 +42,7 @@ const COPY = {
     heading: `## Built-in RSS sources (${sources.length} sources, ${active.length} active)`,
     intro:
       `CyberPulse ships with ${sources.length} cybersecurity feeds, ${active.length} of them enabled by default. ` +
-      `This list is generated from \`app/server/seeds.ts\` — run \`npm run docs:sources\` after changing it.`,
+      `This list is generated from \`app/server/services/seeds.ts\` — run \`npm run docs:sources\` after changing it.`,
     retiredHeading: `### Retired (${retired.length})`,
     retiredIntro:
       'Verified unreachable, so they ship disabled rather than costing a request on every scrape. ' +
@@ -54,7 +54,7 @@ const COPY = {
     heading: `## Fuentes RSS incluidas (${sources.length} fuentes, ${active.length} activas)`,
     intro:
       `CyberPulse incluye ${sources.length} feeds de ciberseguridad, ${active.length} habilitados por defecto. ` +
-      `Esta lista se genera desde \`app/server/seeds.ts\` — ejecutá \`npm run docs:sources\` después de modificarlo.`,
+      `Esta lista se genera desde \`app/server/services/seeds.ts\` — ejecutá \`npm run docs:sources\` después de modificarlo.`,
     retiredHeading: `### Retiradas (${retired.length})`,
     retiredIntro:
       'Verificadas como inalcanzables, por eso se incluyen deshabilitadas en lugar de costar una petición en cada scrape. ' +
