@@ -20,20 +20,10 @@ import {
   ChevronRight,
   Trash2,
   Clock,
-  Linkedin,
 } from 'lucide-react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { timeAgo } from '@/lib/dateUtils';
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -43,8 +33,7 @@ import {
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import type { NewsArticle } from '@/data/mockNews';
-import { generateAiPost, type GenerateAiPostParams, getLinkedInStatus, publishToLinkedIn } from '@/services/apiService';
-import { getAiSettings } from '@/lib/settings';
+import { generateAiPost, type GenerateAiPostParams } from '@/services/apiService';
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
@@ -93,7 +82,7 @@ const severityColor = (s: string) => {
     case 'high': return 'bg-[#F97316]';
     case 'medium': return 'bg-[#EAB308]';
     case 'low': return 'bg-[#22C55E]';
-    default: return 'bg-[#808080]';
+    default: return 'bg-[#8B949E]';
   }
 };
 
@@ -1030,14 +1019,14 @@ function ToastNotification({ toast, onDismiss }: { toast: Toast; onDismiss: () =
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 20 }}
           transition={{ duration: 0.3, ease: [0, 0, 0.2, 1] as [number, number, number, number] }}
-          className="fixed top-4 right-4 z-[100] flex items-center gap-3 rounded-lg border border-[#222222] bg-[#181818] px-4 py-3 shadow-lg"
+          className="fixed top-4 right-4 z-[100] flex items-center gap-3 rounded-lg border border-[#2A3140] bg-[#1A1F2E] px-4 py-3 shadow-lg"
         >
           {toast.type === 'success' ? (
-            <Check size={16} className="text-[#CCFF00] shrink-0" />
+            <Check size={16} className="text-[#E8533F] shrink-0" />
           ) : (
             <AlertCircle size={16} className="text-[#EF4444] shrink-0" />
           )}
-          <span className="text-sm font-inter text-[#E5E5E5]">{toast.message}</span>
+          <span className="text-sm font-inter text-[#E6EDF3]">{toast.message}</span>
         </motion.div>
       )}
     </AnimatePresence>
@@ -1054,37 +1043,37 @@ function LinkedInPreview({ content, lang }: { content: string; lang: Language })
   const seeMore = content.length > 210;
 
   return (
-    <div className="rounded-lg overflow-hidden border border-[#E5E5E5] bg-white">
+    <div className="rounded-lg overflow-hidden border border-[#E6EDF3] bg-white">
       {/* Post Header */}
       <div className="flex items-start gap-3 px-4 py-3">
         <div
-          className="w-12 h-12 rounded-full shrink-0 flex items-center justify-center text-[#0A0A0A] font-semibold text-base"
+          className="w-12 h-12 rounded-full shrink-0 flex items-center justify-center text-[#0D1117] font-semibold text-base"
           style={{
-            background: 'linear-gradient(135deg, #CCFF00 0%, #008F6B 100%)',
+            background: 'linear-gradient(135deg, #E8533F 0%, #008F6B 100%)',
           }}
         >
           AC
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-[14px] text-[#1F1F1F] font-inter">Alex Chen</span>
+            <span className="font-semibold text-[14px] text-[#232A36] font-inter">Alex Chen</span>
           </div>
-          <p className="text-[12px] text-[#666666] font-inter leading-tight">
+          <p className="text-[12px] text-[#768390] font-inter leading-tight">
             Cybersecurity Analyst | CISSP | Cloud Security
           </p>
           <div className="flex items-center gap-1 mt-0.5">
-            <span className="text-[12px] text-[#666666] font-inter">
+            <span className="text-[12px] text-[#768390] font-inter">
               {lang === 'es' ? 'Justo ahora' : 'Just now'}
             </span>
-            <span className="text-[#666666]">·</span>
-            <Globe size={12} className="text-[#666666]" />
+            <span className="text-[#768390]">·</span>
+            <Globe size={12} className="text-[#768390]" />
           </div>
         </div>
       </div>
 
       {/* Post Body */}
       <div className="px-4 pb-3">
-        <p className="text-[14px] leading-[1.5] text-[#1F1F1F] font-[system-ui] whitespace-pre-wrap">
+        <p className="text-[14px] leading-[1.5] text-[#232A36] font-[system-ui] whitespace-pre-wrap">
           {truncated}
           {seeMore && (
             <span className="text-[#0A66C2] font-medium cursor-pointer">
@@ -1095,20 +1084,20 @@ function LinkedInPreview({ content, lang }: { content: string; lang: Language })
       </div>
 
       {/* Footer Icons */}
-      <div className="flex items-center justify-between px-4 py-2 border-t border-[#E5E5E5]">
-        <button className="flex items-center gap-1.5 text-[#666666] hover:text-[#0A66C2] transition-colors">
+      <div className="flex items-center justify-between px-4 py-2 border-t border-[#E6EDF3]">
+        <button className="flex items-center gap-1.5 text-[#768390] hover:text-[#0A66C2] transition-colors">
           <ThumbsUp size={20} />
           <span className="text-[12px] font-inter">{labels.like}</span>
         </button>
-        <button className="flex items-center gap-1.5 text-[#666666] hover:text-[#0A66C2] transition-colors">
+        <button className="flex items-center gap-1.5 text-[#768390] hover:text-[#0A66C2] transition-colors">
           <MessageCircle size={20} />
           <span className="text-[12px] font-inter">{labels.comment}</span>
         </button>
-        <button className="flex items-center gap-1.5 text-[#666666] hover:text-[#0A66C2] transition-colors">
+        <button className="flex items-center gap-1.5 text-[#768390] hover:text-[#0A66C2] transition-colors">
           <Repeat2 size={20} />
           <span className="text-[12px] font-inter">{labels.repost}</span>
         </button>
-        <button className="flex items-center gap-1.5 text-[#666666] hover:text-[#0A66C2] transition-colors">
+        <button className="flex items-center gap-1.5 text-[#768390] hover:text-[#0A66C2] transition-colors">
           <Send size={20} />
           <span className="text-[12px] font-inter">{labels.send}</span>
         </button>
@@ -1116,7 +1105,7 @@ function LinkedInPreview({ content, lang }: { content: string; lang: Language })
 
       {/* Engagement Bar */}
       <div className="bg-[#F3F2EF] px-4 py-2.5">
-        <p className="text-[12px] text-[#666666] font-inter">
+        <p className="text-[12px] text-[#768390] font-inter">
           5 {labels.reactions} · 12 {labels.comments}
         </p>
       </div>
@@ -1137,20 +1126,20 @@ function CarouselPreview({ content, lang }: { content: string; lang: Language })
   const goToNext = () => setCurrentIndex((prev) => (prev < slides.length - 1 ? prev + 1 : 0));
 
   return (
-    <div className="rounded-lg overflow-hidden border border-[#E5E5E5] bg-[#F3F2EF]">
+    <div className="rounded-lg overflow-hidden border border-[#E6EDF3] bg-[#F3F2EF]">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-[#E5E5E5] flex items-center gap-3">
+      <div className="px-4 py-3 border-b border-[#E6EDF3] flex items-center gap-3">
         <div
-          className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-[#0A0A0A] font-semibold text-sm"
+          className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-[#0D1117] font-semibold text-sm"
           style={{
-            background: 'linear-gradient(135deg, #CCFF00 0%, #008F6B 100%)',
+            background: 'linear-gradient(135deg, #E8533F 0%, #008F6B 100%)',
           }}
         >
           AC
         </div>
         <div>
-          <div className="font-semibold text-[13px] text-[#1F1F1F] font-inter">Alex Chen</div>
-          <div className="text-[11px] text-[#666666] font-inter">
+          <div className="font-semibold text-[13px] text-[#232A36] font-inter">Alex Chen</div>
+          <div className="text-[11px] text-[#768390] font-inter">
             {lang === 'es' ? 'Documento de LinkedIn' : 'LinkedIn Document'}
           </div>
         </div>
@@ -1158,10 +1147,10 @@ function CarouselPreview({ content, lang }: { content: string; lang: Language })
 
       {/* Slide Viewer */}
       <div className="relative px-4 py-4">
-        <div className="bg-white rounded-lg border border-[#E5E5E5] min-h-[240px] flex flex-col">
+        <div className="bg-white rounded-lg border border-[#E6EDF3] min-h-[240px] flex flex-col">
           {/* Slide header */}
-          <div className="px-4 py-2 border-b border-[#E5E5E5] flex items-center justify-between">
-            <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#555555]">
+          <div className="px-4 py-2 border-b border-[#E6EDF3] flex items-center justify-between">
+            <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B]">
               {lang === 'es' ? 'Diapositiva' : 'Slide'} {currentIndex + 1}/{slides.length}
             </span>
           </div>
@@ -1175,7 +1164,7 @@ function CarouselPreview({ content, lang }: { content: string; lang: Language })
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -30 }}
                 transition={{ duration: 0.25, ease: [0, 0, 0.2, 1] as [number, number, number, number] }}
-                className="text-[14px] leading-[1.6] text-[#1F1F1F] font-[system-ui] whitespace-pre-wrap"
+                className="text-[14px] leading-[1.6] text-[#232A36] font-[system-ui] whitespace-pre-wrap"
               >
                 {slides[currentIndex]}
               </motion.div>
@@ -1187,13 +1176,13 @@ function CarouselPreview({ content, lang }: { content: string; lang: Language })
             <>
               <button
                 onClick={goToPrev}
-                className="absolute left-1 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white border border-[#E5E5E5] shadow-md flex items-center justify-center text-[#666666] hover:text-[#0A66C2] transition-colors z-10"
+                className="absolute left-1 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white border border-[#E6EDF3] shadow-md flex items-center justify-center text-[#768390] hover:text-[#0A66C2] transition-colors z-10"
               >
                 <ChevronLeft size={18} />
               </button>
               <button
                 onClick={goToNext}
-                className="absolute right-1 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white border border-[#E5E5E5] shadow-md flex items-center justify-center text-[#666666] hover:text-[#0A66C2] transition-colors z-10"
+                className="absolute right-1 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white border border-[#E6EDF3] shadow-md flex items-center justify-center text-[#768390] hover:text-[#0A66C2] transition-colors z-10"
               >
                 <ChevronRight size={18} />
               </button>
@@ -1218,20 +1207,20 @@ function CarouselPreview({ content, lang }: { content: string; lang: Language })
       </div>
 
       {/* Footer Icons */}
-      <div className="flex items-center justify-between px-4 py-2 border-t border-[#E5E5E5]">
-        <button className="flex items-center gap-1.5 text-[#666666] hover:text-[#0A66C2] transition-colors">
+      <div className="flex items-center justify-between px-4 py-2 border-t border-[#E6EDF3]">
+        <button className="flex items-center gap-1.5 text-[#768390] hover:text-[#0A66C2] transition-colors">
           <ThumbsUp size={20} />
           <span className="text-[12px] font-inter">{labels.like}</span>
         </button>
-        <button className="flex items-center gap-1.5 text-[#666666] hover:text-[#0A66C2] transition-colors">
+        <button className="flex items-center gap-1.5 text-[#768390] hover:text-[#0A66C2] transition-colors">
           <MessageCircle size={20} />
           <span className="text-[12px] font-inter">{labels.comment}</span>
         </button>
-        <button className="flex items-center gap-1.5 text-[#666666] hover:text-[#0A66C2] transition-colors">
+        <button className="flex items-center gap-1.5 text-[#768390] hover:text-[#0A66C2] transition-colors">
           <Repeat2 size={20} />
           <span className="text-[12px] font-inter">{labels.repost}</span>
         </button>
-        <button className="flex items-center gap-1.5 text-[#666666] hover:text-[#0A66C2] transition-colors">
+        <button className="flex items-center gap-1.5 text-[#768390] hover:text-[#0A66C2] transition-colors">
           <Send size={20} />
           <span className="text-[12px] font-inter">{labels.send}</span>
         </button>
@@ -1239,7 +1228,7 @@ function CarouselPreview({ content, lang }: { content: string; lang: Language })
 
       {/* Engagement Bar */}
       <div className="bg-[#F3F2EF] px-4 py-2.5">
-        <p className="text-[12px] text-[#666666] font-inter">
+        <p className="text-[12px] text-[#768390] font-inter">
           5 {labels.reactions} · 12 {labels.comments}
         </p>
       </div>
@@ -1351,33 +1340,33 @@ function SchedulePanel({
   };
 
   return (
-    <div className="mt-6 bg-[#111111] border border-[#222222] rounded-xl p-5">
-      <h3 className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#555555] mb-4">
+    <div className="mt-6 bg-[#161B22] border border-[#2A3140] rounded-xl p-5">
+      <h3 className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B] mb-4">
         {labels.schedulePost}
       </h3>
 
       {/* Date and Time inputs */}
       <div className="flex gap-3 mb-4">
         <div className="flex-1">
-          <label className="block text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#555555] mb-1.5">
+          <label className="block text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B] mb-1.5">
             {labels.date}
           </label>
           <input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="w-full bg-[#1A1A1A] border border-[#222222] text-[#E5E5E5] font-inter text-sm rounded-lg h-10 px-3 hover:border-[#555555] transition-colors outline-none focus:border-[#CCFF00]"
+            className="w-full bg-[#1A1F2E] border border-[#2A3140] text-[#E6EDF3] font-inter text-sm rounded-lg h-10 px-3 hover:border-[#636E7B] transition-colors outline-none focus:border-[#E8533F]"
           />
         </div>
         <div className="flex-1">
-          <label className="block text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#555555] mb-1.5">
+          <label className="block text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B] mb-1.5">
             {labels.time}
           </label>
           <input
             type="time"
             value={time}
             onChange={(e) => setTime(e.target.value)}
-            className="w-full bg-[#1A1A1A] border border-[#222222] text-[#E5E5E5] font-inter text-sm rounded-lg h-10 px-3 hover:border-[#555555] transition-colors outline-none focus:border-[#CCFF00]"
+            className="w-full bg-[#1A1F2E] border border-[#2A3140] text-[#E6EDF3] font-inter text-sm rounded-lg h-10 px-3 hover:border-[#636E7B] transition-colors outline-none focus:border-[#E8533F]"
           />
         </div>
       </div>
@@ -1393,7 +1382,7 @@ function SchedulePanel({
           <button
             key={type}
             onClick={() => setQuickTime(type)}
-            className="px-3 py-1.5 text-[11px] font-inter font-medium text-[#808080] bg-[#1A1A1A] border border-[#222222] rounded-button hover:border-[#555555] hover:text-[#E5E5E5] transition-colors"
+            className="px-3 py-1.5 text-[11px] font-inter font-medium text-[#8B949E] bg-[#1A1F2E] border border-[#2A3140] rounded-button hover:border-[#636E7B] hover:text-[#E6EDF3] transition-colors"
           >
             {label}
           </button>
@@ -1404,7 +1393,7 @@ function SchedulePanel({
       <Button
         onClick={handleSchedule}
         disabled={!date || !time || !content}
-        className="w-full bg-[#CCFF00] text-[#0A0A0A] hover:brightness-110 font-inter text-sm font-semibold rounded-button h-10 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full bg-[#E8533F] text-[#0D1117] hover:brightness-110 font-inter text-sm font-semibold rounded-button h-10 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <Clock size={16} />
         {labels.scheduleBtn}
@@ -1412,27 +1401,27 @@ function SchedulePanel({
 
       {/* Scheduled posts list */}
       {scheduledPosts.length > 0 && (
-        <div className="mt-5 border-t border-[#222222] pt-4">
-          <h4 className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#555555] mb-3">
+        <div className="mt-5 border-t border-[#2A3140] pt-4">
+          <h4 className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B] mb-3">
             {labels.scheduledPosts}
           </h4>
           <div className="space-y-2 max-h-[200px] overflow-y-auto">
             {scheduledPosts.map((post) => (
               <div
                 key={post.id}
-                className="flex items-center gap-2 bg-[#1A1A1A] border border-[#222222] rounded-lg px-3 py-2"
+                className="flex items-center gap-2 bg-[#1A1F2E] border border-[#2A3140] rounded-lg px-3 py-2"
               >
                 <div className="flex-1 min-w-0">
-                  <p className="text-[12px] font-inter text-[#E5E5E5] truncate">
+                  <p className="text-[12px] font-inter text-[#E6EDF3] truncate">
                     {post.sourceTitle}
                   </p>
-                  <p className="text-[11px] font-inter text-[#808080]">
+                  <p className="text-[11px] font-inter text-[#8B949E]">
                     {formatDate(post.scheduledFor)} · {post.format} · {post.language.toUpperCase()}
                   </p>
                 </div>
                 <button
                   onClick={() => handleDelete(post.id)}
-                  className="shrink-0 p-1.5 text-[#666666] hover:text-[#EF4444] transition-colors rounded"
+                  className="shrink-0 p-1.5 text-[#768390] hover:text-[#EF4444] transition-colors rounded"
                 >
                   <Trash2 size={14} />
                 </button>
@@ -1443,7 +1432,7 @@ function SchedulePanel({
       )}
 
       {scheduledPosts.length === 0 && (
-        <p className="mt-4 text-[12px] font-inter text-[#555555] text-center">
+        <p className="mt-4 text-[12px] font-inter text-[#636E7B] text-center">
           {labels.noScheduled}
         </p>
       )}
@@ -1459,9 +1448,11 @@ interface GeneratePostTabProps {
   articles: NewsArticle[];
   selectedArticleId: string | null;
   onBackToNewsFeed: () => void;
+  /* The company has a Claude or OpenAI key configured server-side. */
+  aiAvailable: boolean;
 }
 
-export default function GeneratePostTab({ articles, selectedArticleId: propArticleId, onBackToNewsFeed }: GeneratePostTabProps) {
+export default function GeneratePostTab({ articles, selectedArticleId: propArticleId, onBackToNewsFeed, aiAvailable }: GeneratePostTabProps) {
   /* NOTE: every hook below must run on each render. The "no articles" guard
      lives just above the main return, after the last hook — putting it here
      would change the hook count when articles load and crash React. */
@@ -1481,12 +1472,6 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
   const [aiFallback, setAiFallback] = useState(false);
   const [toast, setToast] = useState<Toast>({ message: '', type: 'success', visible: false });
 
-  const [linkedinConnected, setLinkedinConnected] = useState(false);
-  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
-  const [linkedinVisibility, setLinkedinVisibility] = useState<'PUBLIC' | 'CONNECTIONS'>('PUBLIC');
-  const [publishing, setPublishing] = useState(false);
-  const [publishResult, setPublishResult] = useState<{ success: boolean; message: string } | null>(null);
-
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   /* Sync selected article from News Feed */
@@ -1504,33 +1489,6 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
       return valid;
     });
   }, [articles]);
-
-  /* Check LinkedIn connection status */
-  useEffect(() => {
-    getLinkedInStatus()
-      .then((status) => setLinkedinConnected(status.connected))
-      .catch(() => setLinkedinConnected(false));
-  }, []);
-
-  /* Refresh LinkedIn status after publishing or OAuth */
-  const refreshLinkedInStatus = useCallback(async () => {
-    try {
-      const status = await getLinkedInStatus();
-      setLinkedinConnected(status.connected);
-    } catch {
-      setLinkedinConnected(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    function onMessage(event: MessageEvent) {
-      if (event.data && event.data.type === 'linkedin-oauth') {
-        refreshLinkedInStatus();
-      }
-    }
-    window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
-  }, [refreshLinkedInStatus]);
 
   const selectedArticle = articles.find((a) => a.id === selectedArticleId) ?? articles[0];
   const isDailyDigest = format === 'Daily Digest';
@@ -1570,8 +1528,7 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
     const tryAi = async () => {
       if (isDailyDigest) return false;
 
-      const settings = getAiSettings();
-      if (!settings.apiKey.trim()) return false;
+      if (!aiAvailable) return false;
 
       try {
         const params: GenerateAiPostParams = {
@@ -1585,9 +1542,6 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
           format,
           length,
           language,
-          apiKey: settings.apiKey,
-          model: settings.model,
-          baseUrl: settings.baseUrl,
         };
 
         const post = await generateAiPost(params);
@@ -1607,7 +1561,7 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
         runLocal();
       }
     });
-  }, [selectedArticle, tone, format, length, language, showToast, isDailyDigest, selectedArticleIds]);
+  }, [selectedArticle, tone, format, length, language, showToast, isDailyDigest, selectedArticleIds, aiAvailable]);
 
   /* Regenerate */
   const handleRegenerate = useCallback(() => {
@@ -1682,32 +1636,9 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
     }
   }, [generatedContent, selectedArticle, tone, format, length, showToast, isDailyDigest, selectedArticleIds, language]);
 
-  /* Publish to LinkedIn */
-  const handlePublishToLinkedIn = useCallback(async () => {
-    if (!generatedContent) return;
-    setPublishing(true);
-    setPublishResult(null);
-    try {
-      await publishToLinkedIn(generatedContent, linkedinVisibility);
-      setPublishResult({
-        success: true,
-        message: language === 'es' ? 'Publicado en LinkedIn' : 'Posted to LinkedIn',
-      });
-      showToast(language === 'es' ? 'Publicado en LinkedIn' : 'Posted to LinkedIn');
-    } catch (err: any) {
-      setPublishResult({
-        success: false,
-        message: err?.message || (language === 'es' ? 'Error al publicar en LinkedIn' : 'Failed to post to LinkedIn'),
-      });
-      showToast(err?.message || (language === 'es' ? 'Error al publicar en LinkedIn' : 'Failed to post to LinkedIn'), 'error');
-    } finally {
-      setPublishing(false);
-    }
-  }, [generatedContent, linkedinVisibility, language, showToast]);
-
   /* Section header style */
   const SectionHeader = ({ label }: { label: string }) => (
-    <h3 className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#555555] mb-4">
+    <h3 className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B] mb-4">
       {label}
     </h3>
   );
@@ -1721,7 +1652,7 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
         </p>
         <button
           onClick={onBackToNewsFeed}
-          className="px-4 py-2 bg-accent text-[#0A0A0A] font-inter text-sm font-semibold rounded-button hover:brightness-110 transition-all cursor-pointer"
+          className="px-4 py-2 bg-accent text-[#0D1117] font-inter text-sm font-semibold rounded-button hover:brightness-110 transition-all cursor-pointer"
         >
           Go to News Feed
         </button>
@@ -1734,22 +1665,22 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
       <ToastNotification toast={toast} onDismiss={dismissToast} />
 
       {/* ============ LEFT COLUMN ============ */}
-      <div className="w-full lg:w-1/2 lg:border-r border-[#222222] pr-0 lg:pr-6 pb-6 lg:pb-0 overflow-y-auto">
+      <div className="w-full lg:w-1/2 lg:border-r border-[#2A3140] pr-0 lg:pr-6 pb-6 lg:pb-0 overflow-y-auto">
         <SectionHeader label={labels.sourceArticle} />
 
         {/* Single Article Selector (non-Daily Digest) */}
         {!isDailyDigest && (
           <div className="mb-4">
             <Select value={selectedArticleId} onValueChange={setSelectedArticleId}>
-              <SelectTrigger className="w-full bg-[#1A1A1A] border-[#222222] text-[#E5E5E5] font-inter text-sm rounded-lg h-10 hover:border-[#555555] transition-colors [&>svg]:text-[#555555]">
+              <SelectTrigger className="w-full bg-[#1A1F2E] border-[#2A3140] text-[#E6EDF3] font-inter text-sm rounded-lg h-10 hover:border-[#636E7B] transition-colors [&>svg]:text-[#636E7B]">
                 <SelectValue placeholder="Select an article" />
               </SelectTrigger>
-              <SelectContent className="bg-[#181818] border-[#222222] rounded-lg">
+              <SelectContent className="bg-[#1A1F2E] border-[#2A3140] rounded-lg">
                 {articles.map((article) => (
                   <SelectItem
                     key={article.id}
                     value={article.id}
-                    className="text-[#E5E5E5] font-inter text-sm focus:bg-[rgba(204,255,0,0.1)] focus:text-[#E5E5E5] cursor-pointer"
+                    className="text-[#E6EDF3] font-inter text-sm focus:bg-[rgba(232, 83, 63,0.1)] focus:text-[#E6EDF3] cursor-pointer"
                   >
                     <div className="flex items-center gap-2">
                       <span className={`w-2 h-2 rounded-full ${severityColor(article.severity)}`} />
@@ -1764,12 +1695,12 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
 
         {/* Multi-article selector (Daily Digest mode) */}
         {isDailyDigest && (
-          <div className="mb-4 bg-[#111111] border border-[#222222] rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-[#222222] flex items-center justify-between">
-              <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#555555]">
+          <div className="mb-4 bg-[#161B22] border border-[#2A3140] rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-[#2A3140] flex items-center justify-between">
+              <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B]">
                 {labels.selectArticles}
               </span>
-              <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#CCFF00]">
+              <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#E8533F]">
                 {selectedArticleIds.length} {labels.selected}
               </span>
             </div>
@@ -1779,7 +1710,7 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
                 return (
                   <label
                     key={article.id}
-                    className={`flex items-start gap-3 px-4 py-3 cursor-pointer border-b border-[#1A1A1A] transition-all duration-200 hover:bg-[#181818] ${isSelected ? 'bg-[rgba(204,255,0,0.05)]' : ''}`}
+                    className={`flex items-start gap-3 px-4 py-3 cursor-pointer border-b border-[#1A1F2E] transition-all duration-200 hover:bg-[#1A1F2E] ${isSelected ? 'bg-[rgba(232, 83, 63,0.05)]' : ''}`}
                   >
                     <input
                       type="checkbox"
@@ -1791,16 +1722,16 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
                           setSelectedArticleIds((prev) => prev.filter((id) => id !== article.id));
                         }
                       }}
-                      className="mt-1 w-4 h-4 rounded border-[#222222] bg-[#1A1A1A] text-[#CCFF00] accent-[#CCFF00] cursor-pointer shrink-0"
+                      className="mt-1 w-4 h-4 rounded border-[#2A3140] bg-[#1A1F2E] text-[#E8533F] accent-[#E8533F] cursor-pointer shrink-0"
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className={`w-2 h-2 rounded-full ${severityColor(article.severity)}`} />
-                        <span className="text-[10px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#555555]">
+                        <span className="text-[10px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B]">
                           {article.source}
                         </span>
                       </div>
-                      <p className="text-[13px] font-inter text-[#E5E5E5] leading-[1.4] line-clamp-2">
+                      <p className="text-[13px] font-inter text-[#E6EDF3] leading-[1.4] line-clamp-2">
                         {article.title}
                       </p>
                     </div>
@@ -1818,37 +1749,37 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.4, ease: [0, 0, 0.2, 1] as [number, number, number, number] }}
-            className="bg-[#111111] border border-[#222222] rounded-xl p-5"
+            className="bg-[#161B22] border border-[#2A3140] rounded-xl p-5"
           >
             {/* Header row */}
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <span className={`w-2 h-2 rounded-full ${severityColor(selectedArticle.severity)}`} />
-                <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#555555]">
+                <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B]">
                   {selectedArticle.source}
                 </span>
               </div>
-              <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#555555]">
+              <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B]">
                 {timeAgo(selectedArticle.publishedAt)}
               </span>
             </div>
 
             {/* Title */}
-            <h2 className="text-[18px] font-semibold font-inter text-[#E5E5E5] leading-[1.3] mb-3">
+            <h2 className="text-[18px] font-semibold font-inter text-[#E6EDF3] leading-[1.3] mb-3">
               {selectedArticle.title}
             </h2>
 
             {/* Summary */}
-            <p className="text-[14px] font-inter text-[#808080] leading-[1.5] mb-4">
+            <p className="text-[14px] font-inter text-[#8B949E] leading-[1.5] mb-4">
               {selectedArticle.summary}
             </p>
 
             {/* Footer row */}
             <div className="flex items-center justify-between">
-              <span className="inline-block px-2 py-1 text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#CCFF00] bg-[rgba(204,255,0,0.1)] rounded-pill">
+              <span className="inline-block px-2 py-1 text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#E8533F] bg-[rgba(232, 83, 63,0.1)] rounded-pill">
                 {selectedArticle.category}
               </span>
-              <div className="flex items-center gap-1.5 text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#555555]">
+              <div className="flex items-center gap-1.5 text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B]">
                 <FileText size={12} />
                 {selectedArticle.readTime}
               </div>
@@ -1860,7 +1791,7 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
         <div className="flex items-center justify-between mt-4">
           <Button
             variant="ghost"
-            className="text-[#CCFF00] hover:bg-[rgba(204,255,0,0.1)] font-inter text-sm font-medium px-4 py-2 h-auto rounded-button cursor-pointer"
+            className="text-[#E8533F] hover:bg-[rgba(232, 83, 63,0.1)] font-inter text-sm font-medium px-4 py-2 h-auto rounded-button cursor-pointer"
             onClick={onBackToNewsFeed}
           >
             <ArrowLeft size={16} />
@@ -1873,7 +1804,7 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
             <Button
               asChild
               variant="outline"
-              className="border-[#222222] text-[#E5E5E5] hover:bg-[#181818] hover:border-[#808080] font-inter text-sm font-medium px-4 py-2 h-auto rounded-button bg-transparent"
+              className="border-[#2A3140] text-[#E6EDF3] hover:bg-[#1A1F2E] hover:border-[#8B949E] font-inter text-sm font-medium px-4 py-2 h-auto rounded-button bg-transparent"
             >
               <a href={selectedArticle.url} target="_blank" rel="noopener noreferrer">
                 {labels.openOriginal}
@@ -1882,7 +1813,7 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
             </Button>
           )}
           {isDailyDigest && (
-            <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#555555]">
+            <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B]">
               {selectedArticleIds.length} {labels.articlesWillBeIncluded}
             </span>
           )}
@@ -1894,10 +1825,10 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
         <SectionHeader label={labels.generatePost} />
 
         {/* Configuration Panel */}
-        <div className="bg-[#111111] border border-[#222222] rounded-xl p-5 mb-4">
+        <div className="bg-[#161B22] border border-[#2A3140] rounded-xl p-5 mb-4">
           {/* Language Selector */}
           <div className="mb-4">
-            <label className="block text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#555555] mb-2">
+            <label className="block text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B] mb-2">
               {labels.language}
             </label>
             <RadioGroup
@@ -1909,12 +1840,12 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
                 <RadioGroupItem
                   value="en"
                   id="lang-en"
-                  className="border-[#222222] text-[#CCFF00] data-[state=checked]:border-[#CCFF00]"
+                  className="border-[#2A3140] text-[#E8533F] data-[state=checked]:border-[#E8533F]"
                 />
                 <label
                   htmlFor="lang-en"
                   className={`text-[13px] font-inter cursor-pointer ${
-                    language === 'en' ? 'text-[#E5E5E5]' : 'text-[#808080]'
+                    language === 'en' ? 'text-[#E6EDF3]' : 'text-[#8B949E]'
                   }`}
                 >
                   🇬🇧 English
@@ -1924,12 +1855,12 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
                 <RadioGroupItem
                   value="es"
                   id="lang-es"
-                  className="border-[#222222] text-[#CCFF00] data-[state=checked]:border-[#CCFF00]"
+                  className="border-[#2A3140] text-[#E8533F] data-[state=checked]:border-[#E8533F]"
                 />
                 <label
                   htmlFor="lang-es"
                   className={`text-[13px] font-inter cursor-pointer ${
-                    language === 'es' ? 'text-[#E5E5E5]' : 'text-[#808080]'
+                    language === 'es' ? 'text-[#E6EDF3]' : 'text-[#8B949E]'
                   }`}
                 >
                   🇪🇸 Español
@@ -1940,19 +1871,19 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
 
           {/* Tone Selector */}
           <div className="mb-4">
-            <label className="block text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#555555] mb-2">
+            <label className="block text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B] mb-2">
               {labels.tone}
             </label>
             <Select value={tone} onValueChange={(v) => setTone(v as Tone)}>
-              <SelectTrigger className="w-full bg-[#1A1A1A] border-[#222222] text-[#E5E5E5] font-inter text-sm rounded-lg h-10 hover:border-[#555555] transition-colors [&>svg]:text-[#555555]">
+              <SelectTrigger className="w-full bg-[#1A1F2E] border-[#2A3140] text-[#E6EDF3] font-inter text-sm rounded-lg h-10 hover:border-[#636E7B] transition-colors [&>svg]:text-[#636E7B]">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-[#181818] border-[#222222] rounded-lg">
+              <SelectContent className="bg-[#1A1F2E] border-[#2A3140] rounded-lg">
                 {(['Professional', 'Casual', 'Urgent', 'Educational', 'Thought Leadership'] as Tone[]).map((t) => (
                   <SelectItem
                     key={t}
                     value={t}
-                    className="text-[#E5E5E5] font-inter text-sm focus:bg-[rgba(204,255,0,0.1)] focus:text-[#E5E5E5] cursor-pointer"
+                    className="text-[#E6EDF3] font-inter text-sm focus:bg-[rgba(232, 83, 63,0.1)] focus:text-[#E6EDF3] cursor-pointer"
                   >
                     {toneLabel(t)}
                   </SelectItem>
@@ -1963,19 +1894,19 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
 
           {/* Format Selector */}
           <div className="mb-4">
-            <label className="block text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#555555] mb-2">
+            <label className="block text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B] mb-2">
               {labels.format}
             </label>
             <Select value={format} onValueChange={(v) => setFormat(v as Format)}>
-              <SelectTrigger className="w-full bg-[#1A1A1A] border-[#222222] text-[#E5E5E5] font-inter text-sm rounded-lg h-10 hover:border-[#555555] transition-colors [&>svg]:text-[#555555]">
+              <SelectTrigger className="w-full bg-[#1A1F2E] border-[#2A3140] text-[#E6EDF3] font-inter text-sm rounded-lg h-10 hover:border-[#636E7B] transition-colors [&>svg]:text-[#636E7B]">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-[#181818] border-[#222222] rounded-lg">
+              <SelectContent className="bg-[#1A1F2E] border-[#2A3140] rounded-lg">
                 {(['News Analysis', 'Quick Summary', 'Thread', 'Contrarian', 'Storytelling', 'Daily Digest'] as Format[]).map((f) => (
                   <SelectItem
                     key={f}
                     value={f}
-                    className="text-[#E5E5E5] font-inter text-sm focus:bg-[rgba(204,255,0,0.1)] focus:text-[#E5E5E5] cursor-pointer"
+                    className="text-[#E6EDF3] font-inter text-sm focus:bg-[rgba(232, 83, 63,0.1)] focus:text-[#E6EDF3] cursor-pointer"
                   >
                     {f === 'Thread' ? 'Thread / Carousel' : f === 'Contrarian' ? 'Contrarian Take' : f}
                   </SelectItem>
@@ -1986,7 +1917,7 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
 
           {/* Length Selector */}
           <div className="mb-5">
-            <label className="block text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#555555] mb-2">
+            <label className="block text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B] mb-2">
               {labels.length}
             </label>
             <RadioGroup
@@ -1999,16 +1930,16 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
                   <RadioGroupItem
                     value={l}
                     id={`length-${l}`}
-                    className="border-[#222222] text-[#CCFF00] data-[state=checked]:border-[#CCFF00]"
+                    className="border-[#2A3140] text-[#E8533F] data-[state=checked]:border-[#E8533F]"
                   />
                   <label
                     htmlFor={`length-${l}`}
                     className={`text-[13px] font-inter cursor-pointer ${
-                      length === l ? 'text-[#E5E5E5]' : 'text-[#808080]'
+                      length === l ? 'text-[#E6EDF3]' : 'text-[#8B949E]'
                     }`}
                   >
                     {l === 'short' ? labels.short : l === 'medium' ? labels.medium : labels.long}{' '}
-                    <span className="text-[#555555]">({lengthWordCount(l)})</span>
+                    <span className="text-[#636E7B]">({lengthWordCount(l)})</span>
                   </label>
                 </div>
               ))}
@@ -2025,14 +1956,14 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
               font-inter text-sm font-semibold
               transition-all duration-200
               ${isGenerating
-                ? 'bg-[#CCFF00]/70 text-[#0A0A0A] cursor-not-allowed'
-                : 'bg-[#CCFF00] text-[#0A0A0A] hover:brightness-110 hover:scale-[1.02] cursor-pointer'
+                ? 'bg-[#E8533F]/70 text-[#0D1117] cursor-not-allowed'
+                : 'bg-[#E8533F] text-[#0D1117] hover:brightness-110 hover:scale-[1.02] cursor-pointer'
               }
             `}
           >
             {isGenerating ? (
               <>
-                <span className="w-4 h-4 border-2 border-transparent border-t-[#0A0A0A] rounded-full animate-spin" />
+                <span className="w-4 h-4 border-2 border-transparent border-t-[#0D1117] rounded-full animate-spin" />
                 {labels.generating}
               </>
             ) : (
@@ -2067,7 +1998,7 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
                 ref={textareaRef}
                 value={generatedContent}
                 onChange={(e) => setGeneratedContent(e.target.value)}
-                className="min-h-[300px] bg-[#1A1A1A] border-[#222222] rounded-lg p-4 font-merriweather text-[16px] text-[#E5E5E5] leading-[1.7] resize-y focus:border-[#CCFF00] focus:shadow-[0_0_0_2px_rgba(204,255,0,0.15)] transition-all"
+                className="min-h-[300px] bg-[#1A1F2E] border-[#2A3140] rounded-lg p-4 font-merriweather text-[16px] text-[#E6EDF3] leading-[1.7] resize-y focus:border-[#E8533F] focus:shadow-[0_0_0_2px_rgba(232, 83, 63,0.15)] transition-all"
               />
 
               {/* Action buttons */}
@@ -2075,7 +2006,7 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
                 <Button
                   variant="ghost"
                   onClick={handleRegenerate}
-                  className="text-[#CCFF00] hover:bg-[rgba(204,255,0,0.1)] font-inter text-sm font-medium flex-1 rounded-button h-10"
+                  className="text-[#E8533F] hover:bg-[rgba(232, 83, 63,0.1)] font-inter text-sm font-medium flex-1 rounded-button h-10"
                 >
                   <RefreshCw size={16} />
                   {labels.regenerate}
@@ -2083,31 +2014,17 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
                 <Button
                   variant="outline"
                   onClick={handleCopy}
-                  className="border-[#222222] text-[#E5E5E5] hover:bg-[#181818] hover:border-[#808080] font-inter text-sm font-medium flex-1 rounded-button h-10 bg-transparent"
+                  className="border-[#2A3140] text-[#E6EDF3] hover:bg-[#1A1F2E] hover:border-[#8B949E] font-inter text-sm font-medium flex-1 rounded-button h-10 bg-transparent"
                 >
                   <ClipboardCopy size={16} />
                   {copied ? labels.copied : labels.copy}
                 </Button>
                 <Button
                   onClick={handleSave}
-                  className="bg-[#CCFF00] text-[#0A0A0A] hover:brightness-110 font-inter text-sm font-semibold flex-1 rounded-button h-10"
+                  className="bg-[#E8533F] text-[#0D1117] hover:brightness-110 font-inter text-sm font-semibold flex-1 rounded-button h-10"
                 >
                   <Save size={16} />
                   {labels.save}
-                </Button>
-                <Button
-                  onClick={() => {
-                    setPublishResult(null);
-                    setPublishDialogOpen(true);
-                  }}
-                  disabled={!linkedinConnected}
-                  title={linkedinConnected
-                    ? (language === 'es' ? 'Publicar en LinkedIn' : 'Post to LinkedIn')
-                    : (language === 'es' ? 'Conectá LinkedIn en Configuración' : 'Connect LinkedIn in Settings')}
-                  className="bg-[#0A66C2] text-white hover:brightness-110 font-inter text-sm font-semibold flex-[2] rounded-button h-10 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <Linkedin size={16} />
-                  {language === 'es' ? 'Publicar en LinkedIn' : 'Post to LinkedIn'}
                 </Button>
               </div>
             </motion.div>
@@ -2143,84 +2060,6 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
         </AnimatePresence>
       </div>
 
-      {/* LinkedIn publish dialog */}
-      <Dialog open={publishDialogOpen} onOpenChange={setPublishDialogOpen}>
-        <DialogContent className="bg-bg-primary border-border-default text-text-primary sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-text-primary font-inter text-lg flex items-center gap-2">
-              <Linkedin size={20} className="text-[#0A66C2]" />
-              {language === 'es' ? 'Publicar en LinkedIn' : 'Post to LinkedIn'}
-            </DialogTitle>
-            <DialogDescription className="text-text-tertiary font-inter text-xs">
-              {language === 'es'
-                ? 'Revisá el texto y elegí la visibilidad antes de publicar.'
-                : 'Review the text and choose visibility before publishing.'}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <div className="max-h-[240px] overflow-y-auto rounded-lg border border-border-default bg-bg-elevated p-3 font-merriweather text-sm text-text-secondary whitespace-pre-wrap">
-              {generatedContent}
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-text-secondary text-xs font-jetbrains uppercase tracking-[0.08em]">
-                {language === 'es' ? 'Visibilidad' : 'Visibility'}
-              </Label>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant={linkedinVisibility === 'PUBLIC' ? 'default' : 'outline'}
-                  onClick={() => setLinkedinVisibility('PUBLIC')}
-                  className={linkedinVisibility === 'PUBLIC'
-                    ? 'bg-accent text-text-inverse font-inter text-sm flex-1 rounded-button h-10'
-                    : 'border-border-default text-text-secondary hover:text-text-primary hover:bg-bg-elevated font-inter text-sm flex-1 rounded-button h-10'
-                  }
-                >
-                  {language === 'es' ? 'Pública' : 'Public'}
-                </Button>
-                <Button
-                  type="button"
-                  variant={linkedinVisibility === 'CONNECTIONS' ? 'default' : 'outline'}
-                  onClick={() => setLinkedinVisibility('CONNECTIONS')}
-                  className={linkedinVisibility === 'CONNECTIONS'
-                    ? 'bg-accent text-text-inverse font-inter text-sm flex-1 rounded-button h-10'
-                    : 'border-border-default text-text-secondary hover:text-text-primary hover:bg-bg-elevated font-inter text-sm flex-1 rounded-button h-10'
-                  }
-                >
-                  {language === 'es' ? 'Conexiones' : 'Connections'}
-                </Button>
-              </div>
-            </div>
-
-            {publishResult && (
-              <div className={`text-sm font-inter ${publishResult.success ? 'text-emerald-400' : 'text-red-400'}`}>
-                {publishResult.message}
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setPublishDialogOpen(false)}
-              className="border-border-default text-text-secondary hover:text-text-primary hover:bg-bg-elevated font-inter text-sm rounded-button h-10"
-            >
-              {language === 'es' ? 'Cancelar' : 'Cancel'}
-            </Button>
-            <Button
-              onClick={handlePublishToLinkedIn}
-              disabled={publishing}
-              className="bg-[#0A66C2] text-white hover:brightness-110 font-inter text-sm font-semibold rounded-button h-10"
-            >
-              <Linkedin size={16} />
-              {publishing
-                ? (language === 'es' ? 'Publicando...' : 'Publishing...')
-                : (language === 'es' ? 'Publicar' : 'Publish')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

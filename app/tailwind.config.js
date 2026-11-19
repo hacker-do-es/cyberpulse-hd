@@ -5,24 +5,24 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        'bg-primary': '#0A0A0A',
-        'bg-card': '#111111',
-        'bg-elevated': '#181818',
-        'bg-input': '#1A1A1A',
-        'border-default': '#222222',
-        'border-subtle': '#1A1A1A',
-        'border-active': '#CCFF00',
+        'bg-primary': '#0D1117',
+        'bg-card': '#161B22',
+        'bg-elevated': '#1A1F2E',
+        'bg-input': '#1A1F2E',
+        'border-default': '#2A3140',
+        'border-subtle': '#1A1F2E',
+        'border-active': '#E8533F',
         'critical': '#EF4444',
         'high': '#F97316',
         'medium': '#EAB308',
         'low': '#22C55E',
-        'text-primary': '#E5E5E5',
-        'text-secondary': '#808080',
-        'text-tertiary': '#555555',
-        'text-inverse': '#0A0A0A',
-        'accent': '#CCFF00',
-        'accent-glow': 'rgba(204, 255, 0, 0.15)',
-        'accent-dim': 'rgba(204, 255, 0, 0.1)',
+        'text-primary': '#E6EDF3',
+        'text-secondary': '#8B949E',
+        'text-tertiary': '#636E7B',
+        'text-inverse': '#0D1117',
+        'accent': '#E8533F',
+        'accent-glow': 'rgba(232, 83, 63, 0.15)',
+        'accent-dim': 'rgba(232, 83, 63, 0.1)',
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -69,6 +69,9 @@ module.exports = {
       },
       fontFamily: {
         inter: ['Inter', 'system-ui', 'sans-serif'],
+        /* Hacker-Do brand: Rajdhani for headings, Orbitron for the wordmark. */
+        rajdhani: ['Rajdhani', 'Inter', 'system-ui', 'sans-serif'],
+        orbitron: ['Orbitron', 'Rajdhani', 'system-ui', 'sans-serif'],
         jetbrains: ['JetBrains Mono', 'monospace'],
         merriweather: ['Merriweather', 'Georgia', 'serif'],
       },
@@ -95,7 +98,7 @@ module.exports = {
       },
       boxShadow: {
         xs: "0 1px 2px 0 rgb(0 0 0 / 0.05)",
-        'accent-glow': '0 0 12px rgba(204, 255, 0, 0.08)',
+        'accent-glow': '0 0 12px rgba(232, 83, 63, 0.08)',
       },
       keyframes: {
         "accordion-down": {

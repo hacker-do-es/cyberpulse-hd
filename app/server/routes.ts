@@ -104,8 +104,11 @@ authRouter.get('/me', requireAuth, wrap((req, res) => {
   const tenants = user.role === 'superadmin'
     ? db.prepare(`SELECT id, name, active FROM tenants ORDER BY name`).all()
     : db.prepare(`SELECT id, name, active FROM tenants WHERE id = ?`).all(user.tenantId);
-  const activeTenant = active
-    ? db.prepare(`SELECT id, name, language, timezone FROM tenants WHERE id = ?`).get(active) ?? null
+  const t = active
+    ? db.prepare(`SELECT id, name, language, timezone, ai_provider, ai_key FROM tenants WHERE id = ?`).get(active) as any
+    : null;
+  const activeTenant = t
+    ? { id: t.id, name: t.name, language: t.language, timezone: t.timezone, aiProvider: t.ai_provider, aiConfigured: t.ai_provider !== 'none' && Boolean(t.ai_key) }
     : null;
   res.json({
     user: { id: user.id, username: user.username, displayName: user.displayName, role: user.role, totpEnabled: user.totpEnabled },

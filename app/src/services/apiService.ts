@@ -1,5 +1,4 @@
 import type { NewsArticle } from '@/data/mockNews';
-import { getSettings } from '@/lib/settings';
 
 export interface SourceInfo {
   id: string;
@@ -27,13 +26,10 @@ export interface ApiSourceResponse {
   }[];
 }
 
-export function getCyberpulseApiKey(): string {
-  return getSettings().cyberpulseApiKey || '';
-}
-
+/* Session cookie travels automatically (same origin); writes also carry the
+   CSRF header the server requires. */
 function cyberpulseHeaders(): Record<string, string> {
-  const key = getCyberpulseApiKey();
-  return key ? { 'X-API-Key': key } : {};
+  return { 'X-Requested-With': 'cyberpulse' };
 }
 
 export async function fetchApiNews(): Promise<NewsArticle[]> {
@@ -169,9 +165,6 @@ export interface GenerateAiPostParams {
   format: string;
   length: string;
   language: string;
-  apiKey: string;
-  model?: string;
-  baseUrl?: string;
 }
 
 export interface GenerateAiPostResponse {
@@ -198,98 +191,6 @@ export async function generateAiPost(params: GenerateAiPostParams): Promise<stri
     throw new Error('Invalid AI response format');
   }
   return data.post;
-}
-
-/* ------------------------------------------------------------------ */
-/*  LinkedIn integration                                              */
-/* ------------------------------------------------------------------ */
-
-export interface LinkedInConfigPayload {
-  clientId: string;
-  clientSecret: string;
-  redirectUri: string;
-}
-
-/* A public deployment answers 401 to visitors without the API key. That is
-   the expected state for them, not a failure: report it as "nothing
-   configured" so the UI hides the LinkedIn controls instead of erroring. */
-export async function getLinkedInConfig(): Promise<{ configured: boolean }> {
-  const res = await fetch('/api/linkedin/config', { headers: cyberpulseHeaders() });
-  if (res.status === 401) return { configured: false };
-  if (!res.ok) throw new Error(`LinkedIn config error: ${res.status}`);
-  return res.json();
-}
-
-export async function saveLinkedInConfig(config: LinkedInConfigPayload): Promise<void> {
-  const res = await fetch('/api/linkedin/config', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...cyberpulseHeaders(),
-    },
-    body: JSON.stringify(config),
-  });
-  const data = (await res.json().catch(() => ({}))) as { success?: boolean; error?: string };
-  if (!res.ok || !data.success) {
-    throw new Error(data.error || `Save LinkedIn config failed (${res.status})`);
-  }
-}
-
-export async function deleteLinkedInConfig(): Promise<void> {
-  const res = await fetch('/api/linkedin/config', {
-    method: 'DELETE',
-    headers: cyberpulseHeaders(),
-  });
-  const data = (await res.json().catch(() => ({}))) as { success?: boolean; error?: string };
-  if (!res.ok || !data.success) {
-    throw new Error(data.error || `Delete LinkedIn config failed (${res.status})`);
-  }
-}
-
-export async function getLinkedInAuthUrl(): Promise<{ url: string }> {
-  const res = await fetch('/api/linkedin/auth-url', { headers: cyberpulseHeaders() });
-  if (!res.ok) throw new Error(`LinkedIn auth URL error: ${res.status}`);
-  return res.json();
-}
-
-export interface LinkedInStatus {
-  configured: boolean;
-  connected: boolean;
-  personUrn: string | null;
-  personId: string | null;
-}
-
-export async function getLinkedInStatus(): Promise<LinkedInStatus> {
-  const res = await fetch('/api/linkedin/status', { headers: cyberpulseHeaders() });
-  if (res.status === 401) {
-    return { configured: false, connected: false, personUrn: null, personId: null };
-  }
-  if (!res.ok) throw new Error(`LinkedIn status error: ${res.status}`);
-  return res.json();
-}
-
-export async function disconnectLinkedIn(): Promise<void> {
-  const res = await fetch('/api/linkedin/disconnect', { method: 'POST', headers: cyberpulseHeaders() });
-  const data = (await res.json().catch(() => ({}))) as { success?: boolean; error?: string };
-  if (!res.ok || !data.success) {
-    throw new Error(data.error || `Disconnect LinkedIn failed (${res.status})`);
-  }
-}
-
-export async function publishToLinkedIn(text: string, visibility: 'PUBLIC' | 'CONNECTIONS' = 'PUBLIC'): Promise<{ success: boolean; postUrn: string }> {
-  const res = await fetch('/api/linkedin/post', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...cyberpulseHeaders(),
-    },
-    body: JSON.stringify({ text, visibility }),
-  });
-  const data = (await res.json().catch(() => ({}))) as { success?: boolean; postUrn?: string; error?: string };
-  if (!res.ok || !data.success) {
-    throw new Error(data.error || `Publish to LinkedIn failed (${res.status})`);
-  }
-  return { success: true, postUrn: data.postUrn || '' };
 }
 
 /* ------------------------------------------------------------------ */

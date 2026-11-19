@@ -1,15 +1,10 @@
 # =============================================================================
-# CyberPulse — Docker Compose (local)
+# Hacker-Do CyberPulse — Docker Compose
 #
-# Rebuild after changing source:
-#   docker compose up --build
-# or, to force a clean build:
-#   docker compose build --no-cache && docker compose up -d
+#   cp .env.example .env    # fill in CYBERPULSE_SECRET and the first admin
+#   docker compose up -d --build
 #
-# This file is tuned for running on your own machine. Before putting
-# CyberPulse on the internet, read "Deploying it publicly" in the README:
-# at minimum set CYBERPULSE_API_KEY and CYBERPULSE_SECRET, and drop the
-# CYBERPULSE_ALLOW_NO_AUTH line below.
+# After the first start, remove CYBERPULSE_ADMIN_PASSWORD from .env.
 # =============================================================================
 
 services:
@@ -17,33 +12,17 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: cyberpulse:latest
+    image: hacker-do/cyberpulse:latest
     container_name: cyberpulse
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "${CYBERPULSE_BIND:-127.0.0.1}:${CYBERPULSE_PORT:-3001}:3001"
+    env_file: .env
     environment:
-      # Protects every write endpoint, including LinkedIn publishing.
-      # Generate one with: openssl rand -hex 32
-      - CYBERPULSE_API_KEY=${CYBERPULSE_API_KEY:-}
-
-      # The image runs with NODE_ENV=production, where the server refuses to
-      # start without an API key. On localhost that guard is more annoying
-      # than useful, so it is waived here — explicitly, so it is visible.
-      # Remove this line the moment the app is reachable from outside.
-      - CYBERPULSE_ALLOW_NO_AUTH=${CYBERPULSE_ALLOW_NO_AUTH:-true}
-
-      # Encrypts the stored LinkedIn token and client secret (AES-256-GCM).
-      # Without it they sit in the database in clear text.
-      # Generate one with: openssl rand -hex 32  — and keep it, or the saved
-      # LinkedIn connection becomes unreadable.
-      - CYBERPULSE_SECRET=${CYBERPULSE_SECRET:-}
-
       - PORT=3001
-      # Scrape interval, cron syntax.
-      - SCRAPE_CRON=${SCRAPE_CRON:-*/15 * * * *}
+      - TZ=${TZ:-Europe/Madrid}
     volumes:
-      # Persist the database across restarts.
-      - ./data:/app/data
-    # The image carries its own HEALTHCHECK using node's built-in fetch.
-    # Declaring one here would override it, and curl is no longer installed.
+      - cyberpulse_data:/app/data
+
+volumes:
+  cyberpulse_data:

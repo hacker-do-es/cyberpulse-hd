@@ -15,7 +15,8 @@ interface NewsFeedTabProps {
   lastSyncResult: { totalNew: number; errors: string[]; finishedAt: string | null } | null;
   onRefresh: () => void;
   onForceReload: () => void;
-  onSyncFeeds: () => void;
+  /* Only the superadmin can trigger a scrape; feeds also refresh on a schedule. */
+  onSyncFeeds?: () => void;
   activeSources: string[];
   onSelectArticle: (id: string) => void;
   selectedArticleId: string | null;
@@ -254,7 +255,7 @@ export default function NewsFeedTab({
           </button>
 
           {/* Sync Button — fetch new articles from RSS sources */}
-          <button
+          {onSyncFeeds && <button
             onClick={onSyncFeeds}
             disabled={syncing}
             className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium font-inter rounded-md text-accent bg-accent-dim hover:brightness-110 transition-all cursor-pointer disabled:opacity-50"
@@ -267,7 +268,7 @@ export default function NewsFeedTab({
               <CloudDownload size={14} />
             </motion.span>
             {syncing ? 'Syncing...' : 'Sync'}
-          </button>
+          </button>}
         </div>
 
         {/* Right: Last updated + Search */}
@@ -293,7 +294,7 @@ export default function NewsFeedTab({
                 text-sm text-text-primary font-inter
                 placeholder:text-text-tertiary
                 focus:outline-none focus:border-accent
-                focus:shadow-[0_0_0_2px_rgba(204,255,0,0.15)]
+                focus:shadow-[0_0_0_2px_rgba(232, 83, 63,0.15)]
                 transition-all duration-200
               `}
             />
@@ -303,7 +304,7 @@ export default function NewsFeedTab({
 
       {/* Time range */}
       <div className="mb-3 flex items-center gap-2 flex-wrap">
-        <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#555555] mr-1">
+        <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B] mr-1">
           Window
         </span>
         {timeRangeOptions.map((option) => {
@@ -514,7 +515,7 @@ const NewsCard = memo(function NewsCard({ article, isSelected, isHot, onClick }:
         transition-all duration-200 ease-out
         ${isSelected
           ? 'border-accent border-l-[3px] shadow-accent-glow'
-          : 'border-border-default hover:border-[#2A2A2A] hover:bg-bg-elevated'
+          : 'border-border-default hover:border-[#30384A] hover:bg-bg-elevated'
         }
       `}
     >

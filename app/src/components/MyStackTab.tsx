@@ -272,7 +272,7 @@ export default function MyStackTab({
                 text-sm text-text-primary font-inter
                 placeholder:text-text-tertiary
                 focus:outline-none focus:border-accent
-                focus:shadow-[0_0_0_2px_rgba(204,255,0,0.15)]
+                focus:shadow-[0_0_0_2px_rgba(232, 83, 63,0.15)]
                 transition-all duration-200
               `}
             />
@@ -283,7 +283,7 @@ export default function MyStackTab({
       {/* Technology filters */}
       {technologies.length > 0 && (
         <div className="mb-3 flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#555555] mr-1">
+          <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B] mr-1">
             Technologies
           </span>
           <button
@@ -329,7 +329,7 @@ export default function MyStackTab({
       {/* Category filters */}
       {categories.length > 0 && (
         <div className="mb-3 flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#555555] mr-1">
+          <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B] mr-1">
             Categories
           </span>
           <button
@@ -492,7 +492,7 @@ const StackNewsCard = memo(function StackNewsCard({ article, isSelected, onClick
         transition-all duration-200 ease-out
         ${isSelected
           ? 'border-accent border-l-[3px] shadow-accent-glow'
-          : 'border-border-default hover:border-[#2A2A2A] hover:bg-bg-elevated'
+          : 'border-border-default hover:border-[#30384A] hover:bg-bg-elevated'
         }
       `}
     >

@@ -87,22 +87,17 @@ export default function Sidebar({ sources, onToggleSource, onToggleAll, onClose,
       {/* Logo Area */}
       <div className="px-6 py-6 border-b border-border-default">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="relative flex items-center justify-center">
-              <img
-                src="/pulse-logo.svg"
-                alt="CyberPulse logo"
-                width="28"
-                height="28"
-                className="rounded-lg"
-              />
-              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-accent rounded-full" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-text-primary font-inter leading-tight">
-              Cyber<span className="text-accent">Pulse</span>
-            </h1>
-            </div>
+          <div className="flex flex-col gap-1.5">
+            <img
+              src="/hackerdo-logo.png"
+              alt="Hacker-Do"
+              width="135"
+              height="48"
+              className="h-9 w-auto self-start"
+            />
+            <span className="font-orbitron text-[13px] font-bold tracking-[0.18em] text-text-primary">
+              CYBER<span className="text-accent">PULSE</span>
+            </span>
           </div>
           <button
             onClick={onClose}
@@ -113,7 +108,7 @@ export default function Sidebar({ sources, onToggleSource, onToggleAll, onClose,
           </button>
         </div>
         <p className="mt-1 text-[10px] font-medium font-jetbrains uppercase tracking-[0.1em] text-text-tertiary">
-          CYBERSECURITY NEWS DASHBOARD
+          THREAT INTEL FOR YOUR STACK
         </p>
       </div>
 
@@ -296,7 +291,7 @@ export default function Sidebar({ sources, onToggleSource, onToggleAll, onClose,
                 <span
                   className={`
                     text-xs font-normal font-jetbrains shrink-0
-                    ${source.count === 0 ? 'text-[#4A4A4A]' : 'text-text-tertiary'}
+                    ${source.count === 0 ? 'text-[#545D68]' : 'text-text-tertiary'}
                   `}
                   title={
                     source.count === 0

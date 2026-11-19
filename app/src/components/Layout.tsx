@@ -12,8 +12,16 @@ import MyStackTab from './MyStackTab';
 const GeneratePostTab = lazy(() => import('./GeneratePostTab'));
 const HistoryTab = lazy(() => import('./HistoryTab'));
 import type { SourceInfo } from '@/hooks/useRSSFeeds';
-import { Menu } from 'lucide-react';
-import SettingsPanel from './SettingsPanel';
+import { Menu, LogOut, UserCog, Building2, ChevronDown } from 'lucide-react';
+import { useAuth } from '@/lib/auth';
+import { tabsForRole } from './Navbar';
+import ChannelsTab from './hd/ChannelsTab';
+import SettingsTab from './hd/SettingsTab';
+import AdminTab from './hd/AdminTab';
+import AccountDialog from './hd/AccountDialog';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useRSSFeeds } from '@/hooks/useRSSFeeds';
 import { countArticlesBySource, type TimeRange } from '@/lib/timeRange';
 import { createSource, deleteSource, fetchTechStackNews, fetchTechStack, type TechStackNewsArticle } from '@/services/apiService';
@@ -34,8 +42,25 @@ const tabContentVariants = {
   exit: { opacity: 0 },
 };
 
+function NeedsCompany({ onPick }: { onPick: () => void }) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center text-center gap-3">
+      <Building2 size={28} className="text-accent" />
+      <p className="text-text-secondary text-sm max-w-sm">Pick a company in the selector at the top right (or in Companies) to see its stack, channels and settings.</p>
+      <button onClick={onPick} className="text-accent text-sm hover:underline cursor-pointer">Go to Companies</button>
+    </div>
+  );
+}
+
 export default function Layout() {
-  const [activeTab, setActiveTab] = useState<TabId>('news');
+  const { me, logout, switchTenant } = useAuth();
+  const role = me?.user.role;
+  const hasTenant = Boolean(me?.activeTenant);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [activeTab, setActiveTabRaw] = useState<TabId>(role === 'superadmin' && !hasTenant ? 'admin' : 'news');
+  const setActiveTab = useCallback((t: TabId) => {
+    setActiveTabRaw(tabsForRole(role).includes(t) ? t : 'news');
+  }, [role]);
   const { articles, sources, loading, refreshing, syncing, lastUpdated, lastSyncResult, refresh, forceReload, reloadSources, syncFeeds } = useRSSFeeds();
   const [localSources, setLocalSources] = useState<SourceInfo[]>(sources);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
@@ -151,10 +176,10 @@ export default function Layout() {
 
   // Load tech stack news on mount and when switching to my-stack tab
   useEffect(() => {
-    if (activeTab === 'my-stack') {
+    if (activeTab === 'my-stack' && hasTenant) {
       loadStackNews();
     }
-  }, [activeTab, loadStackNews]);
+  }, [activeTab, loadStackNews, hasTenant, me?.activeTenant?.id]);
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -170,7 +195,7 @@ export default function Layout() {
             lastSyncResult={lastSyncResult}
             onRefresh={refresh}
             onForceReload={forceReload}
-            onSyncFeeds={syncFeeds}
+            onSyncFeeds={role === 'superadmin' ? syncFeeds : undefined}
             activeSources={effectiveSources
               .filter((s) => s.active)
               .map((s) => s.name)}
@@ -181,6 +206,7 @@ export default function Layout() {
           />
         );
       case 'my-stack':
+        if (!hasTenant) return <NeedsCompany onPick={() => setActiveTab('admin')} />;
         return (
           <MyStackTab
             key="my-stack"
@@ -202,6 +228,7 @@ export default function Layout() {
               articles={articles}
               selectedArticleId={selectedArticleId}
               onBackToNewsFeed={() => setActiveTab('news')}
+              aiAvailable={Boolean(me?.activeTenant?.aiConfigured)}
             />
           </Suspense>
         );
@@ -211,6 +238,14 @@ export default function Layout() {
             <HistoryTab />
           </Suspense>
         );
+      case 'channels':
+        if (!hasTenant) return <NeedsCompany onPick={() => setActiveTab('admin')} />;
+        return <ChannelsTab key={`channels-${me?.activeTenant?.id}`} />;
+      case 'settings':
+        if (!hasTenant) return <NeedsCompany onPick={() => setActiveTab('admin')} />;
+        return <SettingsTab key={`settings-${me?.activeTenant?.id}`} onStackChanged={refreshStackNews} />;
+      case 'admin':
+        return <AdminTab onEnterTenant={() => setActiveTab('settings')} />;
       default:
         return null;
     }
@@ -239,8 +274,8 @@ export default function Layout() {
           onToggleSource={handleToggleSource}
           onToggleAll={handleToggleAllSources}
           onClose={() => setSidebarOpen(false)}
-          onAddSource={handleAddSource}
-          onDeleteSource={handleDeleteSource}
+          onAddSource={role === 'superadmin' ? handleAddSource : undefined}
+          onDeleteSource={role === 'superadmin' ? handleDeleteSource : undefined}
         />
       </aside>
 
@@ -255,8 +290,44 @@ export default function Layout() {
           >
             <Menu size={20} />
           </button>
-          <Navbar activeTab={activeTab} onTabChange={setActiveTab} />
-          <SettingsPanel className="ml-auto" onSourcesChanged={reloadSources} />
+          <Navbar activeTab={activeTab} onTabChange={setActiveTab} role={role} />
+          <div className="ml-auto flex items-center gap-2 pl-3 shrink-0">
+            {role === 'superadmin' ? (
+              <select
+                aria-label="Active company"
+                value={me?.activeTenant?.id ?? ''}
+                onChange={(e) => { void switchTenant(e.target.value ? Number(e.target.value) : null); }}
+                className="h-8 max-w-[180px] rounded-md border border-border-default bg-bg-input px-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent/40"
+              >
+                <option value="">— No company —</option>
+                {me?.tenants.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}{t.active ? '' : ' (disabled)'}</option>
+                ))}
+              </select>
+            ) : (
+              <span className="hidden md:inline-flex items-center gap-1.5 text-xs text-text-secondary font-rajdhani font-semibold tracking-wide">
+                <Building2 size={14} className="text-accent" /> {me?.activeTenant?.name}
+              </span>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger className="flex items-center gap-1.5 h-8 px-2 rounded-md text-xs text-text-secondary hover:text-text-primary hover:bg-bg-elevated cursor-pointer">
+                <span className="w-6 h-6 rounded-full bg-accent/15 text-accent font-semibold flex items-center justify-center uppercase">
+                  {(me?.user.displayName || me?.user.username || '?').slice(0, 1)}
+                </span>
+                <span className="hidden sm:inline max-w-[110px] truncate">{me?.user.username}</span>
+                <ChevronDown size={12} />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-bg-card border-border-default text-text-primary">
+                <DropdownMenuLabel className="text-xs text-text-tertiary font-normal">
+                  {me?.user.role === 'superadmin' ? 'Hacker-Do superadmin' : me?.user.role === 'admin' ? 'Company admin' : 'Member'}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-border-default" />
+                <DropdownMenuItem onClick={() => setAccountOpen(true)} className="cursor-pointer"><UserCog size={14} /> My account</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => void logout()} className="cursor-pointer"><LogOut size={14} /> Sign out</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          <AccountDialog open={accountOpen} onOpenChange={setAccountOpen} />
         </div>
 
         {/* Content Area */}

@@ -228,21 +228,21 @@ function EmptyStateIllustration() {
         width="55"
         height="70"
         rx="4"
-        stroke="#555555"
+        stroke="#636E7B"
         strokeWidth="1.5"
       />
-      <line x1="38" y1="35" x2="67" y2="35" stroke="#555555" strokeWidth="1.5" />
-      <line x1="38" y1="45" x2="67" y2="45" stroke="#555555" strokeWidth="1.5" />
-      <line x1="38" y1="55" x2="55" y2="55" stroke="#555555" strokeWidth="1.5" />
+      <line x1="38" y1="35" x2="67" y2="35" stroke="#636E7B" strokeWidth="1.5" />
+      <line x1="38" y1="45" x2="67" y2="45" stroke="#636E7B" strokeWidth="1.5" />
+      <line x1="38" y1="55" x2="55" y2="55" stroke="#636E7B" strokeWidth="1.5" />
       {/* Sparkle */}
       <path
         d="M85 20C85 20 88 26 94 29C88 32 85 38 85 38C85 38 82 32 76 29C82 26 85 20 85 20Z"
-        stroke="#555555"
+        stroke="#636E7B"
         strokeWidth="1.5"
         strokeLinejoin="round"
       />
-      <circle cx="90" cy="52" r="3" stroke="#555555" strokeWidth="1.5" />
-      <circle cx="78" cy="65" r="2" stroke="#555555" strokeWidth="1.5" />
+      <circle cx="90" cy="52" r="3" stroke="#636E7B" strokeWidth="1.5" />
+      <circle cx="78" cy="65" r="2" stroke="#636E7B" strokeWidth="1.5" />
     </svg>
   );
 }
@@ -338,7 +338,7 @@ function HistoryCard({
       className={`
         bg-bg-card border border-border-default rounded-[12px] p-4
         transition-colors duration-200 ease-out
-        hover:bg-bg-elevated hover:border-[#2A2A2A]
+        hover:bg-bg-elevated hover:border-[#30384A]
         ${matchesSearch ? '' : 'pointer-events-none'}
       `}
     >
@@ -617,7 +617,7 @@ export default function HistoryTab() {
               bg-bg-input border border-border-default rounded-input
               text-sm font-inter text-text-primary
               placeholder:text-text-tertiary
-              focus:outline-none focus:border-border-active focus:shadow-[0_0_0_2px_rgba(204,255,0,0.15)]
+              focus:outline-none focus:border-border-active focus:shadow-[0_0_0_2px_rgba(232, 83, 63,0.15)]
               transition-all duration-200
             "
           />
