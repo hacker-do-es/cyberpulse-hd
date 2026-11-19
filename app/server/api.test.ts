@@ -245,3 +245,23 @@ describe('multitenant API', () => {
     expect((await new Client().req('POST', '/api/auth/login', { username: 'bob', password: PW })).status).toBe(401);
   });
 });
+
+describe('login lockout', () => {
+  it('locks an account after five failures, including bad 2FA codes', async () => {
+    const { createUser, startTotpEnrolment, confirmTotpEnrolment, totpCode } = await import('./auth');
+    const { getDb } = await import('./db');
+    const t = getDb().prepare(`INSERT INTO tenants (name) VALUES ('LockCo')`).run();
+    const uid = createUser({ username: 'locky', password: PW, role: 'admin', tenantId: Number(t.lastInsertRowid) });
+    const secret = startTotpEnrolment(uid);
+    expect(confirmTotpEnrolment(uid, totpCode(secret, Math.floor(Date.now() / 30000)))).toBe(true);
+
+    for (let i = 0; i < 5; i++) {
+      const r = await new Client().req('POST', '/api/auth/login', { username: 'locky', password: PW, totp: '000000' });
+      expect(r.status).toBe(401);
+    }
+    const locked = await new Client().req('POST', '/api/auth/login', {
+      username: 'locky', password: PW, totp: totpCode(secret, Math.floor(Date.now() / 30000) + 1),
+    });
+    expect(locked.status).toBe(429);
+  });
+});

@@ -250,7 +250,8 @@ export function attemptLogin(username: unknown, password: unknown, totp: unknown
     return { ok: false, status: 429, error: 'Account temporarily locked after repeated failures. Try again later.' };
   }
 
-  if (!verifyPassword(password, row.password_hash)) {
+  /* Wrong passwords and wrong 2FA codes count towards the same lockout. */
+  const recordFailure = () => {
     const failed = row.failed_logins + 1;
     if (failed >= MAX_FAILED_LOGINS) {
       db.prepare(`UPDATE users SET failed_logins = 0, locked_until = datetime('now', ?) WHERE id = ?`)
@@ -258,6 +259,10 @@ export function attemptLogin(username: unknown, password: unknown, totp: unknown
     } else {
       db.prepare(`UPDATE users SET failed_logins = ? WHERE id = ?`).run(failed, row.id);
     }
+  };
+
+  if (!verifyPassword(password, row.password_hash)) {
+    recordFailure();
     return generic;
   }
 
@@ -271,8 +276,7 @@ export function attemptLogin(username: unknown, password: unknown, totp: unknown
     }
     const step = verifyTotp(decryptSecret(row.totp_secret), totp);
     if (step === null || (row.totp_last_step !== null && step <= row.totp_last_step)) {
-      const failed = row.failed_logins + 1;
-      db.prepare(`UPDATE users SET failed_logins = ? WHERE id = ?`).run(failed, row.id);
+      recordFailure();
       return { ok: false, status: 401, error: 'Invalid two-factor code', totpRequired: true };
     }
     db.prepare(`UPDATE users SET totp_last_step = ? WHERE id = ?`).run(step, row.id);
