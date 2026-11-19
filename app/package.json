@@ -1,7 +1,7 @@
 {
-  "name": "cyberpulse",
+  "name": "hacker-do-cyberpulse",
   "private": true,
-  "version": "2.1.0",
+  "version": "3.0.0",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npx tsx server/index.ts\" \"vite\"",
@@ -12,9 +12,12 @@
     "server:dev": "npx tsx watch server/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "docs:sources": "node scripts/gen-sources-doc.mjs"
+    "docs:sources": "node scripts/gen-sources-doc.mjs",
+    "admin": "tsx server/cli.ts",
+    "typecheck:server": "tsc -p tsconfig.server.json"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.3.0",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -59,6 +62,7 @@
     "lucide-react": "^0.562.0",
     "next-themes": "^0.4.6",
     "node-cron": "^4.2.1",
+    "qrcode": "1.5.4",
     "react": "^19.2.0",
     "react-day-picker": "^9.13.0",
     "react-dom": "^19.2.0",
@@ -81,6 +85,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^24.10.1",
     "@types/node-cron": "^3.0.11",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",

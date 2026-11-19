@@ -52,7 +52,7 @@ export function buildAiHostAllowlist(extraHosts: string | undefined): Set<string
 export type ResolvedBaseUrl = { url: string } | { error: string };
 
 export function resolveAiBaseUrl(raw: unknown, allowlist: Set<string>): ResolvedBaseUrl {
-  const candidate = (raw && String(raw).trim()) || 'https://api.openai.com/v1';
+  const candidate: string = (raw ? String(raw).trim() : '') || 'https://api.openai.com/v1';
 
   let parsed: URL;
   try {

@@ -3,9 +3,8 @@ import path from 'path';
 import fs from 'fs';
 
 // Use /app/data in Docker, fallback to cwd locally
-const DATA_DIR = process.env.NODE_ENV === 'production'
-  ? '/app/data'
-  : process.cwd();
+const DATA_DIR = process.env.CYBERPULSE_DATA_DIR
+  || (process.env.NODE_ENV === 'production' ? '/app/data' : process.cwd());
 
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -15,13 +14,14 @@ if (!fs.existsSync(DATA_DIR)) {
 const DB_PATH = path.resolve(DATA_DIR, 'cyberpulse.db');
 let db: Database.Database | null = null;
 
-const CURRENT_SCHEMA_VERSION = 8;
+export const CURRENT_SCHEMA_VERSION = 9;
 
 export function getDb(): Database.Database {
   if (db) return db;
 
   db = new Database(DB_PATH);
   db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS articles (
@@ -155,7 +155,7 @@ export function getDb(): Database.Database {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    db.prepare(`INSERT OR REPLACE INTO schema_metadata (key, value) VALUES ('version', ?)`).run(CURRENT_SCHEMA_VERSION);
+    db.prepare(`INSERT OR REPLACE INTO schema_metadata (key, value) VALUES ('version', ?)`).run(6);
     console.log('[DB] Migrated to schema v6: added LinkedIn tables');
   }
 
@@ -200,6 +200,114 @@ export function getDb(): Database.Database {
     `);
     db.prepare(`INSERT OR REPLACE INTO schema_metadata (key, value) VALUES ('version', ?)`).run(8);
     console.log('[DB] Migrated to schema v8: added user_tech_stack table');
+  }
+
+  if (currentVersion < 9) {
+    /* v9 (Hacker-Do): multitenancy. Companies (tenants) own their tech stack,
+       AI provider, output channels and schedules; users log in with a
+       password (+ optional TOTP). News and RSS sources stay shared. */
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS tenants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        timezone TEXT NOT NULL DEFAULT 'Europe/Madrid',
+        language TEXT NOT NULL DEFAULT 'es',
+        ai_provider TEXT NOT NULL DEFAULT 'none' CHECK (ai_provider IN ('none', 'anthropic', 'openai')),
+        ai_model TEXT,
+        ai_key TEXT,
+        ai_base_url TEXT,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
+        username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        display_name TEXT,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('superadmin', 'admin', 'member')),
+        totp_secret TEXT,
+        totp_enabled INTEGER NOT NULL DEFAULT 0,
+        totp_last_step INTEGER,
+        active INTEGER NOT NULL DEFAULT 1,
+        failed_logins INTEGER NOT NULL DEFAULT 0,
+        locked_until DATETIME,
+        last_login_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        CHECK ((role = 'superadmin' AND tenant_id IS NULL) OR (role <> 'superadmin' AND tenant_id IS NOT NULL))
+      );
+
+      CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        active_tenant_id INTEGER REFERENCES tenants(id) ON DELETE SET NULL,
+        expires_at DATETIME NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+
+      CREATE TABLE IF NOT EXISTS channels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK (type IN ('slack', 'rocketchat')),
+        webhook_url TEXT NOT NULL,
+        active INTEGER NOT NULL DEFAULT 1,
+        schedule_type TEXT NOT NULL DEFAULT 'weekly' CHECK (schedule_type IN ('interval', 'weekly')),
+        interval_hours INTEGER,
+        time_of_day TEXT,
+        weekdays TEXT,
+        min_severity TEXT NOT NULL DEFAULT 'medium',
+        max_items INTEGER NOT NULL DEFAULT 15,
+        use_ai INTEGER NOT NULL DEFAULT 1,
+        last_run_at DATETIME,
+        last_sent_at DATETIME,
+        next_run_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_channels_tenant ON channels(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_channels_next_run ON channels(next_run_at);
+
+      CREATE TABLE IF NOT EXISTS deliveries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+        tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        trigger TEXT NOT NULL DEFAULT 'schedule',
+        status TEXT NOT NULL CHECK (status IN ('sent', 'skipped', 'error')),
+        article_count INTEGER NOT NULL DEFAULT 0,
+        detail TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_deliveries_channel ON deliveries(channel_id, created_at);
+
+      CREATE TABLE IF NOT EXISTS channel_sent_articles (
+        channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+        article_id INTEGER NOT NULL,
+        sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (channel_id, article_id)
+      );
+    `);
+
+    const stackCols = db.prepare(`PRAGMA table_info(user_tech_stack)`).all() as Array<{ name: string }>;
+    if (!stackCols.some((c) => c.name === 'tenant_id')) {
+      db.exec(`ALTER TABLE user_tech_stack ADD COLUMN tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE`);
+    }
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_tech_stack_tenant ON user_tech_stack(tenant_id)`);
+
+    /* A pre-existing single-tenant stack is not thrown away: it moves into a
+       "Default" company that the superadmin can rename. */
+    const orphan = db.prepare(`SELECT COUNT(*) AS c FROM user_tech_stack WHERE tenant_id IS NULL`).get() as { c: number };
+    if (orphan.c > 0) {
+      const t = db.prepare(`INSERT OR IGNORE INTO tenants (name) VALUES ('Default')`).run();
+      const tenantId = t.changes > 0
+        ? Number(t.lastInsertRowid)
+        : (db.prepare(`SELECT id FROM tenants WHERE name = 'Default'`).get() as { id: number }).id;
+      db.prepare(`UPDATE user_tech_stack SET tenant_id = ? WHERE tenant_id IS NULL`).run(tenantId);
+    }
+
+    db.prepare(`INSERT OR REPLACE INTO schema_metadata (key, value) VALUES ('version', ?)`).run(9);
+    console.log('[DB] Migrated to schema v9: multitenancy (tenants, users, channels)');
   }
 
   return db;
