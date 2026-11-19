@@ -14,7 +14,7 @@ if (!fs.existsSync(DATA_DIR)) {
 const DB_PATH = path.resolve(DATA_DIR, 'cyberpulse.db');
 let db: Database.Database | null = null;
 
-export const CURRENT_SCHEMA_VERSION = 9;
+export const CURRENT_SCHEMA_VERSION = 10;
 
 export function getDb(): Database.Database {
   if (db) return db;
@@ -308,6 +308,17 @@ export function getDb(): Database.Database {
 
     db.prepare(`INSERT OR REPLACE INTO schema_metadata (key, value) VALUES ('version', ?)`).run(9);
     console.log('[DB] Migrated to schema v9: multitenancy (tenants, users, channels)');
+  }
+
+  if (currentVersion < 10) {
+    /* v10: per-channel message header and footer (NULL = default text,
+       empty footer = no footer), so a company's digest can carry its own
+       branding instead of Hacker-Do's. */
+    const cols = db.prepare(`PRAGMA table_info(channels)`).all() as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === 'header_text')) db.exec(`ALTER TABLE channels ADD COLUMN header_text TEXT`);
+    if (!cols.some((c) => c.name === 'footer_text')) db.exec(`ALTER TABLE channels ADD COLUMN footer_text TEXT`);
+    db.prepare(`INSERT OR REPLACE INTO schema_metadata (key, value) VALUES ('version', ?)`).run(10);
+    console.log('[DB] Migrated to schema v10: channel header/footer');
   }
 
   return db;

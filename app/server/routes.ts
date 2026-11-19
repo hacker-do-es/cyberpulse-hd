@@ -402,6 +402,8 @@ function channelOut(row: ChannelRow) {
     minSeverity: row.min_severity,
     maxItems: row.max_items,
     useAi: Boolean(row.use_ai),
+    header: row.header_text,
+    footer: row.footer_text,
     lastRunAt: row.last_run_at,
     lastSentAt: row.last_sent_at,
     nextRunAt: row.next_run_at,
@@ -417,6 +419,35 @@ interface ChannelInput {
   minSeverity: string;
   maxItems: number;
   useAi: boolean;
+  header: string | null;
+  footer: string | null;
+}
+
+export const MAX_HEADER_LENGTH = 150;
+export const MAX_FOOTER_LENGTH = 300;
+
+/* header: null/'' = default. footer: null = default, '' = none. */
+function parseBranding(body: any, existing?: ChannelRow): { header: string | null; footer: string | null } | { error: string } {
+  let header = existing?.header_text ?? null;
+  if (body?.header !== undefined) {
+    if (body.header !== null && typeof body.header !== 'string') return { error: 'header must be text' };
+    const h = (body.header ?? '').replace(/[\r\n]+/g, ' ').trim();
+    if (h.length > MAX_HEADER_LENGTH) return { error: `Header can be at most ${MAX_HEADER_LENGTH} characters` };
+    header = h || null;
+  }
+  let footer = existing ? existing.footer_text : null;
+  if (body?.footer !== undefined) {
+    if (body.footer !== null && typeof body.footer !== 'string') return { error: 'footer must be text' };
+    if (body.footer === null) footer = null;
+    else {
+      const lines = body.footer.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
+      if (lines.length > 3) return { error: 'Footer can have at most 3 lines' };
+      const f = lines.join('\n');
+      if (f.length > MAX_FOOTER_LENGTH) return { error: `Footer can be at most ${MAX_FOOTER_LENGTH} characters` };
+      footer = f;
+    }
+  }
+  return { header, footer };
 }
 
 function parseChannelInput(body: any, existing?: ChannelRow): { value: ChannelInput } | { error: string } {
@@ -455,9 +486,12 @@ function parseChannelInput(body: any, existing?: ChannelRow): { value: ChannelIn
   const maxItems = Number(body?.maxItems ?? existing?.max_items ?? 15);
   if (!Number.isInteger(maxItems) || maxItems < 1 || maxItems > 50) return { error: 'maxItems must be 1-50' };
 
+  const branding = parseBranding(body, existing);
+  if ('error' in branding) return { error: branding.error };
+
   return {
     value: {
-      name, type, webhookUrl, schedule, minSeverity, maxItems,
+      name, type, webhookUrl, schedule, minSeverity, maxItems, ...branding,
       active: body?.active === undefined ? (existing ? Boolean(existing.active) : true) : Boolean(body.active),
       useAi: body?.useAi === undefined ? (existing ? Boolean(existing.use_ai) : true) : Boolean(body.useAi),
     },
@@ -483,12 +517,12 @@ tenantRouter.post('/channels', ...requireTenantAdmin, writeLimiter, wrap((req, r
   const count = (db.prepare(`SELECT COUNT(*) AS c FROM channels WHERE tenant_id = ?`).get(tenantId(req)) as { c: number }).c;
   if (count >= MAX_CHANNELS_PER_TENANT) return res.status(409).json({ error: `A company can have at most ${MAX_CHANNELS_PER_TENANT} channels` });
   const result = db.prepare(`
-    INSERT INTO channels (tenant_id, name, type, webhook_url, active, schedule_type, interval_hours, time_of_day, weekdays, min_severity, max_items, use_ai)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO channels (tenant_id, name, type, webhook_url, active, schedule_type, interval_hours, time_of_day, weekdays, min_severity, max_items, use_ai, header_text, footer_text)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     tenantId(req), v.name, v.type, encryptSecret(v.webhookUrl!), v.active ? 1 : 0,
     v.schedule.type, v.schedule.intervalHours, v.schedule.timeOfDay, v.schedule.weekdays?.join(',') ?? null,
-    v.minSeverity, v.maxItems, v.useAi ? 1 : 0,
+    v.minSeverity, v.maxItems, v.useAi ? 1 : 0, v.header, v.footer,
   );
   const id = Number(result.lastInsertRowid);
   rescheduleChannel(id);
@@ -504,12 +538,12 @@ tenantRouter.put('/channels/:id', ...requireTenantAdmin, writeLimiter, wrap((req
   const db = getDb();
   db.prepare(`
     UPDATE channels SET name = ?, type = ?, webhook_url = ?, active = ?, schedule_type = ?, interval_hours = ?,
-      time_of_day = ?, weekdays = ?, min_severity = ?, max_items = ?, use_ai = ?
+      time_of_day = ?, weekdays = ?, min_severity = ?, max_items = ?, use_ai = ?, header_text = ?, footer_text = ?
     WHERE id = ? AND tenant_id = ?
   `).run(
     v.name, v.type, v.webhookUrl ? encryptSecret(v.webhookUrl) : existing.webhook_url, v.active ? 1 : 0,
     v.schedule.type, v.schedule.intervalHours, v.schedule.timeOfDay, v.schedule.weekdays?.join(',') ?? null,
-    v.minSeverity, v.maxItems, v.useAi ? 1 : 0, existing.id, tenantId(req),
+    v.minSeverity, v.maxItems, v.useAi ? 1 : 0, v.header, v.footer, existing.id, tenantId(req),
   );
   rescheduleChannel(existing.id);
   res.json({ channel: channelOut(db.prepare(`SELECT * FROM channels WHERE id = ?`).get(existing.id) as ChannelRow) });

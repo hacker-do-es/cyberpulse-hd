@@ -166,7 +166,24 @@ function slackEscape(s: string): string {
 }
 
 function mdEscape(s: string): string {
-  return s.replace(/([\\[\]()*_`~|])/g, '\\$1');
+  /* Rocket.Chat turns a bare @all / @here / @user into a mention; a
+     zero-width space after "@" keeps the text readable but inert. */
+  return s.replace(/([\\[\]()*_`~|])/g, '\\$1').replace(/@(?=\w)/g, '@\u200b');
+}
+
+/* Footer may span a few lines; each is italicised on its own because
+   Slack/Rocket.Chat emphasis does not cross line breaks. */
+function footerLines(type: ChannelType, footer: string): string[] {
+  const esc = type === 'slack' ? slackEscape : mdEscape;
+  const lines = footer.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  return lines.length ? ['', ...lines.map((l) => `_${esc(l)}_`)] : [];
+}
+
+export function renderTestPreview(type: ChannelType, msg: { heading: string; body: string; footer: string }): string {
+  const lines = type === 'slack'
+    ? [`*${slackEscape(msg.heading)}*`, '', slackEscape(msg.body)]
+    : [`**${mdEscape(msg.heading)}**`, '', mdEscape(msg.body)];
+  return [...lines, ...footerLines(type, msg.footer)].join('\n');
 }
 
 function safeUrl(u: string): string | null {
@@ -199,7 +216,7 @@ export function renderMessage(type: ChannelType, msg: DigestMessage): { text: st
         lines.push(`• ${link} · ${slackEscape(it.source)}${tech}`);
       }
     }
-    lines.push('', `_${slackEscape(msg.footer)}_`);
+    lines.push(...footerLines(type, msg.footer));
   } else {
     lines.push(`**${mdEscape(msg.heading)}**`);
     if (msg.summary) lines.push('', mdEscape(msg.summary));
@@ -213,7 +230,7 @@ export function renderMessage(type: ChannelType, msg: DigestMessage): { text: st
         lines.push(`• ${link} · ${mdEscape(it.source)}${tech}`);
       }
     }
-    lines.push('', `_${mdEscape(msg.footer)}_`);
+    lines.push(...footerLines(type, msg.footer));
   }
   return { text: lines.join('\n') };
 }

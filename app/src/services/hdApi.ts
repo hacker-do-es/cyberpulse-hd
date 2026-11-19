@@ -134,6 +134,10 @@ export interface Channel {
   minSeverity: Severity;
   maxItems: number;
   useAi: boolean;
+  /** Custom digest header; null = default. */
+  header: string | null;
+  /** Custom digest footer; null = default, '' = no footer. */
+  footer: string | null;
   lastRunAt: string | null;
   lastSentAt: string | null;
   nextRunAt: string | null;
@@ -148,6 +152,8 @@ export interface ChannelInput {
   minSeverity: Severity;
   maxItems: number;
   useAi: boolean;
+  header?: string | null;
+  footer?: string | null;
 }
 
 export interface Delivery {

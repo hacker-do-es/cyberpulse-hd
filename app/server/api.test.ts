@@ -220,6 +220,56 @@ describe('multitenant API', () => {
     expect(hist.body.deliveries.map((d: any) => d.status)).toEqual(['skipped', 'sent']);
   });
 
+  it('uses the channel\'s own header and footer instead of the Hacker-Do branding', async () => {
+    const ch = (await adminA.req('GET', '/api/channels')).body.channels[0];
+    expect(ch.header).toBeNull();
+    expect(ch.footer).toBeNull();
+
+    expect((await adminA.req('PUT', `/api/channels/${ch.id}`, { header: 'x'.repeat(151) })).status).toBe(400);
+    expect((await adminA.req('PUT', `/api/channels/${ch.id}`, { footer: 'a\nb\nc\nd' })).status).toBe(400);
+
+    const upd = await adminA.req('PUT', `/api/channels/${ch.id}`, {
+      header: 'Schub Security Alerts · {empresa} · {count} alertas',
+      footer: 'Schub · Ciberseguridad gestionada\nsoc@schub.example',
+    });
+    expect(upd.status).toBe(200);
+    expect(upd.body.channel.header).toBe('Schub Security Alerts · {empresa} · {count} alertas');
+
+    /* A later edit that does not mention them keeps them. */
+    const keep = await adminA.req('PUT', `/api/channels/${ch.id}`, { name: 'SOC' });
+    expect(keep.body.channel.footer).toBe('Schub · Ciberseguridad gestionada\nsoc@schub.example');
+
+    const { getDb } = await import('./db');
+    getDb().prepare(`INSERT INTO articles (title, summary, source, severity, category, published_at, url) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run('FortiOS @all second bug', 'Fortinet FortiOS', 'TestFeed', 'high', 'VULNERABILITY', new Date().toISOString(), 'https://news.example/fortios-2');
+
+    received.length = 0;
+    const run = await adminA.req('POST', `/api/channels/${ch.id}/run`);
+    expect(run.body.status).toBe('sent');
+    const text: string = received[0].body.text;
+    expect(text.split('\n')[0]).toBe('**Schub Security Alerts · Acme · 1 alertas**');
+    expect(text).toContain('_Schub · Ciberseguridad gestionada_\n_soc@\u200bschub.example_');
+    expect(text).toContain('@\u200ball');
+    expect(text).not.toMatch(/Hacker-Do/);
+
+    received.length = 0;
+    expect((await adminA.req('POST', `/api/channels/${ch.id}/test`)).status).toBe(200);
+    expect(received[0].body.text).toContain('Schub Security Alerts · Acme · 3 alertas');
+    expect(received[0].body.text).not.toMatch(/Hacker-Do/);
+
+    /* Footer '' = none; header null = back to default. */
+    await adminA.req('PUT', `/api/channels/${ch.id}`, { header: null, footer: '' });
+    received.length = 0;
+    await adminA.req('POST', `/api/channels/${ch.id}/test`);
+    expect(received[0].body.text).toContain('**Hacker-Do CyberPulse · Acme · 3');
+    expect(received[0].body.text).not.toContain('hacker-do.es');
+
+    await adminA.req('PUT', `/api/channels/${ch.id}`, { header: null, footer: null });
+    received.length = 0;
+    await adminA.req('POST', `/api/channels/${ch.id}/test`);
+    expect(received[0].body.text).toMatch(/^Mensaje de prueba de Hacker-Do CyberPulse para Acme/);
+  });
+
   it('blocks private webhook targets unless explicitly allowed', async () => {
     process.env.CYBERPULSE_ALLOW_PRIVATE_WEBHOOKS = 'false';
     try {
