@@ -225,9 +225,7 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
         <DialogHeader>
           <DialogTitle className="font-rajdhani text-xl">{isNew ? 'New channel' : `Edit ${f.name}`}</DialogTitle>
           <DialogDescription className="text-text-tertiary text-xs">
-            {f.type === 'slack'
-              ? 'In Slack: api.slack.com/apps → Create New App → Incoming Webhooks → On → Add New Webhook, pick the channel and paste the https://hooks.slack.com/services/… URL.'
-              : 'In Rocket.Chat: Administration → Integrations → New → Incoming, pick the channel, save and paste the Webhook URL.'}
+            Digests go to a {f.type === 'slack' ? 'Slack' : 'Rocket.Chat'} channel through an incoming webhook.
           </DialogDescription>
         </DialogHeader>
 
@@ -243,6 +241,8 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
               </select>
             </Field>
           </div>
+
+          <WebhookHelp key={f.type} type={f.type} defaultOpen={isNew || Boolean(typeChanged)} />
 
           <Field
             label="Webhook URL"
@@ -374,6 +374,56 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+const WEBHOOK_STEPS: Record<ChannelInput['type'], { title: string; steps: React.ReactNode[]; notes: React.ReactNode[] }> = {
+  slack: {
+    title: 'How to get a Slack webhook URL',
+    steps: [
+      <>Open <a href="https://api.slack.com/apps" target="_blank" rel="noopener noreferrer" className="text-accent underline">api.slack.com/apps</a> and click <b>Create New App</b> → <b>From scratch</b> → <b>Pick features</b>.</>,
+      <>Under <b>Bot scopes</b> add only <span className="font-jetbrains">incoming-webhook</span>. Leave <b>User scopes</b> empty.</>,
+      <>Give the app a name (e.g. “Security Alerts”), choose the workspace and create it.</>,
+      <>In the left menu open <b>Incoming Webhooks</b>, switch it <b>On</b> and click <b>Add New Webhook</b>.</>,
+      <>Pick the channel and click <b>Allow</b>.</>,
+      <>Copy the <b>Webhook URL</b> (<span className="font-jetbrains">https://hooks.slack.com/services/…</span>) and paste it below.</>,
+    ],
+    notes: [
+      'If your workspace requires app approval, a Slack admin has to approve the install.',
+      'Private channels only show up if you are a member.',
+      'Optional: set the app icon and name under Basic Information → Display Information; that is what the channel shows as the sender.',
+    ],
+  },
+  rocketchat: {
+    title: 'How to get a Rocket.Chat webhook URL',
+    steps: [
+      <>Log in as a user with permission to manage integrations (usually an admin).</>,
+      <>Go to <b>Administration</b> (Workspace) → <b>Integrations</b> → <b>New</b> → <b>Incoming</b>.</>,
+      <>Turn <b>Enabled</b> on and give it a name (e.g. “Security Alerts”).</>,
+      <>In <b>Post to Channel</b> type the channel (<span className="font-jetbrains">#security-alerts</span>) and in <b>Post as</b> an existing user, e.g. a bot user or <span className="font-jetbrains">rocket.cat</span>.</>,
+      <>Optional: set <b>Alias</b> and <b>Avatar URL</b> to choose how the sender looks. Leave <b>Script</b> disabled.</>,
+      <>Click <b>Save</b>, then copy the <b>Webhook URL</b> (<span className="font-jetbrains">https://chat.example.com/hooks/…</span>) and paste it below.</>,
+    ],
+    notes: [
+      'The “Post as” user must be a member of the channel.',
+      'The Rocket.Chat server must be reachable over HTTPS from the internet. Servers on a private network need CYBERPULSE_ALLOW_PRIVATE_WEBHOOKS on the CyberPulse side (ask Hacker-Do).',
+    ],
+  },
+};
+
+function WebhookHelp({ type, defaultOpen }: { type: ChannelInput['type']; defaultOpen: boolean }) {
+  const h = WEBHOOK_STEPS[type];
+  return (
+    <details className="group rounded-lg border border-border-default bg-bg-elevated/40 px-4 py-3 text-xs" open={defaultOpen}>
+      <summary className="cursor-pointer select-none font-medium text-text-secondary">{h.title}</summary>
+      <ol className="mt-2 list-decimal space-y-1 pl-5 text-text-secondary">
+        {h.steps.map((s, i) => <li key={i}>{s}</li>)}
+      </ol>
+      <ul className="mt-2 space-y-0.5 text-text-tertiary">
+        {h.notes.map((n, i) => <li key={i}>· {n}</li>)}
+      </ul>
+      <p className="mt-2 text-text-tertiary">The URL works like a password: anyone who has it can post to the channel. Don’t share it by chat or email.</p>
+    </details>
   );
 }
 
