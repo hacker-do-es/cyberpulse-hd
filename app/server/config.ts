@@ -33,25 +33,55 @@ export const config = {
 
 export const DEFAULT_SCRAPE_CRON = '*/15 * * * *';
 
-/* LinkedIn app (developers.linkedin.com) for "Publish to LinkedIn". Read
-   lazily so tests can set them. Publishing is off unless all three are set. */
+/* LinkedIn apps (developers.linkedin.com) for "Publish to LinkedIn". Read
+   lazily so tests can set them.
+
+   - Main app (LINKEDIN_CLIENT_ID/SECRET): "Sign In with LinkedIn using
+     OpenID Connect" + "Share on LinkedIn" -> users post as themselves.
+     LINKEDIN_ORG_POSTING=1 also asks it for Company Page scopes, for an app
+     that has Community Management too. LINKEDIN_SCOPES overrides its list.
+   - Pages app (LINKEDIN_PAGES_CLIENT_ID/SECRET, optional): a separate app
+     with only the Community Management API (LinkedIn does not let it share
+     an app with other products) -> users post as Company Pages they manage.
+     LINKEDIN_PAGES_SCOPES overrides its list.
+   Both share LINKEDIN_REDIRECT_URI. Publishing is off unless at least one
+   app and the redirect URI are set. */
+export type LinkedInSlot = 'main' | 'pages';
+
+export interface LinkedInApp {
+  slot: LinkedInSlot;
+  clientId: string;
+  clientSecret: string;
+  scopes: string[];
+}
+
+const scopeList = (v: string | undefined) => (v || '').trim().split(/[\s,]+/).filter(Boolean);
+
+export const LINKEDIN_MEMBER_SCOPES = ['openid', 'profile', 'w_member_social'];
+export const LINKEDIN_ORG_SCOPES = ['w_organization_social', 'r_organization_admin'];
+
 export const linkedinConfig = () => {
-  const clientId = (process.env.LINKEDIN_CLIENT_ID || '').trim();
-  const clientSecret = (process.env.LINKEDIN_CLIENT_SECRET || '').trim();
   const redirectUri = (process.env.LINKEDIN_REDIRECT_URI || '').trim();
-  return clientId && clientSecret && redirectUri
-    ? {
-      clientId, clientSecret, redirectUri,
-      apiVersion: (process.env.LINKEDIN_API_VERSION || '202609').trim(),
-      /* Posting as a Company Page needs LinkedIn's Community Management API
-         product (reviewed by LinkedIn). Asking for its scopes before the app
-         has it makes LinkedIn reject the whole sign-in, so it is opt-in. */
-      orgPosting: (process.env.LINKEDIN_ORG_POSTING || '').trim() === '1',
-      /* Optional override, e.g. when Community Management lives in an app
-         without "Sign In with LinkedIn": "w_organization_social r_organization_admin". */
-      scopes: (process.env.LINKEDIN_SCOPES || '').trim().split(/[\s,]+/).filter(Boolean),
-    }
-    : null;
+  const mainId = (process.env.LINKEDIN_CLIENT_ID || '').trim();
+  const mainSecret = (process.env.LINKEDIN_CLIENT_SECRET || '').trim();
+  const pagesId = (process.env.LINKEDIN_PAGES_CLIENT_ID || '').trim();
+  const pagesSecret = (process.env.LINKEDIN_PAGES_CLIENT_SECRET || '').trim();
+  const orgPosting = (process.env.LINKEDIN_ORG_POSTING || '').trim() === '1';
+
+  const apps: Partial<Record<LinkedInSlot, LinkedInApp>> = {};
+  if (mainId && mainSecret) {
+    const override = scopeList(process.env.LINKEDIN_SCOPES);
+    apps.main = {
+      slot: 'main', clientId: mainId, clientSecret: mainSecret,
+      scopes: override.length ? override : orgPosting ? [...LINKEDIN_MEMBER_SCOPES, ...LINKEDIN_ORG_SCOPES] : LINKEDIN_MEMBER_SCOPES,
+    };
+  }
+  if (pagesId && pagesSecret) {
+    const override = scopeList(process.env.LINKEDIN_PAGES_SCOPES);
+    apps.pages = { slot: 'pages', clientId: pagesId, clientSecret: pagesSecret, scopes: override.length ? override : LINKEDIN_ORG_SCOPES };
+  }
+  if (!redirectUri || (!apps.main && !apps.pages)) return null;
+  return { redirectUri, apiVersion: (process.env.LINKEDIN_API_VERSION || '202609').trim(), apps };
 };
 
 export const flags = {

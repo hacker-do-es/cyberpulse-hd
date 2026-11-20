@@ -258,8 +258,23 @@ export interface LinkedInOrganization {
   role: string;
 }
 
+export interface LinkedInConnection {
+  connected: boolean;
+  expired: boolean;
+  expiresAt: string | null;
+}
+
+/* 'main' = own profile (or both, with a single LinkedIn app); 'pages' = the
+   separate Community Management app for Company Pages. */
+export type LinkedInApp = 'main' | 'pages';
+
 export interface LinkedInStatus {
   configured: boolean;
+  /* The server can post as the member (main app). */
+  memberPosting: boolean;
+  /* Company Pages use their own app and connection (pagesConnection). */
+  pagesApp: boolean;
+  pagesConnection: LinkedInConnection | null;
   /* The server asks for Company Page permissions (Community Management). */
   orgPosting: boolean;
   connected: boolean;
@@ -276,8 +291,8 @@ export interface LinkedInStatus {
 export const linkedinApi = {
   status: () => call<LinkedInStatus>('GET', '/api/linkedin'),
   /* Full-page navigation: LinkedIn's consent screen, then back to the app. */
-  connectUrl: (returnTo: 'generate' | 'account') => `/api/linkedin/connect?return=${returnTo}`,
-  disconnect: () => call<{ success: true }>('DELETE', '/api/linkedin'),
+  connectUrl: (returnTo: 'generate' | 'account', app: LinkedInApp = 'main') => `/api/linkedin/connect?return=${returnTo}&app=${app}`,
+  disconnect: (app: LinkedInApp = 'main') => call<{ success: true }>('DELETE', `/api/linkedin?app=${app}`),
   /* author: 'member' or a Page URN from status.organizations. */
   publish: (text: string, author: string) => call<{ urn: string; url: string }>('POST', '/api/linkedin/posts', { text, author }),
   refreshOrganizations: () => call<{ organizations: LinkedInOrganization[] }>('POST', '/api/linkedin/organizations/refresh'),

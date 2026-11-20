@@ -612,6 +612,90 @@ describe('multitenant API', () => {
     }
   });
 
+  it('uses a separate Community Management app for Company Pages', async () => {
+    const { setLinkedInFetch } = await import('../services/linkedin/client');
+    const calls: Array<{ url: string; init: any }> = [];
+    setLinkedInFetch((async (url: any, init: any) => {
+      calls.push({ url: String(url), init });
+      const u = String(url);
+      if (u.endsWith('/oauth/v2/accessToken')) {
+        const pages = String(init.body).includes('client_id=pagesApp');
+        return new Response(JSON.stringify(pages
+          ? { access_token: 'tok-pages', expires_in: 5183999, scope: 'w_organization_social,r_organization_admin' }
+          : { access_token: 'tok-main', expires_in: 5183999, scope: 'openid,profile,w_member_social' }), { status: 200 });
+      }
+      if (u.endsWith('/v2/userinfo')) return new Response(JSON.stringify({ sub: 'abc123XYZ', name: 'Alice Example' }), { status: 200 });
+      if (u.includes('/rest/organizationAcls?')) return new Response(JSON.stringify({ elements: [{ roleAssignee: 'urn:li:person:abc123XYZ', role: 'ADMINISTRATOR', state: 'APPROVED', organization: 'urn:li:organization:111' }] }), { status: 200 });
+      if (u.endsWith('/rest/organizations/111')) return new Response(JSON.stringify({ localizedName: 'Example Corp' }), { status: 200 });
+      if (u.endsWith('/rest/posts')) return new Response('', { status: 201, headers: { 'x-restli-id': 'urn:li:share:7400000000000000001' } });
+      if (u.endsWith('/oauth/v2/revoke')) return new Response('', { status: 200 });
+      return new Response('nope', { status: 404 });
+    }) as typeof fetch);
+    const connect = async (app: string) => {
+      const r = await fetch(base + `/api/linkedin/connect?return=account&app=${app}`, { headers: { cookie: memberA.cookie }, redirect: 'manual' });
+      const loc = new URL(r.headers.get('location')!);
+      const cb = await fetch(base + `/api/linkedin/callback?code=c&state=${encodeURIComponent(loc.searchParams.get('state')!)}`);
+      expect(await cb.text()).toContain('linkedin=connected');
+      return { clientId: loc.searchParams.get('client_id'), scope: loc.searchParams.get('scope') };
+    };
+    try {
+      process.env.LINKEDIN_CLIENT_ID = 'mainApp';
+      process.env.LINKEDIN_CLIENT_SECRET = 'mainSecret';
+      process.env.LINKEDIN_PAGES_CLIENT_ID = 'pagesApp';
+      process.env.LINKEDIN_PAGES_CLIENT_SECRET = 'pagesSecret';
+      process.env.LINKEDIN_REDIRECT_URI = 'https://cyberpulse.example/api/linkedin/callback';
+
+      let st = (await memberA.req('GET', '/api/linkedin')).body;
+      expect(st).toMatchObject({ configured: true, orgPosting: true, memberPosting: true, pagesApp: true, connected: false, pagesConnection: { connected: false } });
+
+      /* Each app asks only for its own permissions. */
+      expect(await connect('main')).toEqual({ clientId: 'mainApp', scope: 'openid profile w_member_social' });
+      st = (await memberA.req('GET', '/api/linkedin')).body;
+      expect(st).toMatchObject({ connected: true, canPostAsMember: true, canPostAsOrganization: false, organizations: [], pagesConnection: { connected: false } });
+      expect(await connect('pages')).toEqual({ clientId: 'pagesApp', scope: 'w_organization_social r_organization_admin' });
+      expect(calls.filter((c) => c.url.endsWith('/accessToken')).pop()!.init.body).toContain('client_secret=pagesSecret');
+      st = (await memberA.req('GET', '/api/linkedin')).body;
+      expect(st).toMatchObject({ canPostAsMember: true, canPostAsOrganization: true, name: 'Alice Example', pagesConnection: { connected: true } });
+      expect(st.organizations).toEqual([{ urn: 'urn:li:organization:111', name: 'Example Corp', role: 'ADMINISTRATOR' }]);
+
+      /* Each author uses the token of its own connection. */
+      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'Page post', author: 'urn:li:organization:111' })).status).toBe(201);
+      let post = calls.filter((c) => c.url.endsWith('/rest/posts')).pop()!;
+      expect(post.init.headers.Authorization).toBe('Bearer tok-pages');
+      expect(JSON.parse(post.init.body).author).toBe('urn:li:organization:111');
+      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'My post', author: 'member' })).status).toBe(201);
+      post = calls.filter((c) => c.url.endsWith('/rest/posts')).pop()!;
+      expect(post.init.headers.Authorization).toBe('Bearer tok-main');
+      expect(JSON.parse(post.init.body).author).toBe('urn:li:person:abc123XYZ');
+
+      /* Refresh goes through the pages connection. */
+      expect((await memberA.req('POST', '/api/linkedin/organizations/refresh')).body.organizations).toHaveLength(1);
+
+      /* Disconnecting the pages app keeps the profile connection, and revokes with the right app. */
+      expect((await memberA.req('DELETE', '/api/linkedin?app=pages')).status).toBe(200);
+      expect(calls.filter((c) => c.url.endsWith('/revoke')).pop()!.init.body).toContain('client_id=pagesApp');
+      st = (await memberA.req('GET', '/api/linkedin')).body;
+      expect(st).toMatchObject({ connected: true, canPostAsMember: true, canPostAsOrganization: false, organizations: [], pagesConnection: { connected: false } });
+      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'x', author: 'urn:li:organization:111' })).status).toBe(400);
+
+      /* Only the pages app configured: no personal posting offered. */
+      await connect('pages');
+      delete process.env.LINKEDIN_CLIENT_ID;
+      st = (await memberA.req('GET', '/api/linkedin')).body;
+      expect(st).toMatchObject({ memberPosting: false, canPostAsMember: false, canPostAsOrganization: true });
+      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'x', author: 'member' })).status).toBe(409);
+      expect((await memberA.req('GET', '/api/linkedin/connect?app=main')).status).toBe(400);
+
+      /* Disconnect without ?app clears everything. */
+      process.env.LINKEDIN_CLIENT_ID = 'mainApp';
+      expect((await memberA.req('DELETE', '/api/linkedin')).status).toBe(200);
+      expect((await memberA.req('GET', '/api/linkedin')).body).toMatchObject({ connected: false, pagesConnection: { connected: false } });
+    } finally {
+      setLinkedInFetch(null);
+      for (const k of ['LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET', 'LINKEDIN_PAGES_CLIENT_ID', 'LINKEDIN_PAGES_CLIENT_SECRET', 'LINKEDIN_REDIRECT_URI']) delete process.env[k];
+    }
+  });
+
   it('cuts off a disabled company immediately', async () => {
     await root.req('PATCH', `/api/admin/tenants/${tenantA}`, { active: false });
     expect((await adminA.req('GET', '/api/tech-stack')).status).toBe(401);

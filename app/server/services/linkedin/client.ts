@@ -1,24 +1,16 @@
-import { linkedinConfig } from '../../config';
+import { linkedinConfig, type LinkedInApp } from '../../config';
 
 /* LinkedIn OAuth 2.0 (OpenID Connect) and the Posts API. Only these two
    fixed hosts are ever contacted. Scopes: openid + profile identify the
    member, w_member_social lets them post as themselves; with Community
-   Management (LINKEDIN_ORG_POSTING=1) w_organization_social posts as a
-   Company Page the member administers, found via r_organization_admin. */
+   Management w_organization_social posts as a Company Page the member
+   administers, found via r_organization_admin. OAuth calls take the app
+   (main or pages, see config.ts) they belong to. */
 
 export class LinkedInError extends Error {
   constructor(message: string, public readonly status = 0) {
     super(message);
   }
-}
-
-export const MEMBER_SCOPES = ['openid', 'profile', 'w_member_social'];
-export const ORG_SCOPES = ['w_organization_social', 'r_organization_admin'];
-
-export function requestedScopes(): string[] {
-  const c = cfg();
-  if (c.scopes.length) return c.scopes;
-  return c.orgPosting ? [...MEMBER_SCOPES, ...ORG_SCOPES] : MEMBER_SCOPES;
 }
 
 export function grantedScopes(scope: string | null | undefined): Set<string> {
@@ -65,14 +57,14 @@ async function errorText(res: Response): Promise<string> {
   }
 }
 
-export function authorizeUrl(state: string): string {
+export function authorizeUrl(app: LinkedInApp, state: string): string {
   const c = cfg();
   const q = new URLSearchParams({
     response_type: 'code',
-    client_id: c.clientId,
+    client_id: app.clientId,
     redirect_uri: c.redirectUri,
     state,
-    scope: requestedScopes().join(' '),
+    scope: app.scopes.join(' '),
   });
   return `${AUTH_URL}?${q.toString()}`;
 }
@@ -83,7 +75,7 @@ export interface TokenResult {
   scope: string;
 }
 
-export async function exchangeCode(code: string): Promise<TokenResult> {
+export async function exchangeCode(app: LinkedInApp, code: string): Promise<TokenResult> {
   const c = cfg();
   const res = await call(TOKEN_URL, {
     method: 'POST',
@@ -92,8 +84,8 @@ export async function exchangeCode(code: string): Promise<TokenResult> {
       grant_type: 'authorization_code',
       code,
       redirect_uri: c.redirectUri,
-      client_id: c.clientId,
-      client_secret: c.clientSecret,
+      client_id: app.clientId,
+      client_secret: app.clientSecret,
     }).toString(),
   });
   if (!res.ok) throw new LinkedInError(`LinkedIn refused the authorization: ${await errorText(res)}`, res.status);
@@ -191,14 +183,13 @@ export async function createPost(accessToken: string, author: string, commentary
 }
 
 /* Best effort: the token is deleted locally either way. */
-export async function revokeToken(accessToken: string): Promise<void> {
-  const c = linkedinConfig();
-  if (!c) return;
+export async function revokeToken(app: LinkedInApp | undefined, accessToken: string): Promise<void> {
+  if (!app) return;
   try {
     await call(REVOKE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ client_id: c.clientId, client_secret: c.clientSecret, token: accessToken }).toString(),
+      body: new URLSearchParams({ client_id: app.clientId, client_secret: app.clientSecret, token: accessToken }).toString(),
     });
   } catch { /* ignore */ }
 }

@@ -236,6 +236,21 @@ export const linkedinAccounts = sqliteTable('linkedin_accounts', {
 
 export type LinkedinAccountRow = typeof linkedinAccounts.$inferSelect;
 
+/* Second connection per user when Company Pages use their own LinkedIn app
+   (Community Management only; see config.ts). Same shape as above. */
+export const linkedinPageAccounts = sqliteTable('linkedin_page_accounts', {
+  userId: integer('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  /* From the Page roles (that app has no OpenID); may be empty. */
+  memberId: text('member_id').notNull(),
+  name: text('name'),
+  pictureUrl: text('picture_url'),
+  accessToken: text('access_token').notNull(),
+  scope: text('scope'),
+  expiresAt: text('expires_at').notNull(),
+  connectedAt: text('connected_at').default(now),
+  organizations: text('organizations'),
+});
+
 /* Audit trail: who published what, from which company. */
 export const linkedinPosts = sqliteTable('linkedin_posts', {
   id: integer('id').primaryKey({ autoIncrement: true }),

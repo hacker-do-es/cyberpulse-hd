@@ -29,6 +29,13 @@
       "when": 1795183654324,
       "tag": "0003_app_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1795184985541,
+      "tag": "0004_linkedin_pages",
+      "breakpoints": true
     }
   ]
 }

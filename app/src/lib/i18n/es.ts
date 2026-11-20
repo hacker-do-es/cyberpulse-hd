@@ -650,6 +650,14 @@ export const ES: Record<string, string> = {
   'You cannot post as that LinkedIn Page': 'No puedes publicar como esa página de LinkedIn',
   'LinkedIn did not let you post as this Page. You need to be an admin or content admin of it.': 'LinkedIn no te dejó publicar como esta página. Tienes que ser admin o content admin.',
   'This LinkedIn connection cannot post as a Company Page. Connect it again.': 'Esta conexión de LinkedIn no puede publicar como página de empresa. Vuelve a conectarla.',
+
+  // LinkedIn: separate profile / Company Pages apps
+  'Connect my profile': 'Conectar mi perfil',
+  'Connect Company Pages': 'Conectar páginas de empresa',
+  'Also available:': 'También disponible:',
+  'My profile': 'Mi perfil',
+  'Company Pages': 'Páginas de empresa',
+  'Connect to publish as the Company Pages you administer on LinkedIn.': 'Conecta para publicar como las páginas de empresa que administras en LinkedIn.',
 };
 
 /* Server messages with values in them. */

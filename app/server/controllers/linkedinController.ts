@@ -1,6 +1,6 @@
 import { audit } from '../services/logs/logStore';
 import type express from 'express';
-import { linkedinConfig } from '../config';
+import { linkedinConfig, type LinkedInApp, type LinkedInSlot } from '../config';
 import { decryptSecret, encryptSecret } from '../lib/crypto';
 import { HttpError, badRequest } from '../lib/http';
 import { linkedinRepository } from '../repositories/linkedinRepository';
@@ -13,14 +13,23 @@ import { consumeState, createState, type ReturnTo } from '../services/linkedin/o
 import { MAX_POST_CHARS, toLittleText } from '../services/linkedin/text';
 import { toSqlUtc } from '../services/schedule';
 
-/* "Publish to LinkedIn": each user connects their own LinkedIn member
-   account (OAuth), and can then publish generated posts as themselves or,
-   with Community Management, as a Company Page they administer. */
+/* "Publish to LinkedIn": each user connects their own LinkedIn account
+   (OAuth) and publishes generated posts as themselves or as a Company Page
+   they administer. A server may use one LinkedIn app for both, or two (the
+   Community Management API must live in an app of its own): then each user
+   has a 'main' connection (own profile) and a 'pages' connection. */
 
+const SLOTS: LinkedInSlot[] = ['main', 'pages'];
 const reconnect = (msg: string) => new HttpError(409, msg, { code: 'LINKEDIN_RECONNECT' });
 
 function isExpired(expiresAt: string): boolean {
   return new Date(expiresAt.replace(' ', 'T') + 'Z').getTime() <= Date.now() + 60_000;
+}
+
+const slotParam = (v: unknown): LinkedInSlot => (v === 'pages' ? 'pages' : 'main');
+
+function appFor(slot: LinkedInSlot): LinkedInApp | undefined {
+  return linkedinConfig()?.apps[slot];
 }
 
 /* The callback lands here from linkedin.com. The session cookie is
@@ -47,12 +56,19 @@ function storedOrgs(acc: LinkedinAccountRow | undefined): Organization[] {
   }
 }
 
-function canPostAsMember(acc: LinkedinAccountRow): boolean {
-  return Boolean(acc.memberId) && grantedScopes(acc.scope).has('w_member_social');
+function canPostAsMember(acc: LinkedinAccountRow | undefined): boolean {
+  return Boolean(acc?.memberId) && grantedScopes(acc!.scope).has('w_member_social');
 }
 
-function canPostAsOrgs(acc: LinkedinAccountRow): boolean {
-  return grantedScopes(acc.scope).has('w_organization_social');
+function canPostAsOrgs(acc: LinkedinAccountRow | undefined): boolean {
+  return Boolean(acc) && grantedScopes(acc!.scope).has('w_organization_social');
+}
+
+/* A connection is usable only while its app is still configured and its token valid. */
+function live(userId: number, slot: LinkedInSlot): LinkedinAccountRow | undefined {
+  if (!appFor(slot)) return undefined;
+  const acc = linkedinRepository.find(userId, slot);
+  return acc && !isExpired(acc.expiresAt) ? acc : undefined;
 }
 
 /* Looks up the member's Company Pages when the token allows it. Never fatal. */
@@ -70,31 +86,66 @@ async function lookupOrgs(accessToken: string, scope: string): Promise<{ memberI
   }
 }
 
+/* Pages the user can post as, with the connection that grants each. */
+function pagesOf(userId: number): Array<{ org: Organization; slot: LinkedInSlot; acc: LinkedinAccountRow }> {
+  const out: Array<{ org: Organization; slot: LinkedInSlot; acc: LinkedinAccountRow }> = [];
+  const seen = new Set<string>();
+  for (const slot of ['pages', 'main'] as LinkedInSlot[]) {
+    const acc = live(userId, slot);
+    if (!canPostAsOrgs(acc)) continue;
+    for (const org of storedOrgs(acc)) {
+      if (seen.has(org.urn)) continue;
+      seen.add(org.urn);
+      out.push({ org, slot, acc: acc! });
+    }
+  }
+  return out;
+}
+
+function connectionInfo(userId: number, slot: LinkedInSlot) {
+  if (!appFor(slot)) return null;
+  const acc = linkedinRepository.find(userId, slot);
+  const connected = Boolean(acc && !isExpired(acc.expiresAt));
+  return { connected, expired: Boolean(acc) && !connected, expiresAt: acc?.expiresAt ?? null };
+}
+
 export const linkedinController = {
   status(req: express.Request, res: express.Response) {
-    const acc = linkedinRepository.find(req.auth!.user.id);
-    const connected = Boolean(acc && !isExpired(acc.expiresAt));
+    const userId = req.auth!.user.id;
     const cfg = linkedinConfig();
+    const main = live(userId, 'main');
+    const mainInfo = connectionInfo(userId, 'main');
+    const pagesInfo = connectionInfo(userId, 'pages');
+    const pages = pagesOf(userId);
+    const mainOffersPages = Boolean(cfg?.apps.main?.scopes.includes('w_organization_social'));
     res.json({
       configured: Boolean(cfg),
-      orgPosting: Boolean(cfg?.orgPosting || cfg?.scopes.includes('w_organization_social')),
-      connected,
-      canPostAsMember: Boolean(acc && canPostAsMember(acc)),
-      canPostAsOrganization: Boolean(acc && canPostAsOrgs(acc)),
-      organizations: acc && canPostAsOrgs(acc) ? storedOrgs(acc) : [],
-      expired: Boolean(acc) && !connected,
-      name: acc?.name ?? null,
-      pictureUrl: acc?.pictureUrl ?? null,
-      expiresAt: acc?.expiresAt ?? null,
+      /* The server can post as Company Pages (through either app). */
+      orgPosting: Boolean(cfg?.apps.pages) || mainOffersPages,
+      /* The server can post as the member (main app with w_member_social). */
+      memberPosting: Boolean(cfg?.apps.main?.scopes.includes('w_member_social')),
+      /* Company Pages use their own app and connection. */
+      pagesApp: Boolean(cfg?.apps.pages),
+      connected: Boolean(mainInfo?.connected || pagesInfo?.connected),
+      expired: Boolean(mainInfo?.expired) && !mainInfo?.connected,
+      expiresAt: mainInfo?.expiresAt ?? null,
+      pagesConnection: pagesInfo,
+      canPostAsMember: canPostAsMember(main),
+      canPostAsOrganization: pages.length > 0 || canPostAsOrgs(main) || canPostAsOrgs(live(userId, 'pages')),
+      organizations: pages.map((p) => p.org),
+      name: main?.name ?? null,
+      pictureUrl: main?.pictureUrl ?? null,
       maxChars: MAX_POST_CHARS,
     });
   },
 
   /* Browser navigation from the app (same-site, so the session is there). */
   connect(req: express.Request, res: express.Response) {
-    if (!linkedinConfig()) throw badRequest('LinkedIn publishing is not configured on this server');
+    const slot = slotParam(req.query.app);
+    const app = appFor(slot);
+    if (!app) throw badRequest('LinkedIn publishing is not configured on this server');
     const returnTo: ReturnTo = req.query.return === 'account' ? 'account' : 'generate';
-    res.redirect(302, authorizeUrl(createState(req.auth!.user.id, returnTo)));
+    res.redirect(302, authorizeUrl(app, createState(req.auth!.user.id, returnTo, slot)));
   },
 
   /* Public route: identified by the single-use state, never by query data alone. */
@@ -106,9 +157,10 @@ export const linkedinController = {
       return backToApp(res, { linkedin: 'error', reason: req.query.error === 'user_cancelled_authorize' || req.query.error === 'user_cancelled_login' ? 'cancelled' : 'denied', view });
     }
     const code = typeof req.query.code === 'string' && req.query.code.length < 2000 ? req.query.code : '';
-    if (!code) return backToApp(res, { linkedin: 'error', reason: 'failed', view });
+    const app = appFor(pending.slot);
+    if (!code || !app) return backToApp(res, { linkedin: 'error', reason: 'failed', view });
     try {
-      const token = await exchangeCode(code);
+      const token = await exchangeCode(app, code);
       const granted = grantedScopes(token.scope);
       if (!granted.has('w_member_social') && !granted.has('w_organization_social')) {
         return backToApp(res, { linkedin: 'error', reason: 'scope', view });
@@ -117,7 +169,7 @@ export const linkedinController = {
          has no OpenID, and the member id then comes from the page roles. */
       const member = granted.has('openid') ? await fetchMember(token.accessToken) : null;
       const orgs = await lookupOrgs(token.accessToken, token.scope);
-      linkedinRepository.upsert({
+      linkedinRepository.upsert(pending.slot, {
         userId: pending.userId,
         memberId: member?.id ?? orgs.memberId ?? '',
         name: member?.name ?? null,
@@ -127,7 +179,7 @@ export const linkedinController = {
         expiresAt: toSqlUtc(new Date(Date.now() + token.expiresIn * 1000)),
         organizations: orgs.json,
       });
-      audit({ action: 'linkedin.connect', detail: `ok scopes=${token.scope}`, userId: pending.userId, ip: req.ip ?? null });
+      audit({ action: 'linkedin.connect', detail: `ok app=${pending.slot} scopes=${token.scope}`, userId: pending.userId, ip: req.ip ?? null });
       return backToApp(res, { linkedin: 'connected', view });
     } catch (err) {
       console.warn('[LINKEDIN] connect failed:', err instanceof Error ? err.message : err);
@@ -135,32 +187,43 @@ export const linkedinController = {
     }
   },
 
+  /* ?app=main|pages disconnects one connection; without it, all of them. */
   async disconnect(req: express.Request, res: express.Response) {
-    const acc = linkedinRepository.find(req.auth!.user.id);
-    if (acc) {
-      linkedinRepository.delete(acc.userId);
-      await revokeToken(decryptSecret(acc.accessToken));
+    const userId = req.auth!.user.id;
+    const slots = req.query.app === undefined ? SLOTS : [slotParam(req.query.app)];
+    for (const slot of slots) {
+      const acc = linkedinRepository.find(userId, slot);
+      if (!acc) continue;
+      linkedinRepository.delete(userId, slot);
+      await revokeToken(appFor(slot), decryptSecret(acc.accessToken));
     }
     res.json({ success: true });
   },
 
   /* Re-read the member's Company Pages (e.g. after being made a Page admin). */
   async refreshOrganizations(req: express.Request, res: express.Response) {
-    const acc = linkedinRepository.find(req.auth!.user.id);
-    if (!acc || isExpired(acc.expiresAt)) throw reconnect('Connect your LinkedIn account first');
-    if (!canPostAsOrgs(acc)) throw badRequest('This LinkedIn connection cannot post as a Company Page. Connect it again.');
-    let lookup: Awaited<ReturnType<typeof fetchOrganizations>>;
-    try {
-      lookup = await fetchOrganizations(decryptSecret(acc.accessToken));
-    } catch (err) {
-      if (err instanceof LinkedInError && err.status === 401) {
-        linkedinRepository.delete(acc.userId);
-        throw reconnect('LinkedIn no longer accepts this connection. Connect it again.');
-      }
-      throw new HttpError(502, err instanceof LinkedInError ? err.message : 'LinkedIn request failed');
+    const userId = req.auth!.user.id;
+    const slots = SLOTS.filter((s) => canPostAsOrgs(live(userId, s)));
+    if (slots.length === 0) {
+      const any = SLOTS.some((s) => live(userId, s));
+      if (!any) throw reconnect('Connect your LinkedIn account first');
+      throw badRequest('This LinkedIn connection cannot post as a Company Page. Connect it again.');
     }
-    linkedinRepository.setOrganizations(acc.userId, JSON.stringify(lookup.organizations));
-    res.json({ organizations: lookup.organizations });
+    for (const slot of slots) {
+      const acc = live(userId, slot)!;
+      let lookup: Awaited<ReturnType<typeof fetchOrganizations>>;
+      try {
+        lookup = await fetchOrganizations(decryptSecret(acc.accessToken));
+      } catch (err) {
+        if (err instanceof LinkedInError && err.status === 401) {
+          linkedinRepository.delete(userId, slot);
+          throw reconnect('LinkedIn no longer accepts this connection. Connect it again.');
+        }
+        throw new HttpError(502, err instanceof LinkedInError ? err.message : 'LinkedIn request failed');
+      }
+      linkedinRepository.setOrganizations(userId, slot, JSON.stringify(lookup.organizations));
+    }
+    res.json({ organizations: pagesOf(userId).map((p) => p.org) });
   },
 
   async publish(req: express.Request, res: express.Response) {
@@ -170,21 +233,31 @@ export const linkedinController = {
     if (text.length > MAX_POST_CHARS) throw badRequest(`LinkedIn posts can have at most ${MAX_POST_CHARS} characters`);
 
     const user = req.auth!.user;
-    const acc = linkedinRepository.find(user.id);
-    if (!acc) throw reconnect('Connect your LinkedIn account first');
-    if (isExpired(acc.expiresAt)) throw reconnect('Your LinkedIn connection expired. Connect it again.');
-
     /* Who the post is from: "member" (default) or one of the member's Pages. */
     const wanted = typeof req.body?.author === 'string' ? req.body.author : 'member';
     let author: string;
+    let slot: LinkedInSlot;
+    let acc: LinkedinAccountRow;
     if (wanted === 'member') {
-      if (!canPostAsMember(acc)) throw badRequest('This LinkedIn connection can only post as a Company Page');
-      author = `urn:li:person:${acc.memberId}`;
+      const main = linkedinRepository.find(user.id, 'main');
+      if (!main || !appFor('main')) throw reconnect('Connect your LinkedIn account first');
+      if (isExpired(main.expiresAt)) throw reconnect('Your LinkedIn connection expired. Connect it again.');
+      if (!canPostAsMember(main)) throw badRequest('This LinkedIn connection can only post as a Company Page');
+      author = `urn:li:person:${main.memberId}`;
+      slot = 'main';
+      acc = main;
     } else {
-      if (!canPostAsOrgs(acc) || !storedOrgs(acc).some((o) => o.urn === wanted)) {
+      const page = pagesOf(user.id).find((p) => p.org.urn === wanted);
+      if (!page) {
+        const hasPagesConn = SLOTS.some((s) => canPostAsOrgs(linkedinRepository.find(user.id, s)));
+        if (hasPagesConn && !SLOTS.some((s) => canPostAsOrgs(live(user.id, s)))) {
+          throw reconnect('Your LinkedIn connection expired. Connect it again.');
+        }
         throw badRequest('You cannot post as that LinkedIn Page');
       }
       author = wanted;
+      slot = page.slot;
+      acc = page.acc;
     }
 
     let urn: string;
@@ -192,10 +265,10 @@ export const linkedinController = {
       urn = await createPost(decryptSecret(acc.accessToken), author, toLittleText(text));
     } catch (err) {
       if (err instanceof LinkedInError && err.status === 401) {
-        linkedinRepository.delete(user.id);
+        linkedinRepository.delete(user.id, slot);
         throw reconnect('LinkedIn no longer accepts this connection. Connect it again.');
       }
-      if (err instanceof LinkedInError && err.status === 403 && author !== `urn:li:person:${acc.memberId}`) {
+      if (err instanceof LinkedInError && err.status === 403 && wanted !== 'member') {
         throw new HttpError(403, 'LinkedIn did not let you post as this Page. You need to be an admin or content admin of it.');
       }
       throw new HttpError(502, err instanceof LinkedInError ? err.message : 'LinkedIn request failed');

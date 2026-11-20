@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import type { LinkedInSlot } from '../../config';
 
 /* OAuth `state` values. The session cookie is SameSite=Strict, so it is not
    sent on LinkedIn's redirect back: the callback identifies the user by this
@@ -12,6 +13,7 @@ export type ReturnTo = 'generate' | 'account';
 
 interface Pending {
   userId: number;
+  slot: LinkedInSlot;
   returnTo: ReturnTo;
   expires: number;
 }
@@ -22,14 +24,14 @@ function sweep(now: number) {
   for (const [k, v] of pending) if (v.expires <= now) pending.delete(k);
 }
 
-export function createState(userId: number, returnTo: ReturnTo): string {
+export function createState(userId: number, returnTo: ReturnTo, slot: LinkedInSlot = 'main'): string {
   const now = Date.now();
   sweep(now);
   if (pending.size >= MAX_PENDING) pending.delete(pending.keys().next().value!);
-  /* One pending login per user. */
-  for (const [k, v] of pending) if (v.userId === userId) pending.delete(k);
+  /* One pending login per user and app. */
+  for (const [k, v] of pending) if (v.userId === userId && v.slot === slot) pending.delete(k);
   const state = crypto.randomBytes(32).toString('base64url');
-  pending.set(state, { userId, returnTo, expires: now + TTL_MS });
+  pending.set(state, { userId, slot, returnTo, expires: now + TTL_MS });
   return state;
 }
 
