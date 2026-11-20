@@ -124,11 +124,25 @@ export interface ChannelSchedule {
   weekdays: number[];
 }
 
+export type ChannelType = 'slack' | 'rocketchat' | 'email';
+export type SmtpSecurity = 'tls' | 'starttls';
+
+export interface SmtpSettings {
+  host: string;
+  port: number;
+  security: SmtpSecurity;
+  user: string;
+  fromAddress: string;
+  fromName: string;
+}
+
 export interface Channel {
   id: number;
   name: string;
-  type: 'slack' | 'rocketchat';
+  type: ChannelType;
   webhookHint: string;
+  /** Email channels only; the SMTP password is never returned. */
+  email: { recipients: string[]; smtp: SmtpSettings & { passwordSet: boolean } } | null;
   active: boolean;
   schedule: ChannelSchedule;
   minSeverity: Severity;
@@ -138,6 +152,10 @@ export interface Channel {
   header: string | null;
   /** Custom digest footer; null = default, '' = no footer. */
   footer: string | null;
+  /** Email only: sanitised header HTML; null = default. */
+  headerHtml: string | null;
+  /** Email only: sanitised footer HTML; null = default, '' = none. */
+  footerHtml: string | null;
   lastRunAt: string | null;
   lastSentAt: string | null;
   nextRunAt: string | null;
@@ -145,8 +163,13 @@ export interface Channel {
 
 export interface ChannelInput {
   name: string;
-  type: 'slack' | 'rocketchat';
+  type: ChannelType;
   webhookUrl?: string;
+  recipients?: string[];
+  /** Empty password on update = keep the stored one. */
+  smtp?: SmtpSettings & { password?: string };
+  headerHtml?: string | null;
+  footerHtml?: string | null;
   active: boolean;
   schedule: ChannelSchedule;
   minSeverity: Severity;
@@ -173,6 +196,8 @@ export const channelsApi = {
   test: (id: number) => call<{ ok: true }>('POST', `/api/channels/${id}/test`),
   run: (id: number) => call<{ status: string; articleCount: number; detail: string }>('POST', `/api/channels/${id}/run`),
   deliveries: (id: number) => call<{ deliveries: Delivery[] }>('GET', `/api/channels/${id}/deliveries`).then((r) => r.deliveries),
+  previewEmail: (b: { header: string | null; headerHtml: string | null; footerHtml: string | null }) =>
+    call<{ html: string }>('POST', '/api/channels/preview-email', b).then((r) => r.html),
 };
 
 /* ------------------------------------------------------------------ */

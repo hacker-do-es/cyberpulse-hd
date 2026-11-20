@@ -15,6 +15,7 @@ process.env.CYBERPULSE_ALLOW_PRIVATE_WEBHOOKS = 'true';
 process.env.CYBERPULSE_ALLOW_HTTP_WEBHOOKS = 'true';
 /* The tests below log in far more often than one person would. */
 process.env.CYBERPULSE_RATE_LOGIN = '1000';
+process.env.CYBERPULSE_RATE_SEND = '1000';
 
 let base = '';
 let server: http.Server;
@@ -308,6 +309,111 @@ describe('multitenant API', () => {
       const r = await adminA.req('POST', `/api/channels/${ch.id}/test`);
       expect(r.status).toBe(502);
       expect(r.body.error).toMatch(/non-public/);
+    } finally {
+      process.env.CYBERPULSE_ALLOW_PRIVATE_WEBHOOKS = 'true';
+    }
+  });
+
+  it('delivers digests by email through the channel\'s own SMTP server', async () => {
+    const { setMailTransportFactory } = await import('../services/mail/send');
+    const sent: any[] = [];
+    const opened: any[] = [];
+    let failWith: any = null;
+    setMailTransportFactory((options) => {
+      opened.push(options);
+      return {
+        sendMail: async (m: any) => { if (failWith) throw failWith; sent.push(m); return {} as any; },
+        close: () => {},
+      } as any;
+    });
+    try {
+      const smtp = { host: 'smtp.gmail.com', port: 587, user: 'bot@acme.example', password: 'abcd efgh ijkl mnop', fromAddress: 'alerts@acme.example', fromName: 'Acme SOC' };
+      const base = { name: 'Zeta mail', type: 'email', schedule: { type: 'interval', intervalHours: 6 }, minSeverity: 'low' };
+
+      expect((await adminA.req('POST', '/api/channels', { ...base, recipients: ['not-an-email'], smtp })).status).toBe(400);
+      expect((await adminA.req('POST', '/api/channels', { ...base, recipients: ['a@acme.example'], smtp: { ...smtp, port: 22 } })).status).toBe(400);
+      expect((await adminA.req('POST', '/api/channels', { ...base, recipients: ['a@acme.example'], smtp: { ...smtp, host: 'http://x' } })).status).toBe(400);
+      expect((await adminA.req('POST', '/api/channels', { ...base, recipients: ['a@acme.example\nBcc: x@evil.example'], smtp })).status).toBe(400);
+      expect((await adminA.req('POST', '/api/channels', { ...base, recipients: ['a@acme.example'], smtp: { ...smtp, password: '' } })).status).toBe(400);
+
+      const created = await adminA.req('POST', '/api/channels', {
+        ...base,
+        recipients: 'Ana@Acme.example, bob@acme.example; ana@acme.example',
+        smtp,
+        header: '{company}: {count} alertas',
+        headerHtml: '<img src="https://cdn.acme.example/logo.png" alt="Acme" width="120"><script>alert(1)</script><h2 onclick="x()">{empresa} SOC</h2>',
+        footerHtml: '<p style="color:#888;position:fixed">Acme SOC · <a href="javascript:alert(1)">x</a> <a href="https://acme.example">acme.example</a></p><img src="http://insecure.example/a.png">',
+      });
+      expect(created.status).toBe(201);
+      const ch = created.body.channel;
+      expect(JSON.stringify(created.body)).not.toContain('abcd');
+      expect(ch.email.recipients).toEqual(['ana@acme.example', 'bob@acme.example']);
+      expect(ch.email.smtp).toMatchObject({ host: 'smtp.gmail.com', port: 587, security: 'starttls', fromName: 'Acme SOC', passwordSet: true });
+      expect(ch.webhookHint).toBe('2 recipients · smtp.gmail.com:587');
+      expect(ch.headerHtml).not.toMatch(/script|onclick/);
+      expect(ch.headerHtml).toContain('src="https://cdn.acme.example/logo.png"');
+      expect(ch.footerHtml).not.toMatch(/javascript|position|insecure/);
+      expect(ch.footerHtml).toContain('href="https://acme.example"');
+
+      /* Editing other fields keeps recipients and the stored password. */
+      const upd = await adminA.req('PUT', `/api/channels/${ch.id}`, { name: 'Zeta mail 2', smtp: { ...smtp, password: '' } });
+      expect(upd.status).toBe(200);
+      expect(upd.body.channel.email.smtp.passwordSet).toBe(true);
+      expect(upd.body.channel.email.recipients).toHaveLength(2);
+
+      const { getSqlite } = await import('../db/client');
+      getSqlite().prepare(`INSERT INTO articles (title, summary, source, severity, category, published_at, url) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run('FortiOS <b>third</b> bug & more', 'Fortinet FortiOS', 'TestFeed', 'high', 'VULNERABILITY', new Date().toISOString(), 'https://news.example/fortios-3');
+
+      const run = await adminA.req('POST', `/api/channels/${ch.id}/run`);
+      expect(run.body.status).toBe('sent');
+      expect(run.body.detail).toMatch(/to 2 recipients/);
+      expect(sent.map((m) => m.to)).toEqual(['ana@acme.example', 'bob@acme.example']);
+      const m = sent[0];
+      expect(m.from).toEqual({ name: 'Acme SOC', address: 'alerts@acme.example' });
+      expect(m.subject).toMatch(/^Acme: \d+ alertas$/);
+      expect(m.html).toContain('Acme SOC</h2>');
+      expect(m.html).toContain('FortiOS &lt;b&gt;third&lt;/b&gt; bug &amp; more');
+      expect(m.html).toContain('href="https://news.example/fortios-3"');
+      expect(m.html).not.toMatch(/<script|javascript:/);
+      expect(m.text).toContain('https://news.example/fortios-3');
+      /* Connects to the resolved address, verifies the certificate against the name, demands TLS. */
+      expect(opened[0]).toMatchObject({ port: 587, secure: false, requireTLS: true, auth: { user: 'bot@acme.example', pass: 'abcdefghijklmnop' } });
+      expect(opened[0].tls).toMatchObject({ servername: 'smtp.gmail.com', rejectUnauthorized: true });
+      expect(opened[0].host).not.toBe('smtp.gmail.com');
+
+      sent.length = 0;
+      expect((await adminA.req('POST', `/api/channels/${ch.id}/run`)).body.status).toBe('skipped');
+
+      /* Test mail; a bad password is reported, not swallowed. */
+      expect((await adminA.req('POST', `/api/channels/${ch.id}/test`)).status).toBe(200);
+      expect(sent).toHaveLength(2);
+      failWith = Object.assign(new Error('Invalid login'), { code: 'EAUTH', response: '535-5.7.8 Username and Password not accepted' });
+      const bad = await adminA.req('POST', `/api/channels/${ch.id}/test`);
+      expect(bad.status).toBe(502);
+      expect(bad.body.error).toContain('EAUTH: 535-5.7.8');
+      expect(bad.body.error).toContain('0/2 recipients');
+
+      /* Preview: same sanitising, nothing stored or sent. */
+      const prev = await adminA.req('POST', '/api/channels/preview-email', { header: 'Hola {company}', headerHtml: '<b>{company}</b><iframe src="https://x"></iframe>', footerHtml: '' });
+      expect(prev.status).toBe(200);
+      expect(prev.body.html).toContain('<b>Acme</b>');
+      expect(prev.body.html).not.toContain('iframe');
+      expect((await memberA.req('POST', '/api/channels/preview-email', {})).status).toBe(403);
+
+      await adminA.req('DELETE', `/api/channels/${ch.id}`);
+    } finally {
+      setMailTransportFactory(null);
+    }
+  });
+
+  it('refuses SMTP servers on private addresses unless explicitly allowed', async () => {
+    const { sendEmail, MailError } = await import('../services/mail/send');
+    process.env.CYBERPULSE_ALLOW_PRIVATE_WEBHOOKS = 'false';
+    try {
+      const target = { recipients: ['a@acme.example'], smtp: { host: 'localhost', port: 587, security: 'starttls' as const, user: 'u', password: 'p', fromAddress: 'a@acme.example', fromName: '' } };
+      await expect(sendEmail(target, { subject: 's', html: 'h', text: 't' })).rejects.toThrow(MailError);
+      await expect(sendEmail(target, { subject: 's', html: 'h', text: 't' })).rejects.toThrow(/non-public/);
     } finally {
       process.env.CYBERPULSE_ALLOW_PRIVATE_WEBHOOKS = 'true';
     }

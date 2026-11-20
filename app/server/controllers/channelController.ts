@@ -7,23 +7,44 @@ import { rescheduleChannel } from '../services/channelSchedule';
 import { SEVERITIES } from '../services/digest';
 import { parseWeekdays, validateSchedule, type Schedule } from '../services/schedule';
 import { WebhookError, validateWebhookUrl } from '../services/webhooks';
+import { MAX_HTML_LENGTH, sanitizeEmailHtml } from '../services/mail/html';
+import { MailError } from '../services/mail/send';
+import { parseRecipients, parseSmtp, parseStoredTarget, publicTarget, serializeTarget, type EmailTarget } from '../services/mail/target';
+import { previewEmail } from '../services/digest';
+import { tenantRepository } from '../repositories/tenantRepository';
 import { runChannelDigest, sendChannelTest } from '../useCases/runChannelDigest';
 
 export const MAX_HEADER_LENGTH = 150;
 export const MAX_FOOTER_LENGTH = 300;
 const MAX_CHANNELS_PER_TENANT = 20;
 
-function channelOut(row: ChannelRow) {
-  const url = decryptSecret(row.webhookUrl);
-  let host = '';
+function storedTarget(row: ChannelRow): EmailTarget | null {
+  if (row.type !== 'email') return null;
   try {
-    host = new URL(url).host;
-  } catch { /* not a URL */ }
+    return parseStoredTarget(decryptSecret(row.webhookUrl));
+  } catch {
+    return null;
+  }
+}
+
+function channelOut(row: ChannelRow) {
+  const target = storedTarget(row);
+  let hint = '';
+  if (target) {
+    hint = `${target.recipients.length} recipient${target.recipients.length === 1 ? '' : 's'} · ${target.smtp.host}:${target.smtp.port}`;
+  } else if (row.type !== 'email') {
+    const url = decryptSecret(row.webhookUrl);
+    try {
+      hint = `${new URL(url).host}/…${url.slice(-4)}`;
+    } catch { /* not a URL */ }
+  }
   return {
     id: row.id,
     name: row.name,
     type: row.type,
-    webhookHint: host ? `${host}/…${url.slice(-4)}` : '',
+    webhookHint: hint,
+    /* Email channels: recipients and SMTP settings, never the password. */
+    email: target ? publicTarget(target) : null,
     active: row.active,
     schedule: {
       type: row.scheduleType,
@@ -36,6 +57,8 @@ function channelOut(row: ChannelRow) {
     useAi: row.useAi,
     header: row.headerText,
     footer: row.footerText,
+    headerHtml: row.headerHtml,
+    footerHtml: row.footerHtml,
     lastRunAt: row.lastRunAt,
     lastSentAt: row.lastSentAt,
     nextRunAt: row.nextRunAt,
@@ -66,16 +89,47 @@ function parseBranding(body: any, existing?: ChannelRow): { headerText: string |
   return { headerText, footerText };
 }
 
+/* Email header/footer HTML. header: null/'' = default. footer: null =
+   default, '' = none. Stored already sanitised. */
+function parseHtmlBranding(body: any, existing?: ChannelRow): { headerHtml: string | null; footerHtml: string | null } {
+  const one = (v: unknown, field: string): string => {
+    if (typeof v !== 'string') throw badRequest(`${field} must be HTML text`);
+    if (v.length > MAX_HTML_LENGTH) throw badRequest(`${field} can be at most ${MAX_HTML_LENGTH} characters`);
+    return sanitizeEmailHtml(v);
+  };
+  let headerHtml = existing?.headerHtml ?? null;
+  if (body?.headerHtml !== undefined) headerHtml = body.headerHtml === null ? null : one(body.headerHtml, 'Header HTML') || null;
+  let footerHtml = existing ? existing.footerHtml : null;
+  if (body?.footerHtml !== undefined) footerHtml = body.footerHtml === null ? null : one(body.footerHtml, 'Footer HTML');
+  return { headerHtml, footerHtml };
+}
+
+/* Recipients + SMTP for an email channel; partial updates keep the rest
+   (and the stored password) from the existing channel. */
+function parseEmailTarget(body: any, existing?: ChannelRow): string | undefined {
+  const prev = existing && existing.type === 'email' ? storedTarget(existing) : null;
+  if (body?.recipients === undefined && body?.smtp === undefined) {
+    if (prev) return undefined;
+    throw badRequest('Recipients and SMTP settings are required');
+  }
+  const recipients = body?.recipients !== undefined ? parseRecipients(body.recipients) : prev?.recipients;
+  if (!recipients) throw badRequest('Add at least one recipient');
+  const smtp = parseSmtp(body?.smtp, prev?.smtp);
+  return serializeTarget({ recipients, smtp });
+}
+
 /* Full validation of a create (no `existing`) or a partial update. The
    webhook URL is only returned when a new one was sent. */
 function parseChannelInput(body: any, existing?: ChannelRow): Omit<ChannelValues, 'webhookUrl'> & { webhookUrl?: string } {
   const name = str(body?.name, 80) ?? existing?.name;
   if (!name) throw badRequest('Name is required (max 80 characters)');
   const type = (body?.type ?? existing?.type) as ChannelType;
-  if (type !== 'slack' && type !== 'rocketchat') throw badRequest('type must be "slack" or "rocketchat"');
+  if (type !== 'slack' && type !== 'rocketchat' && type !== 'email') throw badRequest('type must be "slack", "rocketchat" or "email"');
 
   let webhookUrl: string | undefined;
-  if (body?.webhookUrl !== undefined && body.webhookUrl !== '') {
+  if (type === 'email') {
+    webhookUrl = parseEmailTarget(body, existing);
+  } else if (body?.webhookUrl !== undefined && body.webhookUrl !== '') {
     const v = validateWebhookUrl(type, body.webhookUrl);
     if ('error' in v) throw badRequest(v.error);
     webhookUrl = v.url.toString();
@@ -115,6 +169,7 @@ function parseChannelInput(body: any, existing?: ChannelRow): Omit<ChannelValues
     minSeverity,
     maxItems,
     ...parseBranding(body, existing),
+    ...parseHtmlBranding(body, existing),
     active: body?.active === undefined ? (existing ? existing.active : true) : Boolean(body.active),
     useAi: body?.useAi === undefined ? (existing ? existing.useAi : true) : Boolean(body.useAi),
   };
@@ -163,9 +218,19 @@ export const channelController = {
     try {
       await sendChannelTest(channel);
     } catch (err) {
-      throw new HttpError(502, err instanceof WebhookError ? err.message : 'Webhook request failed');
+      if (err instanceof WebhookError || err instanceof MailError) throw new HttpError(502, err.message);
+      throw new HttpError(502, channel.type === 'email' ? 'Email delivery failed' : 'Webhook request failed');
     }
     res.json({ ok: true });
+  },
+
+  /* Renders the email layout with sample news for the editor, applying the
+     same sanitising as saving would. Nothing is stored or sent. */
+  previewEmail(req: express.Request, res: express.Response) {
+    const b = parseHtmlBranding(req.body);
+    const { headerText } = parseBranding({ header: req.body?.header ?? null });
+    const tenant = tenantRepository.findById(tenantOf(req));
+    res.json({ html: previewEmail({ headerText, footerText: null, ...b }, tenant) });
   },
 
   async run(req: express.Request, res: express.Response) {

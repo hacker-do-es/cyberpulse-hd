@@ -20,7 +20,7 @@ export const readLimiter = limiter(config.rateRead, 60_000, SLOW_DOWN);
 /* Writes touch an AI provider, a webhook or a full scrape: tighter budget. */
 export const writeLimiter = limiter(config.rateWrite, 60_000, SLOW_DOWN);
 export const loginLimiter = limiter(config.rateLogin, 15 * 60_000, 'Too many login attempts, try again later.');
-export const sendLimiter = limiter(10, 60_000, 'Too many manual sends, wait a minute.');
+export const sendLimiter = limiter(config.rateSend, 60_000, 'Too many manual sends, wait a minute.');
 
 /* ------------------------------------------------------------------ */
 /*  Headers                                                            */

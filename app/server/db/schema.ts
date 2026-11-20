@@ -132,7 +132,7 @@ export const techStack = sqliteTable('user_tech_stack', {
   createdAt: text('created_at').default(now),
 }, (t) => [index('idx_tech_stack_tenant').on(t.tenantId)]);
 
-export const CHANNEL_TYPES = ['slack', 'rocketchat'] as const;
+export const CHANNEL_TYPES = ['slack', 'rocketchat', 'email'] as const;
 export type ChannelType = (typeof CHANNEL_TYPES)[number];
 export const SCHEDULE_TYPES = ['interval', 'weekly'] as const;
 
@@ -141,7 +141,9 @@ export const channels = sqliteTable('channels', {
   tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   type: text('type', { enum: CHANNEL_TYPES }).notNull(),
-  /* Encrypted at rest (AES-256-GCM, see lib/crypto.ts). */
+  /* Encrypted at rest (AES-256-GCM, see lib/crypto.ts). Slack/Rocket.Chat:
+     the webhook URL. Email: JSON with the recipients and the channel's own
+     SMTP settings, password included (services/mail/target.ts). */
   webhookUrl: text('webhook_url').notNull(),
   active: integer('active', { mode: 'boolean' }).notNull().default(true),
   scheduleType: text('schedule_type', { enum: SCHEDULE_TYPES }).notNull().default('weekly'),
@@ -155,6 +157,9 @@ export const channels = sqliteTable('channels', {
   /* NULL = default text; empty footer = no footer. */
   headerText: text('header_text'),
   footerText: text('footer_text'),
+  /* Email only, sanitised HTML. NULL = default; empty footer = no footer. */
+  headerHtml: text('header_html'),
+  footerHtml: text('footer_html'),
   lastRunAt: text('last_run_at'),
   lastSentAt: text('last_sent_at'),
   nextRunAt: text('next_run_at'),
@@ -162,7 +167,7 @@ export const channels = sqliteTable('channels', {
 }, (t) => [
   index('idx_channels_tenant').on(t.tenantId),
   index('idx_channels_next_run').on(t.nextRunAt),
-  check('channels_type_check', sql`${t.type} IN ('slack', 'rocketchat')`),
+  check('channels_type_check', sql`${t.type} IN ('slack', 'rocketchat', 'email')`),
   check('channels_schedule_type_check', sql`${t.scheduleType} IN ('interval', 'weekly')`),
 ]);
 

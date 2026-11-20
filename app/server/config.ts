@@ -20,6 +20,8 @@ export const config = {
   mcpApiKey: process.env.CYBERPULSE_API_KEY || null,
   rateRead: int(process.env.CYBERPULSE_RATE_READ, 300),
   rateWrite: int(process.env.CYBERPULSE_RATE_WRITE, 60),
+  /* Manual Test / Send now, per IP per minute. */
+  rateSend: int(process.env.CYBERPULSE_RATE_SEND, 10),
   /* Per IP, per 15 minutes. */
   rateLogin: int(process.env.CYBERPULSE_RATE_LOGIN, 20),
   maxNews: int(process.env.CYBERPULSE_MAX_NEWS, 20000),

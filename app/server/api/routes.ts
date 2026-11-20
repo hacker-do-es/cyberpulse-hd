@@ -64,6 +64,7 @@ export function apiRouter(appVersion: string): express.Router {
   /* Company: delivery channels */
   api.get('/channels', ...requireTenantAdmin, handle(channelController.list));
   api.post('/channels', ...requireTenantAdmin, writeLimiter, handle(channelController.create));
+  api.post('/channels/preview-email', ...requireTenantAdmin, writeLimiter, handle(channelController.previewEmail));
   api.put('/channels/:id', ...requireTenantAdmin, writeLimiter, handle(channelController.update));
   api.delete('/channels/:id', ...requireTenantAdmin, writeLimiter, handle(channelController.remove));
   api.post('/channels/:id/test', ...requireTenantAdmin, sendLimiter, handle(channelController.test));

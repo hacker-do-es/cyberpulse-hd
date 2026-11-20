@@ -3,7 +3,9 @@ import { decryptSecret } from '../lib/crypto';
 import { channelRepository, deliveryRepository } from '../repositories/channelRepository';
 import { tenantRepository } from '../repositories/tenantRepository';
 import { AiError } from '../services/ai';
-import { aiSummary, digestText, selectCandidates, testText } from '../services/digest';
+import { aiSummary, digestEmail, digestText, selectCandidates, testEmail, testText } from '../services/digest';
+import { MailError, sendEmail, summarizeReport } from '../services/mail/send';
+import { parseStoredTarget } from '../services/mail/target';
 import { toSqlUtc } from '../services/schedule';
 import { tenantStack } from '../services/stackNews';
 import { deliver } from '../services/webhooks';
@@ -61,17 +63,30 @@ async function buildAndSend(channel: ChannelRow, tenant: TenantRow, now: Date): 
     }
   }
 
+  let deliveredTo = '';
   try {
-    await deliver(channel.type, decryptSecret(channel.webhookUrl), digestText(channel, tenant, items, summary));
+    if (channel.type === 'email') {
+      const report = await sendEmail(parseStoredTarget(decryptSecret(channel.webhookUrl)), digestEmail(channel, tenant, items, summary));
+      /* Nobody got it: retry these articles next time. */
+      if (report.sent.length === 0) return { status: 'error', articleCount: items.length, detail: summarizeReport(report) };
+      deliveredTo = ` to ${summarizeReport(report)}`;
+    } else {
+      await deliver(channel.type, decryptSecret(channel.webhookUrl), digestText(channel, tenant, items, summary));
+    }
   } catch (err: any) {
     return { status: 'error', articleCount: items.length, detail: String(err?.message || err) };
   }
 
   channelRepository.markSent(channel.id, items.map((i) => i.id), toSqlUtc(now));
-  return { status: 'sent', articleCount: items.length, detail: `Delivered ${items.length} articles${aiNote}` };
+  return { status: 'sent', articleCount: items.length, detail: `Delivered ${items.length} articles${deliveredTo}${aiNote}` };
 }
 
 export async function sendChannelTest(channel: ChannelRow): Promise<void> {
   const tenant = tenantRepository.findById(channel.tenantId);
+  if (channel.type === 'email') {
+    const report = await sendEmail(parseStoredTarget(decryptSecret(channel.webhookUrl)), testEmail(channel, tenant));
+    if (report.failed.length) throw new MailError(summarizeReport(report));
+    return;
+  }
   await deliver(channel.type, decryptSecret(channel.webhookUrl), testText(channel, tenant));
 }

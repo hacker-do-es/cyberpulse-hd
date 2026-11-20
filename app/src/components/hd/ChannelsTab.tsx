@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useState } from 'react';
-import { History, Pencil, Plus, Radio, Send, Trash2, Zap } from 'lucide-react';
+import { History, Mail, Pencil, Plus, Radio, Send, Trash2, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { channelsApi, type Channel, type ChannelInput, type Delivery, type Severity } from '@/services/hdApi';
+import { channelsApi, type Channel, type ChannelInput, type ChannelType, type Delivery, type Severity, type SmtpSettings } from '@/services/hdApi';
 import { useAuth } from '@/lib/auth';
 import { Panel, PageHeader, Field, Badge, EmptyState } from './ui';
 import { inputCls, selectCls, notifyError, formatDateTime, WEEKDAYS } from './helpers';
 
 const SEVERITY_LABEL: Record<Severity, string> = { low: 'Low and above', medium: 'Medium and above', high: 'High and above', critical: 'Critical only' };
-const TYPE_LABEL = { slack: 'Slack', rocketchat: 'Rocket.Chat' } as const;
+const TYPE_LABEL = { slack: 'Slack', rocketchat: 'Rocket.Chat', email: 'Email' } as const;
 
 function describeSchedule(c: Channel['schedule']): string {
   if (c.type === 'interval') return `Every ${c.intervalHours} h`;
@@ -75,13 +75,13 @@ export default function ChannelsTab() {
       <Panel
         title="Channels"
         icon={<Radio size={18} />}
-        description="Slack and Rocket.Chat incoming webhooks. Articles are never sent twice to the same channel; when nothing new matches, nothing is sent."
+        description="Slack and Rocket.Chat incoming webhooks, or email through your own SMTP server. Articles are never sent twice to the same channel; when nothing new matches, nothing is sent."
         actions={<Button size="sm" onClick={() => setEditing('new')}><Plus size={14} /> New channel</Button>}
       >
         {loading ? (
           <p className="text-sm text-text-tertiary">Loading…</p>
         ) : channels.length === 0 ? (
-          <EmptyState>No channels yet. Add a Slack or Rocket.Chat webhook to start sending digests.</EmptyState>
+          <EmptyState>No channels yet. Add a Slack or Rocket.Chat webhook, or an email list, to start sending digests.</EmptyState>
         ) : (
           <ul className="space-y-3">
             {channels.map((c) => (
@@ -90,7 +90,7 @@ export default function ChannelsTab() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-rajdhani text-base font-semibold text-text-primary">{c.name}</span>
-                      <Badge tone="accent">{TYPE_LABEL[c.type]}</Badge>
+                      <Badge tone="accent">{c.type === 'email' && <Mail size={10} />} {TYPE_LABEL[c.type]}</Badge>
                       {!c.active && <Badge>Paused</Badge>}
                       {c.useAi && <Badge><Zap size={10} /> AI summary</Badge>}
                     </div>
@@ -152,11 +152,16 @@ function presetOf(s: Channel['schedule']): Preset {
   return 'custom';
 }
 
+type SmtpForm = SmtpSettings & { password: string };
+const EMPTY_SMTP: SmtpForm = { host: '', port: 587, security: 'starttls', user: '', password: '', fromAddress: '', fromName: '' };
+
 const EMPTY: ChannelInput = {
   name: '', type: 'slack', webhookUrl: '', active: true,
   schedule: { type: 'weekly', intervalHours: 6, timeOfDay: '08:30', weekdays: [1, 2, 3, 4, 5] },
-  minSeverity: 'medium', maxItems: 15, useAi: true, header: null, footer: null,
+  minSeverity: 'medium', maxItems: 15, useAi: true, header: null, footer: null, headerHtml: null, footerHtml: null,
 };
+
+const splitRecipients = (t: string) => t.split(/[\s,;]+/).map((r) => r.trim()).filter(Boolean);
 
 function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
   channel: Channel | 'new' | null;
@@ -168,15 +173,21 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
   const [f, setF] = useState<ChannelInput>(EMPTY);
   const [preset, setPreset] = useState<Preset>('weekdays');
   const [busy, setBusy] = useState(false);
+  const [recipients, setRecipients] = useState('');
+  const [smtp, setSmtp] = useState<SmtpForm>(EMPTY_SMTP);
 
   useEffect(() => {
     if (channel === null) return;
     if (channel === 'new') {
       setF(EMPTY);
       setPreset('weekdays');
+      setRecipients('');
+      setSmtp(EMPTY_SMTP);
     } else {
-      setF({ ...toInput(channel), webhookUrl: '', header: channel.header, footer: channel.footer });
+      setF({ ...toInput(channel), webhookUrl: '', header: channel.header, footer: channel.footer, headerHtml: channel.headerHtml, footerHtml: channel.footerHtml });
       setPreset(presetOf(channel.schedule));
+      setRecipients(channel.email?.recipients.join('\n') ?? '');
+      setSmtp(channel.email ? { ...channel.email.smtp, password: '' } : EMPTY_SMTP);
     }
   }, [channel]);
 
@@ -199,12 +210,19 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
   const save = async () => {
     setBusy(true);
     try {
+      const isEmail = f.type === 'email';
       const payload: ChannelInput = {
         ...f,
-        webhookUrl: f.webhookUrl?.trim() || undefined,
+        webhookUrl: isEmail ? undefined : f.webhookUrl?.trim() || undefined,
         header: f.header?.trim() || null,
         /* Footer on but empty = default; footer off = '' (none). */
         footer: f.footer === '' ? '' : f.footer?.trim() || null,
+        ...(isEmail ? {
+          recipients: splitRecipients(recipients),
+          smtp: { ...smtp, host: smtp.host.trim(), user: smtp.user.trim(), fromAddress: smtp.fromAddress.trim() || smtp.user.trim(), fromName: smtp.fromName.trim() },
+          headerHtml: f.headerHtml?.trim() || null,
+          footerHtml: f.footerHtml === '' ? '' : f.footerHtml?.trim() || null,
+        } : { headerHtml: undefined, footerHtml: undefined }),
       };
       if (isNew) await channelsApi.create(payload);
       else if (channel) await channelsApi.update(channel.id, payload);
@@ -225,7 +243,9 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
         <DialogHeader>
           <DialogTitle className="font-rajdhani text-xl">{isNew ? 'New channel' : `Edit ${f.name}`}</DialogTitle>
           <DialogDescription className="text-text-tertiary text-xs">
-            Digests go to a {f.type === 'slack' ? 'Slack' : 'Rocket.Chat'} channel through an incoming webhook.
+            {f.type === 'email'
+              ? 'Digests are emailed to a list of recipients through your own SMTP server.'
+              : `Digests go to a ${f.type === 'slack' ? 'Slack' : 'Rocket.Chat'} channel through an incoming webhook.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -235,31 +255,46 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
               <Input id="ch-name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inputCls} placeholder="#security-alerts" required maxLength={80} />
             </Field>
             <Field label="Platform" htmlFor="ch-type">
-              <select id="ch-type" className={selectCls} value={f.type} onChange={(e) => setF({ ...f, type: e.target.value as ChannelInput['type'] })}>
+              <select id="ch-type" className={selectCls} value={f.type} onChange={(e) => setF({ ...f, type: e.target.value as ChannelType })}>
                 <option value="slack">Slack</option>
                 <option value="rocketchat">Rocket.Chat</option>
+                <option value="email">Email</option>
               </select>
             </Field>
           </div>
 
-          <WebhookHelp key={f.type} type={f.type} defaultOpen={isNew || Boolean(typeChanged)} />
-
-          <Field
-            label="Webhook URL"
-            htmlFor="ch-url"
-            hint={!isNew && channel && !typeChanged ? <>Saved: <span className="font-jetbrains">{channel.webhookHint}</span>. Leave empty to keep it.</> : 'Stored encrypted. Treat it like a password.'}
-          >
-            <Input
-              id="ch-url"
-              type="password"
-              autoComplete="off"
-              value={f.webhookUrl ?? ''}
-              onChange={(e) => setF({ ...f, webhookUrl: e.target.value })}
-              className={`${inputCls} font-jetbrains text-xs`}
-              placeholder={f.type === 'slack' ? 'https://hooks.slack.com/services/…' : 'https://chat.example.com/hooks/…'}
-              required={isNew || Boolean(typeChanged)}
+          {f.type === 'email' ? (
+            <EmailTargetFields
+              recipients={recipients}
+              onRecipients={setRecipients}
+              smtp={smtp}
+              onSmtp={setSmtp}
+              passwordSaved={Boolean(!isNew && channel && channel.type === 'email' && channel.email?.smtp.passwordSet)}
+              defaultOpen={isNew || Boolean(typeChanged)}
             />
-          </Field>
+          ) : (
+            <>
+              <WebhookHelp key={f.type} type={f.type} defaultOpen={isNew || Boolean(typeChanged)} />
+
+              <Field
+                label="Webhook URL"
+                htmlFor="ch-url"
+                hint={!isNew && channel && !typeChanged ? <>Saved: <span className="font-jetbrains">{channel.webhookHint}</span>. Leave empty to keep it.</> : 'Stored encrypted. Treat it like a password.'}
+              >
+                <Input
+                  id="ch-url"
+                  type="password"
+                  autoComplete="off"
+                  value={f.webhookUrl ?? ''}
+                  onChange={(e) => setF({ ...f, webhookUrl: e.target.value })}
+                  className={`${inputCls} font-jetbrains text-xs`}
+                  placeholder={f.type === 'slack' ? 'https://hooks.slack.com/services/…' : 'https://chat.example.com/hooks/…'}
+                  required={isNew || Boolean(typeChanged)}
+                />
+              </Field>
+
+            </>
+          )}
 
           <fieldset className="space-y-3 border border-border-default rounded-lg p-4">
             <legend className="px-1 text-xs font-medium text-text-secondary">Schedule</legend>
@@ -322,6 +357,9 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
             </Field>
           </div>
 
+          {f.type === 'email' ? (
+            <EmailMessageFields f={f} setF={setF} />
+          ) : (
           <fieldset className="space-y-3 border border-border-default rounded-lg p-4">
             <legend className="px-1 text-xs font-medium text-text-secondary">Message</legend>
             <Field
@@ -357,6 +395,7 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
             )}
             <p className="text-xs text-text-tertiary">Use Test after saving to preview the header and footer in the channel.</p>
           </fieldset>
+          )}
 
           <label className="flex items-start gap-3 cursor-pointer">
             <Switch checked={f.useAi} onCheckedChange={(v) => setF({ ...f, useAi: v })} className="mt-0.5" />
@@ -377,7 +416,7 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
   );
 }
 
-const WEBHOOK_STEPS: Record<ChannelInput['type'], { title: string; steps: React.ReactNode[]; notes: React.ReactNode[] }> = {
+const WEBHOOK_STEPS: Record<Exclude<ChannelType, 'email'>, { title: string; steps: React.ReactNode[]; notes: React.ReactNode[] }> = {
   slack: {
     title: 'How to get a Slack webhook URL',
     steps: [
@@ -411,7 +450,7 @@ const WEBHOOK_STEPS: Record<ChannelInput['type'], { title: string; steps: React.
   },
 };
 
-function WebhookHelp({ type, defaultOpen }: { type: ChannelInput['type']; defaultOpen: boolean }) {
+function WebhookHelp({ type, defaultOpen }: { type: Exclude<ChannelType, 'email'>; defaultOpen: boolean }) {
   const h = WEBHOOK_STEPS[type];
   return (
     <details className="group rounded-lg border border-border-default bg-bg-elevated/40 px-4 py-3 text-xs" open={defaultOpen}>
@@ -424,6 +463,122 @@ function WebhookHelp({ type, defaultOpen }: { type: ChannelInput['type']; defaul
       </ul>
       <p className="mt-2 text-text-tertiary">The URL works like a password: anyone who has it can post to the channel. Don’t share it by chat or email.</p>
     </details>
+  );
+}
+
+function EmailTargetFields({ recipients, onRecipients, smtp, onSmtp, passwordSaved, defaultOpen }: {
+  recipients: string;
+  onRecipients: (v: string) => void;
+  smtp: SmtpForm;
+  onSmtp: (v: SmtpForm) => void;
+  passwordSaved: boolean;
+  defaultOpen: boolean;
+}) {
+  const set = (patch: Partial<SmtpForm>) => onSmtp({ ...smtp, ...patch });
+  const count = splitRecipients(recipients).length;
+  return (
+    <>
+      <Field label="Recipients" htmlFor="ch-rcpt" hint={`One per line (or comma-separated), up to 20. Each recipient gets their own copy and never sees the others.${count ? ` ${count} entered.` : ''}`}>
+        <Textarea id="ch-rcpt" rows={3} value={recipients} onChange={(e) => onRecipients(e.target.value)} className={`${inputCls} font-jetbrains text-xs resize-y`} placeholder={'soc@company.com\nit-team@company.com'} required />
+      </Field>
+
+      <fieldset className="space-y-3 border border-border-default rounded-lg p-4">
+        <legend className="px-1 text-xs font-medium text-text-secondary">SMTP server</legend>
+        <details className="rounded-lg border border-border-default bg-bg-elevated/40 px-4 py-3 text-xs" open={defaultOpen}>
+          <summary className="cursor-pointer select-none font-medium text-text-secondary">How to send through Gmail / Google Workspace</summary>
+          <ol className="mt-2 list-decimal space-y-1 pl-5 text-text-secondary">
+            <li>Turn on 2-Step Verification on the Google account that will send.</li>
+            <li>Open <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" className="text-accent underline">myaccount.google.com/apppasswords</a>, create an app password named e.g. “CyberPulse” and copy the 16 letters.</li>
+            <li>Server <span className="font-jetbrains">smtp.gmail.com</span>, port <span className="font-jetbrains">587</span>, STARTTLS, user = the full Gmail address, password = the app password.</li>
+            <li>To send as another address (e.g. alerts@yourdomain), add it first in Gmail → Settings → Accounts → “Send mail as”.</li>
+          </ol>
+          <p className="mt-2 text-text-tertiary">Other providers work the same way (Microsoft 365: smtp.office365.com, 587, STARTTLS). Only public servers on ports 25, 465, 587 or 2525 with TLS are accepted.</p>
+        </details>
+        <div className="grid gap-4 sm:grid-cols-[1fr_7rem_9rem]">
+          <Field label="Server" htmlFor="ch-smtp-host">
+            <Input id="ch-smtp-host" value={smtp.host} onChange={(e) => set({ host: e.target.value })} className={`${inputCls} font-jetbrains text-xs`} placeholder="smtp.gmail.com" required />
+          </Field>
+          <Field label="Port" htmlFor="ch-smtp-port">
+            <select id="ch-smtp-port" className={selectCls} value={smtp.port}
+              onChange={(e) => { const port = Number(e.target.value); set({ port, security: port === 465 ? 'tls' : 'starttls' }); }}>
+              {[587, 465, 2525, 25].map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </Field>
+          <Field label="Security" htmlFor="ch-smtp-sec">
+            <select id="ch-smtp-sec" className={selectCls} value={smtp.security} onChange={(e) => set({ security: e.target.value as SmtpForm['security'] })}>
+              <option value="starttls">STARTTLS</option>
+              <option value="tls">TLS (SSL)</option>
+            </select>
+          </Field>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="User" htmlFor="ch-smtp-user">
+            <Input id="ch-smtp-user" autoComplete="off" value={smtp.user} onChange={(e) => set({ user: e.target.value })} className={inputCls} placeholder="alerts@company.com" required />
+          </Field>
+          <Field label="Password" htmlFor="ch-smtp-pass" hint={passwordSaved ? 'Saved. Leave empty to keep it.' : 'Stored encrypted, never shown again.'}>
+            <Input id="ch-smtp-pass" type="password" autoComplete="new-password" value={smtp.password} onChange={(e) => set({ password: e.target.value })} className={inputCls} placeholder={passwordSaved ? '••••••••' : 'App password'} required={!passwordSaved} />
+          </Field>
+          <Field label="Sender address" htmlFor="ch-smtp-from" hint="Empty = the SMTP user.">
+            <Input id="ch-smtp-from" type="email" value={smtp.fromAddress} onChange={(e) => set({ fromAddress: e.target.value })} className={inputCls} placeholder="alerts@company.com" />
+          </Field>
+          <Field label="Sender name" htmlFor="ch-smtp-name">
+            <Input id="ch-smtp-name" value={smtp.fromName} onChange={(e) => set({ fromName: e.target.value })} className={inputCls} maxLength={80} placeholder="Security Alerts" />
+          </Field>
+        </div>
+      </fieldset>
+    </>
+  );
+}
+
+function EmailMessageFields({ f, setF }: { f: ChannelInput; setF: (v: ChannelInput) => void }) {
+  return (
+    <fieldset className="space-y-3 border border-border-default rounded-lg p-4">
+      <legend className="px-1 text-xs font-medium text-text-secondary">Message</legend>
+      <Field
+        label="Subject"
+        htmlFor="ch-subject"
+        hint={<>Leave empty for the default. <span className="font-jetbrains">{'{company}'}</span> and <span className="font-jetbrains">{'{count}'}</span> work here and in the HTML below.</>}
+      >
+        <Input id="ch-subject" value={f.header ?? ''} onChange={(e) => setF({ ...f, header: e.target.value })} className={inputCls} maxLength={150}
+          placeholder="Hacker-Do CyberPulse · {company} · {count} security updates for your stack" />
+      </Field>
+      <Field label="Header (HTML)" htmlFor="ch-hhtml" hint="Shown above the news. Empty = the subject as a title. Images by https URL, e.g. your hosted logo.">
+        <Textarea id="ch-hhtml" rows={4} value={f.headerHtml ?? ''} onChange={(e) => setF({ ...f, headerHtml: e.target.value })} className={`${inputCls} font-jetbrains text-xs resize-y`} maxLength={10000}
+          placeholder={'<img src="https://company.com/logo.png" alt="Company" width="140">\n<h2>Security briefing for {company}</h2>'} />
+      </Field>
+      <label className="flex items-center gap-3 cursor-pointer">
+        <Switch checked={f.footerHtml !== ''} onCheckedChange={(v) => setF({ ...f, footerHtml: v ? null : '' })} />
+        <span className="text-sm text-text-primary">Show footer</span>
+      </label>
+      {f.footerHtml !== '' && (
+        <Field label="Footer (HTML)" htmlFor="ch-fhtml" hint="Empty = the default footer.">
+          <Textarea id="ch-fhtml" rows={3} value={f.footerHtml ?? ''} onChange={(e) => setF({ ...f, footerHtml: e.target.value === '' ? null : e.target.value })} className={`${inputCls} font-jetbrains text-xs resize-y`} maxLength={10000}
+            placeholder={'<p>Company SOC · <a href="https://company.com">company.com</a></p>'} />
+        </Field>
+      )}
+      <EmailPreview header={f.header ?? null} headerHtml={f.headerHtml ?? null} footerHtml={f.footerHtml ?? null} />
+      <p className="text-xs text-text-tertiary">Scripts, forms and external styles are removed when saving; the preview shows exactly what will be sent. Use Test after saving to check it in a real inbox.</p>
+    </fieldset>
+  );
+}
+
+function EmailPreview({ header, headerHtml, footerHtml }: { header: string | null; headerHtml: string | null; footerHtml: string | null }) {
+  const [html, setHtml] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      channelsApi.previewEmail({ header: header?.trim() || null, headerHtml: headerHtml?.trim() || null, footerHtml: footerHtml === '' ? '' : footerHtml?.trim() || null })
+        .then((h) => { if (!cancelled) setHtml(h); })
+        .catch(() => { /* the form still saves; errors show there */ });
+    }, 500);
+    return () => { cancelled = true; window.clearTimeout(t); };
+  }, [header, headerHtml, footerHtml]);
+  return (
+    <div>
+      <div className="text-xs font-medium text-text-secondary mb-1.5">Preview (sample news)</div>
+      {/* No scripts, no same-origin: the HTML cannot touch the app. */}
+      <iframe title="Email preview" sandbox="" srcDoc={html} className="w-full h-[420px] rounded-md border border-border-default bg-white" />
+    </div>
   );
 }
 

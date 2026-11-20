@@ -60,7 +60,8 @@ describe('legacy database conversion', () => {
     const fresh = new Database(':memory:');
     migrate(drizzle(fresh), { migrationsFolder: MIGRATIONS });
     expect(schemaOf(getSqlite())).toEqual(schemaOf(fresh));
-    expect(getSqlite().prepare(`SELECT COUNT(*) AS n FROM __drizzle_migrations`).get()).toEqual({ n: 1 });
+    expect(getSqlite().prepare(`SELECT COUNT(*) AS n FROM __drizzle_migrations`).get())
+      .toEqual({ n: JSON.parse(fs.readFileSync(path.join(MIGRATIONS, 'meta/_journal.json'), 'utf8')).entries.length });
     expect(fs.readdirSync(dataDir).some((f) => /^cyberpulse\.pre-drizzle-.*\.db$/.test(f))).toBe(true);
   });
 
