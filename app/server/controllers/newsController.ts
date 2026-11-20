@@ -169,6 +169,10 @@ Requirements:
 - Language: ${language === 'es' ? 'Spanish' : 'English'}
 - Include relevant LinkedIn hashtags.
 - End the post with a source link pointing to the article URL above.
+- Plain text only: LinkedIn does not render Markdown, so no **bold**, no # headings, no tables.
+- No list markers: no line may start with "-", "*", "•", "→", ">" or a number followed by "." or ")".
+  When you list points, start each one with a single fitting emoji instead (for example 🔍 finding, ⚠️ risk, 🛡️ defense, ✅ action, 💡 takeaway).
+- Use between 3 and 6 emojis in the whole post, placed at the start of lines, never several in a row.
 
 Return only the post text, with no extra commentary.`,
         maxTokens: 4000,

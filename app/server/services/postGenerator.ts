@@ -116,8 +116,8 @@ function newsAnalysisTemplate(
     : (wc === 'short' ? '**⚡ Bottom line:** review your controls **today**.' : wc === 'medium' ? '**⚡ Bottom line:** review your controls, ensure your **incident response plan** covers this scenario.' : '**⚡ Bottom line:** review your controls, ensure your **incident response plan** covers this scenario, and brief your leadership team on the **business impact**.'), lang);
 
   const bullets = lang === 'es'
-    ? `**Puntos clave:**\n→ 🔍 El **vector de ataque** destaca brechas persistentes en ${a.category.toLowerCase()}\n→ 🏢 Las organizaciones con **infraestructura heredada** siguen más expuestas\n→ 💰 Este incidente subraya la necesidad de **inversión proactiva en seguridad**`
-    : `**Key takeaways:**\n→ 🔍 The **attack vector** highlights persistent gaps in ${a.category.toLowerCase()}\n→ 🏢 Organizations with **legacy infrastructure** remain most exposed\n→ 💰 This incident underscores the need for **proactive security investment**`;
+    ? `**Puntos clave:**\n🔍 El **vector de ataque** destaca brechas persistentes en ${a.category.toLowerCase()}\n🏢 Las organizaciones con **infraestructura heredada** siguen más expuestas\n💰 Este incidente subraya la necesidad de **inversión proactiva en seguridad**`
+    : `**Key takeaways:**\n🔍 The **attack vector** highlights persistent gaps in ${a.category.toLowerCase()}\n🏢 Organizations with **legacy infrastructure** remain most exposed\n💰 This incident underscores the need for **proactive security investment**`;
 
   if (wc === 'short') return `${emoji} **${lang === 'es' ? 'ANÁLISIS DE NOTICIAS' : 'NEWS ANALYSIS'}**\n\n${intro}\n\n${body}\n\n${takeaway}\n\n${hashtags(lang, a.category)}`;
   return `${emoji} **${lang === 'es' ? 'ANÁLISIS DE NOTICIAS' : 'NEWS ANALYSIS'}**\n\n${intro}\n\n${body}\n\n${bullets}\n\n${takeaway}\n\n${hashtags(lang, a.category)}`;
@@ -136,7 +136,7 @@ function quickSummaryTemplate(
     : `❓ **What:** ${a.title}\n⚠️ **Impact:** ${a.summary.slice(0, 120)}...\n✅ **Action:** Patch, review, and monitor`;
   const closing = lang === 'es' ? '🛡️ **Manténgase seguro.**' : '🛡️ **Stay safe out there.**';
 
-  return `${emoji} ${header}\n\n→ ${bullets}\n\n${closing}\n\n${hashtags(lang, a.category)}`;
+  return `${emoji} ${header}\n\n${bullets}\n\n${closing}\n\n${hashtags(lang, a.category)}`;
 }
 
 function threadTemplate(
@@ -225,7 +225,7 @@ function dailyDigestTemplate(
     ? `Manténgase informado. Manténgase seguro.\n\n¿Cuál de estas historias impacta más a su organización? Cuénteme abajo.`
     : `Stay informed. Stay secure.\n\nWhich of these stories impacts your organization the most? Let me know below.`;
 
-  return `${intro}\n\n${body}${closing}\n\n---\n#cybersecurity #infosec #dailynews #threatintel`;
+  return `${intro}\n\n${body}${closing}\n\n#cybersecurity #infosec #dailynews #threatintel`;
 }
 
 /* ------------------------------------------------------------------ */

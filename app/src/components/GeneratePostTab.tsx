@@ -715,24 +715,33 @@ function categoryContext(category: string, lang: Language): CategoryContext {
   return contexts[category] ?? fallbackEn;
 }
 
+/* LinkedIn shows dashes and arrows as plain characters, so posts use no list
+   markers: each point starts with an emoji that says what it is, and a post
+   carries 3-6 emojis in total. */
+const SEVERITY_EMOJI: Record<string, string> = { critical: '🚨', high: '⚠️', medium: '🔶', low: 'ℹ️' };
+const sevEmoji = (a: NewsArticle) => SEVERITY_EMOJI[a.severity] ?? '🔎';
+const POINT_EMOJI = ['🔍', '🏢', '🛡️'];
+const QUICK_EMOJI = ['📰', '🎯', '✅'];
+const points = (items: string[], emojis: string[]) => items.map((t, i) => `${emojis[i % emojis.length]} ${t}`).join('\n');
+
 function newsAnalysisTemplate(a: NewsArticle, tone: Tone, wc: string, lang: Language): string {
   const ctx = categoryContext(a.category, lang);
 
   if (lang === 'es') {
-    const intro = baseTone(tone, `Un desarrollo significativo en ${ctx.topic} está causando impacto en la comunidad de seguridad.`, lang);
+    const intro = `${sevEmoji(a)} ` + baseTone(tone, `Un desarrollo significativo en ${ctx.topic} está causando impacto en la comunidad de seguridad.`, lang);
     const body = baseTone(tone, `${a.title}. ${a.summary}`, lang);
     const bullets = [
       `Este desarrollo pone de relieve los puntos débiles persistentes en ${ctx.topic}`,
       `Las organizaciones con enfoques heredados siguen siendo las más expuestas`,
       `Las implicaciones de este desarrollo para ${ctx.topic} subrayan la necesidad de una inversión proactiva en seguridad`,
     ];
-    const takeaway = baseTone(tone, `Conclusión: ${ctx.advice[wc as Length]}.`, lang);
+    const takeaway = '💡 ' + baseTone(tone, `Conclusión: ${ctx.advice[wc as Length]}.`, lang);
 
     if (wc === 'short') {
       return `${intro}\n\n${body}\n\n${takeaway}\n\n${hashtags(a, lang)}`;
     }
 
-    const fullBullets = bullets.map((b) => `→ ${baseTone(tone, b, lang)}`).join('\n');
+    const fullBullets = points(bullets.map((b) => baseTone(tone, b, lang)), POINT_EMOJI);
 
     if (wc === 'medium') {
       return `${intro}\n\n${body}\n\n${fullBullets}\n\n${takeaway}\n\n${hashtags(a, lang)}`;
@@ -741,20 +750,20 @@ function newsAnalysisTemplate(a: NewsArticle, tone: Tone, wc: string, lang: Lang
     return `${intro}\n\n${body}\n\nObservaciones clave:\n${fullBullets}\n\n${takeaway}\n\n${ctx.question}\n\n${hashtags(a, lang)}`;
   }
 
-  const intro = baseTone(tone, `A significant development in ${ctx.topic} is making waves across the security community.`, lang);
+  const intro = `${sevEmoji(a)} ` + baseTone(tone, `A significant development in ${ctx.topic} is making waves across the security community.`, lang);
   const body = baseTone(tone, `${a.title}. ${a.summary}`, lang);
   const bullets = [
     `This development highlights persistent weaknesses in ${ctx.topic}`,
     `Organizations with legacy approaches remain most exposed`,
     `The implications of this development for ${ctx.topic} underscore the need for proactive security investment`,
   ];
-  const takeaway = baseTone(tone, `The bottom line: ${ctx.advice[wc as Length]}.`, lang);
+  const takeaway = '💡 ' + baseTone(tone, `The bottom line: ${ctx.advice[wc as Length]}.`, lang);
 
   if (wc === 'short') {
     return `${intro}\n\n${body}\n\n${takeaway}\n\n${hashtags(a, lang)}`;
   }
 
-  const fullBullets = bullets.map((b) => `→ ${baseTone(tone, b, lang)}`).join('\n');
+  const fullBullets = points(bullets.map((b) => baseTone(tone, b, lang)), POINT_EMOJI);
 
   if (wc === 'medium') {
     return `${intro}\n\n${body}\n\n${fullBullets}\n\n${takeaway}\n\n${hashtags(a, lang)}`;
@@ -767,34 +776,34 @@ function quickSummaryTemplate(a: NewsArticle, tone: Tone, wc: string, lang: Lang
   const ctx = categoryContext(a.category, lang);
 
   if (lang === 'es') {
-    const header = tone === 'Casual' ? `Actualización rápida sobre ${a.category.toLowerCase()}:` : `${a.category} — Actualización Rápida`;
+    const header = `${sevEmoji(a)} ` + (tone === 'Casual' ? `Actualización rápida sobre ${a.category.toLowerCase()}:` : `${a.category} — Actualización Rápida`);
     const bullets = [
       `Qué: ${a.title}`,
       `Impacto: ${a.summary.slice(0, 120)}...`,
       `Acción: ${ctx.advice.short}`,
     ];
     if (wc === 'short') {
-      return `${header}\n\n${bullets.slice(0, 2).map((b) => `→ ${b}`).join('\n')}\n\n${hashtags(a, lang)}`;
+      return `${header}\n\n${points(bullets.slice(0, 2), QUICK_EMOJI)}\n\n${hashtags(a, lang)}`;
     }
     if (wc === 'medium') {
-      return `${header}\n\n${bullets.map((b) => `→ ${b}`).join('\n')}\n\nConclusión clave: ${ctx.advice.medium}.\n\n${hashtags(a, lang)}`;
+      return `${header}\n\n${points(bullets, QUICK_EMOJI)}\n\n💡 Conclusión clave: ${ctx.advice.medium}.\n\n${hashtags(a, lang)}`;
     }
-    return `${header}\n\n${bullets.map((b) => `→ ${b}`).join('\n')}\n\n${baseTone(tone, `Conclusión: ${ctx.advice.long}.`, lang)}\n\n${hashtags(a, lang)}`;
+    return `${header}\n\n${points(bullets, QUICK_EMOJI)}\n\n💡 ${baseTone(tone, `Conclusión: ${ctx.advice.long}.`, lang)}\n\n${hashtags(a, lang)}`;
   }
 
-  const header = tone === 'Casual' ? `Quick update on ${a.category.toLowerCase()}:` : `${a.category} — Quick Update`;
+  const header = `${sevEmoji(a)} ` + (tone === 'Casual' ? `Quick update on ${a.category.toLowerCase()}:` : `${a.category} — Quick Update`);
   const bullets = [
     `What: ${a.title}`,
     `Impact: ${a.summary.slice(0, 120)}...`,
     `Action: ${ctx.advice.short}`,
   ];
   if (wc === 'short') {
-    return `${header}\n\n${bullets.slice(0, 2).map((b) => `→ ${b}`).join('\n')}\n\n${hashtags(a, lang)}`;
+    return `${header}\n\n${points(bullets.slice(0, 2), QUICK_EMOJI)}\n\n${hashtags(a, lang)}`;
   }
   if (wc === 'medium') {
-    return `${header}\n\n${bullets.map((b) => `→ ${b}`).join('\n')}\n\nKey takeaway: ${ctx.advice.medium}.\n\n${hashtags(a, lang)}`;
+    return `${header}\n\n${points(bullets, QUICK_EMOJI)}\n\n💡 Key takeaway: ${ctx.advice.medium}.\n\n${hashtags(a, lang)}`;
   }
-  return `${header}\n\n${bullets.map((b) => `→ ${b}`).join('\n')}\n\n${baseTone(tone, `Bottom line: ${ctx.advice.long}.`, lang)}\n\n${hashtags(a, lang)}`;
+  return `${header}\n\n${points(bullets, QUICK_EMOJI)}\n\n💡 ${baseTone(tone, `Bottom line: ${ctx.advice.long}.`, lang)}\n\n${hashtags(a, lang)}`;
 }
 
 function threadTemplate(a: NewsArticle, tone: Tone, wc: string, lang: Language): string {
@@ -805,12 +814,12 @@ function threadTemplate(a: NewsArticle, tone: Tone, wc: string, lang: Language):
     text
       .split(', ')
       .map((step) => step.replace(/^(and|y)\s+/i, ''))
-      .map((step) => `→ ${step.charAt(0).toUpperCase() + step.slice(1)}`)
+      .map((step) => `✅ ${step.charAt(0).toUpperCase() + step.slice(1)}`)
       .join('\n');
 
   if (lang === 'es') {
     const lines: string[] = [`1️⃣ ${a.title}\n`];
-    lines.push(`${a.summary.slice(0, 200)}...\n`);
+    lines.push(`2️⃣ ${a.summary.slice(0, 200)}...\n`);
     if (slides >= 3) {
       lines.push(baseTone(tone, `3️⃣ ¿Qué hacer?\n${formatAdvice(ctx.advice.medium)}\n`, lang));
     }
@@ -821,7 +830,7 @@ function threadTemplate(a: NewsArticle, tone: Tone, wc: string, lang: Language):
   }
 
   const lines: string[] = [`1️⃣ ${a.title}\n`];
-  lines.push(`${a.summary.slice(0, 200)}...\n`);
+  lines.push(`2️⃣ ${a.summary.slice(0, 200)}...\n`);
   if (slides >= 3) {
     lines.push(baseTone(tone, `3️⃣ What should you do?\n${formatAdvice(ctx.advice.medium)}\n`, lang));
   }
@@ -835,14 +844,14 @@ function contrarianTemplate(a: NewsArticle, tone: Tone, wc: string, lang: Langua
   const ctx = categoryContext(a.category, lang);
 
   if (lang === 'es') {
-    const challenge = baseTone(tone, `Todo el mundo habla de ${a.title.toLowerCase()}, pero aquí está lo que la mayoría está entendiendo mal.`, lang);
+    const challenge = '🤔 ' + baseTone(tone, `Todo el mundo habla de ${a.title.toLowerCase()}, pero aquí está lo que la mayoría está entendiendo mal.`, lang);
     const reframe = baseTone(tone, `La narrativa se centra en la reacción inmediata, pero la historia real trata sobre ${ctx.topic} — y si lo estamos abordando estratégicamente. ${a.summary}`, lang);
     const dataPoint = tone === 'Thought Leadership'
-      ? 'La investigación muestra que el 68% de las organizaciones tienen dificultades para convertir prioridades de seguridad en acción operativa.'
-      : 'La mayoría de organizaciones aún reaccionan a los titulares en lugar de construir proactivamente su hoja de ruta de seguridad.';
+      ? '📊 La investigación muestra que el 68% de las organizaciones tienen dificultades para convertir prioridades de seguridad en acción operativa.'
+      : '📊 La mayoría de organizaciones aún reaccionan a los titulares en lugar de construir proactivamente su hoja de ruta de seguridad.';
     const call = wc === 'short'
       ? `${ctx.question}`
-      : `Necesitamos dejar de tratar ${ctx.topic} como una casilla de verificación y empezar a integrar la seguridad en nuestro ADN operativo.\n\n${ctx.question}`;
+      : `👉 Necesitamos dejar de tratar ${ctx.topic} como una casilla de verificación y empezar a integrar la seguridad en nuestro ADN operativo.\n\n${ctx.question}`;
 
     if (wc === 'short') {
       return `${challenge}\n\n${reframe}\n\n${call}\n\n${hashtags(a, lang)}`;
@@ -851,14 +860,14 @@ function contrarianTemplate(a: NewsArticle, tone: Tone, wc: string, lang: Langua
     return `${challenge}\n\n${reframe}\n\n${dataPoint}\n\n${call}\n\n${hashtags(a, lang)}`;
   }
 
-  const challenge = baseTone(tone, `Everyone is talking about ${a.title.toLowerCase()}, but here's what most are getting wrong.`, lang);
+  const challenge = '🤔 ' + baseTone(tone, `Everyone is talking about ${a.title.toLowerCase()}, but here's what most are getting wrong.`, lang);
   const reframe = baseTone(tone, `The narrative focuses on the immediate reaction, but the real story is about ${ctx.topic} — and whether we're thinking about it strategically. ${a.summary}`, lang);
   const dataPoint = tone === 'Thought Leadership'
-    ? 'Research shows 68% of organizations struggle to translate security priorities into operational action.'
-    : 'Most organizations still react to headlines instead of shaping their security roadmap proactively.';
+    ? '📊 Research shows 68% of organizations struggle to translate security priorities into operational action.'
+    : '📊 Most organizations still react to headlines instead of shaping their security roadmap proactively.';
   const call = wc === 'short'
     ? `${ctx.question}`
-    : `We need to stop treating ${ctx.topic} as a checkbox and start building security into our operational DNA.\n\n${ctx.question}`;
+    : `👉 We need to stop treating ${ctx.topic} as a checkbox and start building security into our operational DNA.\n\n${ctx.question}`;
 
   if (wc === 'short') {
     return `${challenge}\n\n${reframe}\n\n${call}\n\n${hashtags(a, lang)}`;
@@ -872,15 +881,15 @@ function storytellingTemplate(a: NewsArticle, tone: Tone, wc: string, lang: Lang
 
   if (lang === 'es') {
     const open = tone === 'Casual'
-      ? `Recuerdo la primera vez que tuve que lidiar con ${ctx.incident}...`
-      : `Al principio de mi carrera, aprendí una dura lección sobre ${ctx.topic}.`;
+      ? `📖 Recuerdo la primera vez que tuve que lidiar con ${ctx.incident}...`
+      : `📖 Al principio de mi carrera, aprendí una dura lección sobre ${ctx.topic}.`;
     const connect = `Cuando leí sobre ${a.title.toLowerCase()}, me transportó de vuelta.`;
     const lesson = baseTone(tone, a.summary, lang);
     const close = wc === 'short'
       ? `Manténgase atento.`
       : wc === 'medium'
-      ? `El panorama ha cambiado, pero los fundamentos no: ${ctx.advice.medium}.`
-      : `El panorama ha cambiado drásticamente, pero los fundamentos permanecen: ${ctx.advice.long}. ${baseTone(tone, 'Este último desarrollo es un recordatorio de que la seguridad es un viaje, no un destino.', lang)}`;
+      ? `💡 El panorama ha cambiado, pero los fundamentos no: ${ctx.advice.medium}.`
+      : `💡 El panorama ha cambiado drásticamente, pero los fundamentos permanecen: ${ctx.advice.long}. ${baseTone(tone, 'Este último desarrollo es un recordatorio de que la seguridad es un viaje, no un destino.', lang)}`;
 
     if (wc === 'short') {
       return `${open}\n${connect}\n\n${lesson}\n\n${close}\n\n${hashtags(a, lang)}`;
@@ -889,15 +898,15 @@ function storytellingTemplate(a: NewsArticle, tone: Tone, wc: string, lang: Lang
   }
 
   const open = tone === 'Casual'
-    ? `I remember the first time I had to deal with ${ctx.incident}...`
-    : `Early in my career, I learned a hard lesson about ${ctx.topic}.`;
+    ? `📖 I remember the first time I had to deal with ${ctx.incident}...`
+    : `📖 Early in my career, I learned a hard lesson about ${ctx.topic}.`;
   const connect = `When I read about ${a.title.toLowerCase()}, it brought me right back.`;
   const lesson = baseTone(tone, a.summary, lang);
   const close = wc === 'short'
     ? `Stay thoughtful.`
     : wc === 'medium'
-    ? `The landscape has changed, but the fundamentals haven't: ${ctx.advice.medium}.`
-    : `The landscape has changed dramatically, but the fundamentals remain: ${ctx.advice.long}. ${baseTone(tone, 'This latest development is a reminder that security is a journey, not a destination.', lang)}`;
+    ? `💡 The landscape has changed, but the fundamentals haven't: ${ctx.advice.medium}.`
+    : `💡 The landscape has changed dramatically, but the fundamentals remain: ${ctx.advice.long}. ${baseTone(tone, 'This latest development is a reminder that security is a journey, not a destination.', lang)}`;
 
   if (wc === 'short') {
     return `${open}\n${connect}\n\n${lesson}\n\n${close}\n\n${hashtags(a, lang)}`;
@@ -941,23 +950,22 @@ function generateDailyDigestPost(articles: NewsArticle[], tone: Tone, length: Le
     };
 
     let body = '';
-    selected.forEach((a, i) => {
-      const num = i + 1;
+    selected.forEach((a) => {
       const emoji = severityEmoji[a.severity] || '⚪';
-      const title = baseTone(tone, a.title, lang);
+      const title = baseTone(tone, a.title.replace(/\s+/g, ' ').trim(), lang);
       const summary = wc === 'short'
         ? ''
         : wc === 'medium'
         ? `\n${baseTone(tone, a.summary.slice(0, 140), lang)}...`
         : `\n${baseTone(tone, a.summary, lang)}`;
-      const link = `\n🔗 Leer más: ${a.url}`;
+      const link = `\nLeer más: ${a.url}`;
 
-      body += `${num}. ${emoji} ${title}${summary}${link}\n\n`;
+      body += `${emoji} ${title}${summary}${link}\n\n`;
     });
 
     const hashtagsLine = `#ciberseguridad #infoseguridad #noticiasdiarias #inteligenciadeamenazas`;
 
-    return `${intros[tone]}\n\n${body}${closings[tone]}\n\n---\n${hashtagsLine}`;
+    return `${intros[tone]}\n\n${body}${closings[tone]}\n\n${hashtagsLine}`;
   }
 
   const intros: Record<Tone, string> = {
@@ -984,23 +992,22 @@ function generateDailyDigestPost(articles: NewsArticle[], tone: Tone, length: Le
   };
 
   let body = '';
-  selected.forEach((a, i) => {
-    const num = i + 1;
+  selected.forEach((a) => {
     const emoji = severityEmoji[a.severity] || '⚪';
-    const title = baseTone(tone, a.title, lang);
+    const title = baseTone(tone, a.title.replace(/\s+/g, ' ').trim(), lang);
     const summary = wc === 'short'
       ? ''
       : wc === 'medium'
       ? `\n${baseTone(tone, a.summary.slice(0, 140), lang)}...`
       : `\n${baseTone(tone, a.summary, lang)}`;
-    const link = `\n🔗 Read more: ${a.url}`;
+    const link = `\nRead more: ${a.url}`;
 
-    body += `${num}. ${emoji} ${title}${summary}${link}\n\n`;
+    body += `${emoji} ${title}${summary}${link}\n\n`;
   });
 
   const hashtagsLine = `#cybersecurity #infosec #dailynews #threatintel`;
 
-  return `${intros[tone]}\n\n${body}${closings[tone]}\n\n---\n${hashtagsLine}`;
+  return `${intros[tone]}\n\n${body}${closings[tone]}\n\n${hashtagsLine}`;
 }
 
 /* ------------------------------------------------------------------ */
