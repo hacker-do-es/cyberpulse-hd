@@ -14,6 +14,7 @@ import { CSV_MAX_BYTES } from '../services/csv';
 import { requireAuth, requireRole, requireTenant, requireTenantAdmin } from './middlewares/auth';
 import { auditTrail } from './middlewares/audit';
 import { logsController } from '../controllers/logsController';
+import { linkedinQueueController } from '../controllers/linkedinQueueController';
 import { loginLimiter, requireMcpKey, sendLimiter, writeLimiter } from './middlewares/security';
 
 /* Every HTTP endpoint, with its guards. Controllers hold no routing logic and
@@ -105,6 +106,12 @@ export function apiRouter(appVersion: string): express.Router {
   api.delete('/linkedin', writeLimiter, handle(linkedinController.disconnect));
   api.post('/linkedin/organizations/refresh', sendLimiter, handle(linkedinController.refreshOrganizations));
   api.post('/linkedin/posts', sendLimiter, handle(linkedinController.publish));
+  api.get('/linkedin/queue', requireTenant, handle(linkedinQueueController.list));
+  api.post('/linkedin/queue', requireTenant, writeLimiter, handle(linkedinQueueController.schedule));
+  api.put('/linkedin/queue/:id', requireTenant, writeLimiter, handle(linkedinQueueController.update));
+  api.post('/linkedin/queue/:id/approve', requireTenant, sendLimiter, handle(linkedinQueueController.approve));
+  api.post('/linkedin/queue/:id/reject', requireTenant, writeLimiter, handle(linkedinQueueController.reject));
+  api.post('/linkedin/queue/:id/cancel', requireTenant, writeLimiter, handle(linkedinQueueController.cancel));
 
   /* Post generation */
   api.post('/generate', writeLimiter, handle(generateController.template));

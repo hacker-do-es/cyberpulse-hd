@@ -9,6 +9,8 @@ import { parseStoredTarget } from '../services/mail/target';
 import { toSqlUtc } from '../services/schedule';
 import { tenantStack } from '../services/stackNews';
 import { deliver } from '../services/webhooks';
+import { resolveAuthor, PublishError } from '../services/linkedin/accounts';
+import { runLinkedInChannel } from './runLinkedInChannel';
 
 /* Builds one company's digest for one channel, sends it and records the
    outcome. Used by the scheduler and by the "Send now" button. */
@@ -42,6 +44,7 @@ export async function runChannelDigest(channelId: number, trigger: 'schedule' | 
 }
 
 async function buildAndSend(channel: ChannelRow, tenant: TenantRow, now: Date): Promise<RunResult> {
+  if (channel.type === 'linkedin') return runLinkedInChannel(channel, tenant, now);
   const stack = tenantStack(tenant.id);
   if (stack.length === 0) {
     return { status: 'skipped', articleCount: 0, detail: 'The company has no technology stack configured' };
@@ -82,6 +85,12 @@ async function buildAndSend(channel: ChannelRow, tenant: TenantRow, now: Date): 
 }
 
 export async function sendChannelTest(channel: ChannelRow): Promise<void> {
+  /* LinkedIn: never publish a test post; just check the connection works. */
+  if (channel.type === 'linkedin') {
+    if (!channel.liUserId) throw new PublishError('The user who set up this LinkedIn channel no longer exists', 'invalid');
+    resolveAuthor(channel.liUserId, channel.liAuthor || 'member');
+    return;
+  }
   const tenant = tenantRepository.findById(channel.tenantId);
   if (channel.type === 'email') {
     const report = await sendEmail(parseStoredTarget(decryptSecret(channel.webhookUrl)), testEmail(channel, tenant));

@@ -14,12 +14,16 @@ import { previewEmail } from '../services/digest';
 import { parseStoredTelegramTarget, parseTelegramTarget, publicTelegramTarget, serializeTelegramTarget, type TelegramTarget } from '../services/webhooks/telegram';
 import { tenantRepository } from '../repositories/tenantRepository';
 import { runChannelDigest, sendChannelTest } from '../useCases/runChannelDigest';
+import { LINKEDIN_DEFAULTS } from '../useCases/runLinkedInChannel';
+import { PublishError, resolveAuthor } from '../services/linkedin/accounts';
+import { isFormat, isLength, isTone } from '../services/linkedin/compose';
+import { userRepository } from '../repositories/userRepository';
 
 export const MAX_HEADER_LENGTH = 150;
 export const MAX_FOOTER_LENGTH = 300;
 const MAX_CHANNELS_PER_TENANT = 20;
 /* Channel types that deliver news digests. */
-const DIGEST_TYPES = ['slack', 'rocketchat', 'discord', 'telegram', 'email'] as const;
+const DIGEST_TYPES = ['slack', 'rocketchat', 'discord', 'telegram', 'email', 'linkedin'] as const;
 
 function storedTarget(row: ChannelRow): EmailTarget | null {
   if (row.type !== 'email') return null;
@@ -47,6 +51,8 @@ function channelOut(row: ChannelRow) {
     hint = `${target.recipients.length} recipient${target.recipients.length === 1 ? '' : 's'} · ${target.smtp.host}:${target.smtp.port}`;
   } else if (tg) {
     hint = `chat ${tg.chatId} · bot ${tg.botToken.split(':')[0]}`;
+  } else if (row.type === 'linkedin') {
+    hint = row.liAuthor === 'member' ? 'LinkedIn profile' : `LinkedIn Page ${row.liAuthor?.replace('urn:li:organization:', '#') ?? ''}`;
   } else if (row.type !== 'email' && row.type !== 'telegram') {
     const url = decryptSecret(row.webhookUrl);
     try {
@@ -62,6 +68,12 @@ function channelOut(row: ChannelRow) {
     email: target ? publicTarget(target) : null,
     /* Telegram channels: chat and bot id, never the token. */
     telegram: tg ? publicTelegramTarget(tg) : null,
+    linkedin: row.type === 'linkedin' ? {
+      author: row.liAuthor,
+      owner: row.liUserId ? (() => { const u = userRepository.findById(row.liUserId!); return u ? { id: u.id, name: u.displayName || u.username } : null; })() : null,
+      format: row.postFormat, tone: row.postTone, length: row.postLength, language: row.postLanguage,
+      postsPerRun: row.postsPerRun, maxPostsPerDay: row.maxPostsPerDay, requireApproval: row.requireApproval,
+    } : null,
     active: row.active,
     schedule: {
       type: row.scheduleType,
@@ -137,17 +149,20 @@ function parseEmailTarget(body: any, existing?: ChannelRow): string | undefined 
 
 /* Full validation of a create (no `existing`) or a partial update. The
    webhook URL is only returned when a new one was sent. */
-function parseChannelInput(body: any, existing?: ChannelRow): Omit<ChannelValues, 'webhookUrl'> & { webhookUrl?: string } {
+function parseChannelInput(body: any, existing?: ChannelRow, userId?: number): Omit<ChannelValues, 'webhookUrl'> & { webhookUrl?: string } {
   const name = str(body?.name, 80) ?? existing?.name;
   if (!name) throw badRequest('Name is required (max 80 characters)');
   const type = (body?.type ?? existing?.type) as ChannelType;
   if (!(DIGEST_TYPES as readonly string[]).includes(type)) {
-    throw badRequest('type must be "slack", "rocketchat", "discord", "telegram" or "email"');
+    throw badRequest('type must be "slack", "rocketchat", "discord", "telegram", "email" or "linkedin"');
   }
 
   let webhookUrl: string | undefined;
   if (type === 'email') {
     webhookUrl = parseEmailTarget(body, existing);
+  } else if (type === 'linkedin') {
+    /* No external target: the channel posts with its owner's LinkedIn connection. */
+    if (!existing || existing.type !== 'linkedin') webhookUrl = 'linkedin';
   } else if (type === 'telegram') {
     const prev = existing ? storedTelegram(existing) : null;
     if (body?.telegram === undefined) {
@@ -198,7 +213,51 @@ function parseChannelInput(body: any, existing?: ChannelRow): Omit<ChannelValues
     ...parseHtmlBranding(body, existing),
     active: body?.active === undefined ? (existing ? existing.active : true) : Boolean(body.active),
     useAi: body?.useAi === undefined ? (existing ? existing.useAi : true) : Boolean(body.useAi),
+    ...(type === 'linkedin' ? parseLinkedIn(body?.linkedin, existing, userId) : {
+      liUserId: null, liAuthor: null, postFormat: null, postTone: null, postLength: null,
+      postLanguage: null, postsPerRun: null, maxPostsPerDay: null, requireApproval: null,
+    }),
   };
+}
+
+/* LinkedIn channel settings. Whoever sets the author becomes the owner whose
+   LinkedIn connection publishes; other edits keep the owner. */
+function parseLinkedIn(b: any, existing: ChannelRow | undefined, userId: number | undefined) {
+  const prev = existing?.type === 'linkedin' ? existing : undefined;
+  const author = typeof b?.author === 'string' ? b.author : prev?.liAuthor ?? undefined;
+  if (!author) throw badRequest('Choose who the channel publishes as');
+  let liUserId = prev?.liUserId ?? null;
+  if (!prev || author !== prev.liAuthor || !liUserId || b?.takeOver === true) {
+    if (!userId) throw badRequest('Unknown user');
+    try {
+      resolveAuthor(userId, author);
+    } catch (err) {
+      if (err instanceof PublishError) throw badRequest(`LinkedIn: ${err.message}`);
+      throw err;
+    }
+    liUserId = userId;
+  }
+  const pick = <T,>(v: unknown, ok: (x: unknown) => x is T, fallback: T, what: string): T => {
+    if (v === undefined) return fallback;
+    if (!ok(v)) throw badRequest(`Unknown ${what}`);
+    return v;
+  };
+  const postFormat = pick(b?.format, isFormat, (prev?.postFormat as any) ?? 'News Analysis', 'format');
+  const postTone = pick(b?.tone, isTone, (prev?.postTone as any) ?? 'Professional', 'tone');
+  const postLength = pick(b?.length, isLength, (prev?.postLength as any) ?? 'medium', 'length');
+  const postLanguage = pick(b?.language, (x): x is 'es' | 'en' => x === 'es' || x === 'en', (prev?.postLanguage as any) ?? 'es', 'language');
+  const int = (v: unknown, fallback: number, min: number, max: number, what: string) => {
+    if (v === undefined) return fallback;
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < min || n > max) throw badRequest(`${what} must be ${min}-${max}`);
+    return n;
+  };
+  const postsPerRun = int(b?.postsPerRun, prev?.postsPerRun ?? LINKEDIN_DEFAULTS.postsPerRun, 1, 5, 'Posts per run');
+  const maxPostsPerDay = int(b?.maxPostsPerDay, prev?.maxPostsPerDay ?? LINKEDIN_DEFAULTS.maxPostsPerDay, 1, 10, 'Posts per day');
+  if (postsPerRun > maxPostsPerDay) throw badRequest('Posts per run cannot exceed posts per day');
+  /* Default: a person approves Company Page posts; own-profile posts go out directly. */
+  const requireApproval = b?.requireApproval === undefined ? (prev?.requireApproval ?? author !== 'member') : Boolean(b.requireApproval);
+  return { liUserId, liAuthor: author, postFormat, postTone, postLength, postLanguage, postsPerRun, maxPostsPerDay, requireApproval };
 }
 
 function channelOf(req: express.Request): ChannelRow {
@@ -214,7 +273,7 @@ export const channelController = {
 
   create(req: express.Request, res: express.Response) {
     const tid = tenantOf(req);
-    const v = parseChannelInput(req.body);
+    const v = parseChannelInput(req.body, undefined, req.auth!.user.id);
     if (channelRepository.count(tid) >= MAX_CHANNELS_PER_TENANT) {
       throw conflict(`A company can have at most ${MAX_CHANNELS_PER_TENANT} channels`);
     }
@@ -225,7 +284,7 @@ export const channelController = {
 
   update(req: express.Request, res: express.Response) {
     const existing = channelOf(req);
-    const v = parseChannelInput(req.body, existing);
+    const v = parseChannelInput(req.body, existing, req.auth!.user.id);
     channelRepository.update(existing.id, existing.tenantId, {
       ...v,
       webhookUrl: v.webhookUrl ? encryptSecret(v.webhookUrl) : existing.webhookUrl,
@@ -245,6 +304,7 @@ export const channelController = {
       await sendChannelTest(channel);
     } catch (err) {
       if (err instanceof WebhookError || err instanceof MailError) throw new HttpError(502, err.message);
+      if (err instanceof PublishError) throw new HttpError(err.code === 'reconnect' ? 409 : 400, err.message);
       throw new HttpError(502, channel.type === 'email' ? 'Email delivery failed' : channel.type === 'telegram' ? 'Telegram request failed' : 'Webhook request failed');
     }
     res.json({ ok: true });

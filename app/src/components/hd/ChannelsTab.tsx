@@ -1,19 +1,28 @@
 import { useCallback, useEffect, useState } from 'react';
-import { History, Mail, Pencil, Plus, Radio, Send, Trash2, Zap } from 'lucide-react';
+import { History, Linkedin, Mail, Pencil, Plus, Radio, Send, Trash2, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { channelsApi, type Channel, type ChannelInput, type ChannelType, type Delivery, type Severity, type SmtpSettings } from '@/services/hdApi';
+import { channelsApi, type Channel, type ChannelInput, type ChannelType, type Delivery, type LinkedInChannelSettings, type Severity, type SmtpSettings } from '@/services/hdApi';
+import { LinkedInQueuePanel } from './LinkedInQueue';
+import { authorOptions, useLinkedInStatus } from './linkedinHelpers';
 import { useAuth } from '@/lib/auth';
 import { Panel, PageHeader, Field, Badge, EmptyState } from './ui';
 import { inputCls, selectCls, notifyError, formatDateTime, WEEKDAYS } from './helpers';
 import { getLang, tr, trMessage } from '@/lib/i18n';
 
 const SEVERITY_LABEL: Record<Severity, string> = { low: 'Low and above', medium: 'Medium and above', high: 'High and above', critical: 'Critical only' };
-const TYPE_LABEL = { slack: 'Slack', rocketchat: 'Rocket.Chat', discord: 'Discord', telegram: 'Telegram', email: 'Email' } as const;
+const TYPE_LABEL = { slack: 'Slack', rocketchat: 'Rocket.Chat', discord: 'Discord', telegram: 'Telegram', email: 'Email', linkedin: 'LinkedIn' } as const;
+
+const LI_FORMATS: Array<[string, string]> = [['News Analysis', 'News Analysis'], ['Quick Summary', 'Quick Summary'], ['Thread', 'Thread / Carousel'], ['Contrarian', 'Contrarian Take'], ['Storytelling', 'Storytelling'], ['Daily Digest', 'Daily Digest']];
+const LI_TONES = ['Professional', 'Casual', 'Urgent', 'Educational', 'Thought Leadership'];
+const LI_DEFAULT: LinkedInChannelSettings = {
+  author: null, format: 'News Analysis', tone: 'Professional', length: 'medium', language: 'es',
+  postsPerRun: 1, maxPostsPerDay: 2, requireApproval: null,
+};
 
 function describeSchedule(c: Channel['schedule']): string {
   if (c.type === 'interval') return tr('Every {n} h', { n: c.intervalHours ?? '' });
@@ -91,7 +100,8 @@ export default function ChannelsTab() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-rajdhani text-base font-semibold text-text-primary">{c.name}</span>
-                      <Badge tone="accent">{c.type === 'email' && <Mail size={10} />} {TYPE_LABEL[c.type]}</Badge>
+                      <Badge tone="accent">{c.type === 'email' && <Mail size={10} />}{c.type === 'linkedin' && <Linkedin size={10} />} {TYPE_LABEL[c.type]}</Badge>
+                      {c.type === 'linkedin' && c.linkedin?.requireApproval && <Badge>{tr('Needs approval')}</Badge>}
                       {!c.active && <Badge>{tr("Paused")}</Badge>}
                       {c.useAi && <Badge><Zap size={10} /> {tr("AI summary")}</Badge>}
                     </div>
@@ -105,11 +115,11 @@ export default function ChannelsTab() {
                   <div className="flex items-center gap-1">
                     <Switch checked={c.active} onCheckedChange={() => void toggle(c)} aria-label={c.active ? tr('Pause channel') : tr('Resume channel')} disabled={busyId === c.id} />
                     <Button size="sm" variant="ghost" className="h-8 text-text-secondary" disabled={busyId === c.id}
-                      onClick={() => void act(c, () => channelsApi.test(c.id), tr('Test message sent'))} title={tr("Send a test message")}>
+                      onClick={() => void act(c, () => channelsApi.test(c.id), c.type === 'linkedin' ? tr('The LinkedIn connection works') : tr('Test message sent'))} title={c.type === 'linkedin' ? tr('Check the LinkedIn connection (publishes nothing)') : tr("Send a test message")}>
                       <Send size={14} /> {tr("Test")}
                     </Button>
                     <Button size="sm" variant="ghost" className="h-8 text-text-secondary" disabled={busyId === c.id}
-                      onClick={() => void act(c, () => channelsApi.run(c.id), (r) => r.status === 'sent' ? tr('Digest sent with {n} articles', { n: r.articleCount ?? 0 }) : (r.detail ?? tr('Nothing to send')))}
+                      onClick={() => void act(c, () => channelsApi.run(c.id), (r) => c.type === 'linkedin' ? trMessage(r.detail ?? '') : r.status === 'sent' ? tr('Digest sent with {n} articles', { n: r.articleCount ?? 0 }) : (r.detail ?? tr('Nothing to send')))}
                       title={tr("Build and send the digest now")}>
                       <Zap size={14} /> {tr("Send now")}
                     </Button>
@@ -131,6 +141,7 @@ export default function ChannelsTab() {
         onSaved={async () => { setEditing(null); await load(); }}
       />
       <HistoryDialog channel={historyFor} timeZone={tz} onClose={() => setHistoryFor(null)} />
+      <div className="mt-6"><LinkedInQueuePanel timeZone={tz} /></div>
     </div>
   );
 }
@@ -177,6 +188,9 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
   const [recipients, setRecipients] = useState('');
   const [smtp, setSmtp] = useState<SmtpForm>(EMPTY_SMTP);
   const [tg, setTg] = useState({ botToken: '', chatId: '' });
+  const [li, setLi] = useState<LinkedInChannelSettings>(LI_DEFAULT);
+  const liStatus = useLinkedInStatus().status;
+  const liOptions = authorOptions(liStatus, `${liStatus?.name ?? 'LinkedIn'} (${tr('my profile')})`);
 
   useEffect(() => {
     if (channel === null) return;
@@ -186,12 +200,14 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
       setRecipients('');
       setSmtp(EMPTY_SMTP);
       setTg({ botToken: '', chatId: '' });
+      setLi(LI_DEFAULT);
     } else {
       setF({ ...toInput(channel), webhookUrl: '', header: channel.header, footer: channel.footer, headerHtml: channel.headerHtml, footerHtml: channel.footerHtml });
       setPreset(presetOf(channel.schedule));
       setRecipients(channel.email?.recipients.join('\n') ?? '');
       setSmtp(channel.email ? { ...channel.email.smtp, password: '' } : EMPTY_SMTP);
       setTg({ botToken: '', chatId: channel.telegram?.chatId ?? '' });
+      setLi(channel.linkedin ? { ...LI_DEFAULT, ...Object.fromEntries(Object.entries(channel.linkedin).filter(([, v]) => v !== null)) } as LinkedInChannelSettings : LI_DEFAULT);
     }
   }, [channel]);
 
@@ -216,9 +232,12 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
     try {
       const isEmail = f.type === 'email';
       const isTelegram = f.type === 'telegram';
+      const isLinkedIn = f.type === 'linkedin';
+      const liAuthor = li.author ?? liOptions[0]?.value ?? null;
       const payload: ChannelInput = {
         ...f,
-        webhookUrl: isEmail || isTelegram ? undefined : f.webhookUrl?.trim() || undefined,
+        webhookUrl: isEmail || isTelegram || isLinkedIn ? undefined : f.webhookUrl?.trim() || undefined,
+        linkedin: isLinkedIn ? { ...li, author: liAuthor, requireApproval: li.requireApproval ?? liAuthor !== 'member' } : undefined,
         telegram: isTelegram ? { botToken: tg.botToken.trim() || undefined, chatId: tg.chatId.trim() } : undefined,
         header: f.header?.trim() || null,
         /* Footer on but empty = default; footer off = '' (none). */
@@ -253,6 +272,8 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
               ? tr('Digests are emailed to a list of recipients through your own SMTP server.')
               : f.type === 'telegram'
                 ? tr('Digests are posted to a Telegram group or channel by your own bot.')
+                : f.type === 'linkedin'
+                ? tr('Writes LinkedIn posts about new stories that match your stack and publishes them with your LinkedIn connection, or leaves them for approval.')
                 : tr('Digests go to a {platform} channel through an incoming webhook.', { platform: TYPE_LABEL[f.type] })}
           </DialogDescription>
         </DialogHeader>
@@ -268,6 +289,7 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
                 <option value="rocketchat">{tr("Rocket.Chat")}</option>
                 <option value="discord">Discord</option>
                 <option value="telegram">Telegram</option>
+                {(liStatus?.configured || f.type === 'linkedin') && <option value="linkedin">LinkedIn</option>}
                 <option value="email">{tr("Email")}</option>
               </select>
             </Field>
@@ -282,6 +304,8 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
               passwordSaved={Boolean(!isNew && channel && channel.type === 'email' && channel.email?.smtp.passwordSet)}
               defaultOpen={isNew || Boolean(typeChanged)}
             />
+          ) : f.type === 'linkedin' ? (
+            <LinkedInChannelFields li={li} setLi={setLi} options={liOptions} owner={!isNew && channel ? channel.linkedin?.owner ?? null : null} configured={Boolean(liStatus?.configured)} />
           ) : f.type === 'telegram' ? (
             <>
               <WebhookHelp key={f.type} type={f.type} defaultOpen={isNew || Boolean(typeChanged)} />
@@ -378,12 +402,12 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
                 {(Object.keys(SEVERITY_LABEL) as Severity[]).map((s) => <option key={s} value={s}>{tr(SEVERITY_LABEL[s])}</option>)}
               </select>
             </Field>
-            <Field label={tr("Max articles per digest")} htmlFor="ch-max">
+            {f.type !== 'linkedin' && <Field label={tr("Max articles per digest")} htmlFor="ch-max">
               <Input id="ch-max" type="number" min={1} max={50} value={f.maxItems} onChange={(e) => setF({ ...f, maxItems: Number(e.target.value) })} className={inputCls} />
-            </Field>
+            </Field>}
           </div>
 
-          {f.type === 'email' ? (
+          {f.type === 'linkedin' ? null : f.type === 'email' ? (
             <EmailMessageFields f={f} setF={setF} />
           ) : (
           <fieldset className="space-y-3 border border-border-default rounded-lg p-4">
@@ -426,9 +450,11 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
           <label className="flex items-start gap-3 cursor-pointer">
             <Switch checked={f.useAi} onCheckedChange={(v) => setF({ ...f, useAi: v })} className="mt-0.5" />
             <span className="text-sm">
-              <span className="text-text-primary">{tr("Add an AI executive summary")}</span>
+              <span className="text-text-primary">{f.type === 'linkedin' ? tr('Write the posts with AI') : tr("Add an AI executive summary")}</span>
               <span className="block text-xs text-text-tertiary">
-                {aiConfigured ? tr('Uses the company’s Claude/OpenAI key. Links always come from the feeds, never from the AI.') : tr('No AI key configured for this company yet: the digest will go out without a summary.')}
+                {f.type === 'linkedin'
+                  ? (aiConfigured ? tr('Uses the company’s Claude/OpenAI key; the templates are used if it fails. The Daily Digest format always uses the template.') : tr('No AI key configured for this company yet: posts use the templates.'))
+                  : aiConfigured ? tr('Uses the company’s Claude/OpenAI key. Links always come from the feeds, never from the AI.') : tr('No AI key configured for this company yet: the digest will go out without a summary.')}
               </span>
             </span>
           </label>
@@ -439,6 +465,72 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function LinkedInChannelFields({ li, setLi, options, owner, configured }: {
+  li: LinkedInChannelSettings;
+  setLi: (v: LinkedInChannelSettings) => void;
+  options: Array<{ value: string; label: string; page: boolean }>;
+  owner: { id: number; name: string } | null;
+  configured: boolean;
+}) {
+  const set = (patch: Partial<LinkedInChannelSettings>) => setLi({ ...li, ...patch });
+  const author = li.author ?? options[0]?.value ?? '';
+  const approval = li.requireApproval ?? author !== 'member';
+  if (!configured) return <p className="text-sm text-text-tertiary">{tr('LinkedIn is not configured on this server.')}</p>;
+  return (
+    <fieldset className="space-y-3 border border-border-default rounded-lg p-4">
+      <legend className="px-1 text-xs font-medium text-text-secondary">LinkedIn</legend>
+      {options.length === 0 ? (
+        <p className="text-sm text-text-secondary">{tr('Connect your LinkedIn account in My account first: the channel publishes with your connection.')}</p>
+      ) : (
+        <Field label={tr('Publish as')} htmlFor="ch-li-author" hint={owner ? tr('Publishes with the LinkedIn connection of {name}. Choosing an author makes it yours.', { name: owner.name }) : tr('Publishes with your LinkedIn connection.')}>
+          <select id="ch-li-author" className={selectCls} value={author} onChange={(e) => set({ author: e.target.value, requireApproval: null })}>
+            {li.author && !options.some((o) => o.value === li.author) && <option value={li.author}>{li.author === 'member' ? tr('Profile of {name}', { name: owner?.name ?? '—' }) : li.author}</option>}
+            {options.map((o) => <option key={o.value} value={o.value}>{o.page ? `🏢 ${o.label}` : `👤 ${o.label}`}</option>)}
+          </select>
+        </Field>
+      )}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label={tr('Format')} htmlFor="ch-li-format">
+          <select id="ch-li-format" className={selectCls} value={li.format ?? 'News Analysis'} onChange={(e) => set({ format: e.target.value })}>
+            {LI_FORMATS.map(([v, l]) => <option key={v} value={v}>{tr(l)}</option>)}
+          </select>
+        </Field>
+        <Field label={tr('Tone')} htmlFor="ch-li-tone">
+          <select id="ch-li-tone" className={selectCls} value={li.tone ?? 'Professional'} onChange={(e) => set({ tone: e.target.value })}>
+            {LI_TONES.map((t) => <option key={t} value={t}>{tr(t)}</option>)}
+          </select>
+        </Field>
+        <Field label={tr('Length')} htmlFor="ch-li-length">
+          <select id="ch-li-length" className={selectCls} value={li.length ?? 'medium'} onChange={(e) => set({ length: e.target.value })}>
+            <option value="short">{tr('Short')}</option>
+            <option value="medium">{tr('Medium')}</option>
+            <option value="long">{tr('Long')}</option>
+          </select>
+        </Field>
+        <Field label={tr('Language')} htmlFor="ch-li-lang">
+          <select id="ch-li-lang" className={selectCls} value={li.language ?? 'es'} onChange={(e) => set({ language: e.target.value as 'es' | 'en' })}>
+            <option value="es">{tr('Spanish')}</option>
+            <option value="en">{tr('English')}</option>
+          </select>
+        </Field>
+        <Field label={tr('Posts per run')} htmlFor="ch-li-run" hint={li.format === 'Daily Digest' ? tr('Daily Digest makes one post with several stories.') : tr('Each post is about a different story.')}>
+          <Input id="ch-li-run" type="number" min={1} max={5} value={li.postsPerRun ?? 1} onChange={(e) => set({ postsPerRun: Number(e.target.value) })} className={inputCls} />
+        </Field>
+        <Field label={tr('Max posts per day')} htmlFor="ch-li-day" hint={tr('Counted over the last 24 hours, including posts waiting for approval.')}>
+          <Input id="ch-li-day" type="number" min={1} max={10} value={li.maxPostsPerDay ?? 2} onChange={(e) => set({ maxPostsPerDay: Number(e.target.value) })} className={inputCls} />
+        </Field>
+      </div>
+      <label className="flex items-start gap-3 cursor-pointer">
+        <Switch checked={approval} onCheckedChange={(v) => set({ requireApproval: v })} className="mt-0.5" />
+        <span className="text-sm">
+          <span className="text-text-primary">{tr('Require approval before publishing')}</span>
+          <span className="block text-xs text-text-tertiary">{tr('Posts wait in the LinkedIn queue below until a company admin approves them. On by default for Company Pages.')}</span>
+        </span>
+      </label>
+    </fieldset>
   );
 }
 

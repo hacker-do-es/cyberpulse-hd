@@ -124,7 +124,7 @@ export interface ChannelSchedule {
   weekdays: number[];
 }
 
-export type ChannelType = 'slack' | 'rocketchat' | 'discord' | 'telegram' | 'email';
+export type ChannelType = 'slack' | 'rocketchat' | 'discord' | 'telegram' | 'email' | 'linkedin';
 export type SmtpSecurity = 'tls' | 'starttls';
 
 export interface SmtpSettings {
@@ -136,6 +136,18 @@ export interface SmtpSettings {
   fromName: string;
 }
 
+export interface LinkedInChannelSettings {
+  /** 'member' or a Company Page URN. */
+  author: string | null;
+  format: string | null;
+  tone: string | null;
+  length: string | null;
+  language: 'es' | 'en' | null;
+  postsPerRun: number | null;
+  maxPostsPerDay: number | null;
+  requireApproval: boolean | null;
+}
+
 export interface Channel {
   id: number;
   name: string;
@@ -145,6 +157,8 @@ export interface Channel {
   email: { recipients: string[]; smtp: SmtpSettings & { passwordSet: boolean } } | null;
   /** Telegram channels only; the bot token is never returned. */
   telegram: { chatId: string; botId: string; tokenSet: true } | null;
+  /** LinkedIn channels only. */
+  linkedin: (LinkedInChannelSettings & { owner: { id: number; name: string } | null }) | null;
   active: boolean;
   schedule: ChannelSchedule;
   minSeverity: Severity;
@@ -169,6 +183,8 @@ export interface ChannelInput {
   webhookUrl?: string;
   /** Telegram: empty botToken on update = keep the stored one. */
   telegram?: { botToken?: string; chatId: string };
+  /** LinkedIn: setting the author makes the current user the publishing owner. */
+  linkedin?: Partial<LinkedInChannelSettings> & { takeOver?: boolean };
   recipients?: string[];
   /** Empty password on update = keep the stored one. */
   smtp?: SmtpSettings & { password?: string };
@@ -348,3 +364,40 @@ export const logsApi = {
   sources: () => call<{ sources: Array<{ source: string; n: number }> }>('GET', '/api/admin/logs/sources').then((r) => r.sources),
   exportUrl: (f: LogFilter) => `/api/admin/logs/export.txt?${logQuery(f)}`,
 };
+
+/* ------------------------------------------------------------------ */
+/*  LinkedIn publishing queue                                          */
+/* ------------------------------------------------------------------ */
+
+export type QueueStatus = 'pending' | 'scheduled' | 'publishing' | 'published' | 'failed' | 'rejected' | 'cancelled';
+
+export interface QueuedPost {
+  id: number;
+  status: QueueStatus;
+  text: string;
+  author: string;
+  authorLabel: string | null;
+  authorUser: string | null;
+  channel: { id: number; name: string | null } | null;
+  createdBy: string | null;
+  articles: Array<{ id: number; title: string; url: string }>;
+  /** UTC 'YYYY-MM-DD HH:MM:SS' */
+  scheduledFor: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  publishedAt: string | null;
+  url: string | null;
+  error: string | null;
+  createdAt: string;
+}
+
+export const linkedinQueueApi = {
+  list: (statuses?: QueueStatus[]) =>
+    call<{ posts: QueuedPost[]; canApprove: boolean }>('GET', `/api/linkedin/queue${statuses?.length ? `?status=${statuses.join(',')}` : ''}`),
+  schedule: (p: { text: string; author: string; scheduledFor: string }) => call<{ post: QueuedPost }>('POST', '/api/linkedin/queue', p).then((r) => r.post),
+  update: (id: number, p: { text?: string; scheduledFor?: string }) => call<{ post: QueuedPost }>('PUT', `/api/linkedin/queue/${id}`, p).then((r) => r.post),
+  approve: (id: number, p: { text?: string; scheduledFor?: string } = {}) => call<{ post: QueuedPost }>('POST', `/api/linkedin/queue/${id}/approve`, p).then((r) => r.post),
+  reject: (id: number) => call<{ post: QueuedPost }>('POST', `/api/linkedin/queue/${id}/reject`).then((r) => r.post),
+  cancel: (id: number) => call<{ post: QueuedPost }>('POST', `/api/linkedin/queue/${id}/cancel`).then((r) => r.post),
+};
+

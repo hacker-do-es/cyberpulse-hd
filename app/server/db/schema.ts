@@ -165,6 +165,18 @@ export const channels = sqliteTable('channels', {
   lastSentAt: text('last_sent_at'),
   nextRunAt: text('next_run_at'),
   createdAt: text('created_at').default(now),
+  /* LinkedIn channels only: whose connection publishes, as whom
+     ('member' or urn:li:organization:N), how posts are written, how many,
+     and whether a person approves each post first. */
+  liUserId: integer('li_user_id').references(() => users.id, { onDelete: 'set null' }),
+  liAuthor: text('li_author'),
+  postFormat: text('post_format'),
+  postTone: text('post_tone'),
+  postLength: text('post_length'),
+  postLanguage: text('post_language'),
+  postsPerRun: integer('posts_per_run'),
+  maxPostsPerDay: integer('max_posts_per_day'),
+  requireApproval: integer('require_approval', { mode: 'boolean' }),
 }, (t) => [
   index('idx_channels_tenant').on(t.tenantId),
   index('idx_channels_next_run').on(t.nextRunAt),
@@ -286,3 +298,46 @@ export const appLogs = sqliteTable('app_logs', {
 }, (t) => [index('idx_app_logs_ts').on(t.ts), index('idx_app_logs_source').on(t.source, t.ts)]);
 
 export type AppLogRow = typeof appLogs.$inferSelect;
+
+/* ------------------------------------------------------------------ */
+/*  LinkedIn publishing queue                                          */
+/* ------------------------------------------------------------------ */
+
+/* Posts waiting for approval or for their time, from a LinkedIn channel or
+   scheduled by hand in Generate Post; published ones stay as history.
+   pending → (approve) scheduled → publishing → published | failed;
+   pending → rejected; pending/scheduled → cancelled. */
+export const LINKEDIN_QUEUE_STATUSES = ['pending', 'scheduled', 'publishing', 'published', 'failed', 'rejected', 'cancelled'] as const;
+export type LinkedinQueueStatus = (typeof LINKEDIN_QUEUE_STATUSES)[number];
+
+export const linkedinQueue = sqliteTable('linkedin_queue', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /* NULL for posts scheduled by hand. */
+  channelId: integer('channel_id').references(() => channels.id, { onDelete: 'set null' }),
+  createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+  /* Whose LinkedIn connection publishes it. */
+  authorUserId: integer('author_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  /* 'member' or urn:li:organization:N, and its display name at the time. */
+  author: text('author').notNull(),
+  authorLabel: text('author_label'),
+  text: text('text').notNull(),
+  /* JSON [{id,title,url}] the post is about. */
+  articles: text('articles'),
+  status: text('status', { enum: LINKEDIN_QUEUE_STATUSES }).notNull(),
+  /* UTC 'YYYY-MM-DD HH:MM:SS'; NULL while pending approval. */
+  scheduledFor: text('scheduled_for'),
+  decidedBy: integer('decided_by').references(() => users.id, { onDelete: 'set null' }),
+  decidedAt: text('decided_at'),
+  publishedAt: text('published_at'),
+  postUrn: text('post_urn'),
+  error: text('error'),
+  createdAt: text('created_at').default(now),
+}, (t) => [
+  index('idx_linkedin_queue_tenant').on(t.tenantId, t.status),
+  index('idx_linkedin_queue_due').on(t.status, t.scheduledFor),
+  index('idx_linkedin_queue_channel').on(t.channelId, t.createdAt),
+]);
+
+export type LinkedinQueueRow = typeof linkedinQueue.$inferSelect;
+

@@ -36,6 +36,11 @@ const ACTIONS: Record<string, string> = {
   'POST /scrape': 'scrape.start',
   'DELETE /linkedin': 'linkedin.disconnect',
   'POST /linkedin/posts': 'linkedin.publish',
+  'POST /linkedin/queue': 'linkedin.schedule',
+  'PUT /linkedin/queue/:id': 'linkedin.queue-edit',
+  'POST /linkedin/queue/:id/approve': 'linkedin.approve',
+  'POST /linkedin/queue/:id/reject': 'linkedin.reject',
+  'POST /linkedin/queue/:id/cancel': 'linkedin.cancel',
   'POST /mcp': 'mcp.call',
 };
 

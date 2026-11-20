@@ -77,6 +77,7 @@ export interface Candidate {
   source: string;
   severity: string;
   url: string;
+  category: string;
   matchedTech: string[];
   score: number;
 }
@@ -100,6 +101,7 @@ export async function selectCandidates(channel: ChannelRow, stack: TechStackItem
       source: row.source,
       severity: (row.severity || 'low').toLowerCase(),
       url: row.url,
+      category: row.category ?? 'GENERAL',
       matchedTech,
       score,
     }))

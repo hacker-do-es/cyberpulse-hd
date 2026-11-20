@@ -376,6 +376,136 @@ describe('multitenant API', () => {
     expect(parts.join('\n')).toBe(text);
   });
 
+  it('runs LinkedIn channels with daily limits, an approval queue and scheduled posts', async () => {
+    const { setLinkedInFetch } = await import('../services/linkedin/client');
+    const { publishDuePosts } = await import('../services/linkedin/queueWorker');
+    const { getSqlite } = await import('../db/client');
+    const posts: any[] = [];
+    let postStatus = 201;
+    let n = 0;
+    setLinkedInFetch((async (url: any, init: any) => {
+      const u = String(url);
+      if (u.endsWith('/oauth/v2/accessToken')) return new Response(JSON.stringify({ access_token: 'tok-alice', expires_in: 5183999, scope: 'openid,profile,w_member_social,w_organization_social,r_organization_admin' }), { status: 200 });
+      if (u.endsWith('/v2/userinfo')) return new Response(JSON.stringify({ sub: 'alice123', name: 'Alice Admin' }), { status: 200 });
+      if (u.includes('/rest/organizationAcls?')) return new Response(JSON.stringify({ elements: [{ roleAssignee: 'urn:li:person:alice123', role: 'ADMINISTRATOR', state: 'APPROVED', organization: 'urn:li:organization:777' }] }), { status: 200 });
+      if (u.endsWith('/rest/organizations/777')) return new Response(JSON.stringify({ localizedName: 'Acme Corp' }), { status: 200 });
+      if (u.endsWith('/rest/posts')) {
+        posts.push(JSON.parse(init.body));
+        return new Response('', { status: postStatus, headers: postStatus === 201 ? { 'x-restli-id': `urn:li:share:75000000000000000${n++}` } : {} });
+      }
+      return new Response('nope', { status: 404 });
+    }) as typeof fetch);
+    const addArticle = (title: string) => getSqlite().prepare(`INSERT INTO articles (title, summary, source, severity, category, published_at, url) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(title, 'Fortinet FortiOS issue', 'TestFeed', 'critical', 'VULNERABILITY', new Date().toISOString(), `https://news.example/${encodeURIComponent(title)}`);
+    try {
+      process.env.LINKEDIN_CLIENT_ID = 'cid'; process.env.LINKEDIN_CLIENT_SECRET = 'sec';
+      process.env.LINKEDIN_REDIRECT_URI = 'https://cyberpulse.example/api/linkedin/callback';
+      process.env.LINKEDIN_ORG_POSTING = '1';
+      const sched = { type: 'interval', intervalHours: 6 };
+
+      /* Needs the creator's own LinkedIn connection. */
+      expect((await adminA.req('POST', '/api/channels', { name: 'LI', type: 'linkedin', linkedin: { author: 'member' }, schedule: sched })).status).toBe(400);
+      const r = await fetch(base + '/api/linkedin/connect?return=account', { headers: { cookie: adminA.cookie }, redirect: 'manual' });
+      const st = new URL(r.headers.get('location')!).searchParams.get('state')!;
+      expect(await (await fetch(base + `/api/linkedin/callback?code=c&state=${encodeURIComponent(st)}`)).text()).toContain('linkedin=connected');
+
+      /* Own profile: publishes directly; one post per run, two per day. */
+      const me = await adminA.req('POST', '/api/channels', {
+        name: 'LI me', type: 'linkedin', minSeverity: 'low', schedule: sched,
+        linkedin: { author: 'member', format: 'Quick Summary', language: 'en', postsPerRun: 1, maxPostsPerDay: 2 },
+      });
+      expect(me.status).toBe(201);
+      expect(me.body.channel.linkedin).toMatchObject({ author: 'member', requireApproval: false, postsPerRun: 1, maxPostsPerDay: 2, owner: { name: 'alice' } });
+      expect((await adminA.req('POST', `/api/channels/${me.body.channel.id}/test`)).status).toBe(200);
+      expect(posts).toHaveLength(0);
+
+      addArticle('FortiOS LI one');
+      addArticle('FortiOS LI two');
+      const run1 = await adminA.req('POST', `/api/channels/${me.body.channel.id}/run`);
+      expect(run1.body.status).toBe('sent');
+      expect(run1.body.detail).toContain('Published 1 post');
+      expect(posts).toHaveLength(1);
+      expect(posts[0].author).toBe('urn:li:person:alice123');
+      expect(posts[0].commentary).not.toMatch(/^\s*[-→•]/m);
+      expect((await adminA.req('POST', `/api/channels/${me.body.channel.id}/run`)).body.status).toBe('sent');
+      expect(posts).toHaveLength(2);
+      addArticle('FortiOS LI three');
+      const limited = await adminA.req('POST', `/api/channels/${me.body.channel.id}/run`);
+      expect(limited.body).toMatchObject({ status: 'skipped' });
+      expect(limited.body.detail).toContain('Daily limit');
+      expect(posts).toHaveLength(2);
+
+      /* Company Page: goes to the approval queue by default. */
+      const page = await adminA.req('POST', '/api/channels', {
+        name: 'LI page', type: 'linkedin', minSeverity: 'low', schedule: sched,
+        linkedin: { author: 'urn:li:organization:777', postsPerRun: 2, maxPostsPerDay: 3 },
+      });
+      expect(page.status).toBe(201);
+      expect(page.body.channel.linkedin.requireApproval).toBe(true);
+      addArticle('FortiOS LI four');
+      const run3 = await adminA.req('POST', `/api/channels/${page.body.channel.id}/run`);
+      expect(run3.body.detail).toContain('2 posts waiting for approval');
+      expect(posts).toHaveLength(2);
+
+      const q = await adminA.req('GET', '/api/linkedin/queue?status=pending');
+      expect(q.body.canApprove).toBe(true);
+      expect(q.body.posts).toHaveLength(2);
+      expect(q.body.posts[0]).toMatchObject({ status: 'pending', author: 'urn:li:organization:777', authorLabel: 'Acme Corp', channel: { name: 'LI page' } });
+      const [p1, p2] = q.body.posts;
+
+      /* Members neither see nor approve them. */
+      expect((await memberA.req('GET', '/api/linkedin/queue')).body.posts).toHaveLength(0);
+      expect((await memberA.req('POST', `/api/linkedin/queue/${p1.id}/approve`)).status).toBe(403);
+
+      /* Approve with an edit: published right away as the Page. */
+      const ok = await adminA.req('POST', `/api/linkedin/queue/${p1.id}/approve`, { text: 'Edited by a human 🔍' });
+      expect(ok.status).toBe(200);
+      expect(ok.body.post).toMatchObject({ status: 'published', decidedBy: 'alice' });
+      expect(ok.body.post.url).toContain('urn:li:share:');
+      expect(posts[2]).toMatchObject({ author: 'urn:li:organization:777', commentary: 'Edited by a human 🔍' });
+      expect((await adminA.req('POST', `/api/linkedin/queue/${p1.id}/approve`)).status).toBe(409);
+      expect((await adminA.req('POST', `/api/linkedin/queue/${p2.id}/reject`)).body.post.status).toBe('rejected');
+
+      /* Generate Post → Schedule: future only, published by the worker when due. */
+      expect((await memberA.req('POST', '/api/linkedin/queue', { text: 'x', author: 'member', scheduledFor: new Date(Date.now() + 3600_000).toISOString() })).status).toBe(409);
+      expect((await adminA.req('POST', '/api/linkedin/queue', { text: 'x', author: 'member', scheduledFor: '2020-01-01T00:00:00Z' })).status).toBe(400);
+      const when = new Date(Date.now() + 3600_000).toISOString();
+      const sch = await adminA.req('POST', '/api/linkedin/queue', { text: 'Scheduled post 🛡️', author: 'member', scheduledFor: when });
+      expect(sch.status).toBe(201);
+      expect(sch.body.post.status).toBe('scheduled');
+      expect(await publishDuePosts()).toBe(0);
+      expect(await publishDuePosts(new Date(Date.now() + 2 * 3600_000))).toBe(1);
+      const done = (await adminA.req('GET', '/api/linkedin/queue?status=published')).body.posts.find((p: any) => p.id === sch.body.post.id);
+      expect(done).toMatchObject({ status: 'published' });
+      expect(posts[3]).toMatchObject({ author: 'urn:li:person:alice123', commentary: 'Scheduled post 🛡️' });
+
+      /* Cancel before it goes out; failures are recorded. */
+      const c = await adminA.req('POST', '/api/linkedin/queue', { text: 'Never', author: 'member', scheduledFor: when });
+      expect((await adminA.req('POST', `/api/linkedin/queue/${c.body.post.id}/cancel`)).body.post.status).toBe('cancelled');
+      postStatus = 500;
+      const f = await adminA.req('POST', '/api/linkedin/queue', { text: 'Will fail', author: 'member', scheduledFor: when });
+      await publishDuePosts(new Date(Date.now() + 2 * 3600_000));
+      const failed = (await adminA.req('GET', '/api/linkedin/queue?status=failed')).body.posts.find((p: any) => p.id === f.body.post.id);
+      expect(failed.error).toBeTruthy();
+      postStatus = 201;
+
+      /* Expired connection: the channel pauses itself. */
+      getSqlite().prepare("UPDATE linkedin_accounts SET expires_at = '2020-01-01 00:00:00'").run();
+      addArticle('FortiOS LI five');
+      const exp = await adminA.req('POST', `/api/channels/${page.body.channel.id}/run`);
+      expect(exp.body.status).toBe('error');
+      expect(exp.body.detail).toContain('paused');
+      const ch = (await adminA.req('GET', '/api/channels')).body.channels.find((x: any) => x.id === page.body.channel.id);
+      expect(ch.active).toBe(false);
+
+      for (const id of [me.body.channel.id, page.body.channel.id]) await adminA.req('DELETE', `/api/channels/${id}`);
+      await adminA.req('DELETE', '/api/linkedin');
+    } finally {
+      setLinkedInFetch(null);
+      for (const k of ['LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET', 'LINKEDIN_REDIRECT_URI', 'LINKEDIN_ORG_POSTING']) delete process.env[k];
+    }
+  });
+
   it('blocks private webhook targets unless explicitly allowed', async () => {
     process.env.CYBERPULSE_ALLOW_PRIVATE_WEBHOOKS = 'false';
     try {
@@ -565,7 +695,7 @@ describe('multitenant API', () => {
       const body = JSON.parse(post.init.body);
       expect(body.author).toBe('urn:li:person:abc123XYZ');
       expect(body.commentary).toBe('Patch FortiOS \\(CVE-2026-1\\) now \\@team {hashtag|\\#|CyberSecurity} {hashtag|\\#|FortiOS}');
-      expect((getSqlite().prepare('SELECT COUNT(*) n FROM linkedin_posts').get() as { n: number }).n).toBe(1);
+      expect((getSqlite().prepare('SELECT COUNT(*) n FROM linkedin_posts WHERE post_urn = \'urn:li:share:7212345678901234567\'').get() as { n: number }).n).toBe(1);
 
       /* LinkedIn revoked the token: the connection is dropped and the user asked to reconnect. */
       postStatus = 401;

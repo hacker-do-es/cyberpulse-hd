@@ -5,6 +5,7 @@ import { rescheduleChannel } from '../services/channelSchedule';
 import { toSqlUtc } from '../services/schedule';
 import { cleanOldArticles, scrapeAll } from '../services/scraper';
 import { runChannelDigest } from '../useCases/runChannelDigest';
+import { publishDuePosts } from '../services/linkedin/queueWorker';
 
 /* ------------------------------------------------------------------ */
 /*  Scrape                                                             */
@@ -96,5 +97,6 @@ export function startJobs(): void {
 
   cron.schedule('* * * * *', () => {
     schedulerTick().catch((err) => console.error('[SCHEDULER] tick failed:', err));
+    publishDuePosts().catch((err) => console.error('[LINKEDIN] queue tick failed:', err));
   });
 }
