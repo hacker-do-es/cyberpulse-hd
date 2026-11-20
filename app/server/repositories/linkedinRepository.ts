@@ -18,7 +18,11 @@ export const linkedinRepository = {
     return getDb().delete(linkedinAccounts).where(eq(linkedinAccounts.userId, userId)).run().changes > 0;
   },
 
-  logPost(userId: number, tenantId: number | null, postUrn: string, chars: number): void {
-    getDb().insert(linkedinPosts).values({ userId, tenantId, postUrn, chars }).run();
+  setOrganizations(userId: number, organizationsJson: string | null): void {
+    getDb().update(linkedinAccounts).set({ organizations: organizationsJson }).where(eq(linkedinAccounts.userId, userId)).run();
+  },
+
+  logPost(userId: number, tenantId: number | null, postUrn: string, chars: number, author: string): void {
+    getDb().insert(linkedinPosts).values({ userId, tenantId, postUrn, chars, author }).run();
   },
 };

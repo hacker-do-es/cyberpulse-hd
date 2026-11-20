@@ -2,7 +2,9 @@ import { linkedinConfig } from '../../config';
 
 /* LinkedIn OAuth 2.0 (OpenID Connect) and the Posts API. Only these two
    fixed hosts are ever contacted. Scopes: openid + profile identify the
-   member, w_member_social lets them post as themselves. */
+   member, w_member_social lets them post as themselves; with Community
+   Management (LINKEDIN_ORG_POSTING=1) w_organization_social posts as a
+   Company Page the member administers, found via r_organization_admin. */
 
 export class LinkedInError extends Error {
   constructor(message: string, public readonly status = 0) {
@@ -10,12 +12,25 @@ export class LinkedInError extends Error {
   }
 }
 
-export const SCOPES = ['openid', 'profile', 'w_member_social'];
+export const MEMBER_SCOPES = ['openid', 'profile', 'w_member_social'];
+export const ORG_SCOPES = ['w_organization_social', 'r_organization_admin'];
+
+export function requestedScopes(): string[] {
+  const c = cfg();
+  if (c.scopes.length) return c.scopes;
+  return c.orgPosting ? [...MEMBER_SCOPES, ...ORG_SCOPES] : MEMBER_SCOPES;
+}
+
+export function grantedScopes(scope: string | null | undefined): Set<string> {
+  return new Set((scope || '').split(/[\s,]+/).filter(Boolean));
+}
 const AUTH_URL = 'https://www.linkedin.com/oauth/v2/authorization';
 const TOKEN_URL = 'https://www.linkedin.com/oauth/v2/accessToken';
 const REVOKE_URL = 'https://www.linkedin.com/oauth/v2/revoke';
 const USERINFO_URL = 'https://api.linkedin.com/v2/userinfo';
 const POSTS_URL = 'https://api.linkedin.com/rest/posts';
+const ACLS_URL = 'https://api.linkedin.com/rest/organizationAcls';
+const ORGS_URL = 'https://api.linkedin.com/rest/organizations';
 const TIMEOUT_MS = 15_000;
 
 type Fetch = typeof fetch;
@@ -57,7 +72,7 @@ export function authorizeUrl(state: string): string {
     client_id: c.clientId,
     redirect_uri: c.redirectUri,
     state,
-    scope: SCOPES.join(' '),
+    scope: requestedScopes().join(' '),
   });
   return `${AUTH_URL}?${q.toString()}`;
 }
@@ -102,19 +117,66 @@ export async function fetchMember(accessToken: string): Promise<Member> {
   return { id: j.sub, name: typeof j.name === 'string' ? j.name.slice(0, 200) : null, pictureUrl: picture };
 }
 
-/* Publishes a public text post as the member. Returns the post URN. */
-export async function createPost(accessToken: string, memberId: string, commentary: string): Promise<string> {
-  const c = cfg();
+function restHeaders(accessToken: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${accessToken}`,
+    'LinkedIn-Version': cfg().apiVersion,
+    'X-Restli-Protocol-Version': '2.0.0',
+  };
+}
+
+export const ORG_URN_RE = /^urn:li:organization:(\d{1,20})$/;
+/* Page roles LinkedIn lets publish organic posts for the organization. */
+const POSTING_ROLES = new Set(['ADMINISTRATOR', 'CONTENT_ADMINISTRATOR', 'CONTENT_ADMIN', 'DIRECT_SPONSORED_CONTENT_POSTER']);
+
+export interface Organization {
+  urn: string;
+  name: string | null;
+  role: string;
+}
+
+export interface OrgLookup {
+  /* The member id, from the ACL's roleAssignee (useful when the app has no OpenID). */
+  memberId: string | null;
+  organizations: Organization[];
+}
+
+/* Company Pages where the member holds an approved posting role. */
+export async function fetchOrganizations(accessToken: string): Promise<OrgLookup> {
+  const q = new URLSearchParams({ q: 'roleAssignee', state: 'APPROVED', count: '100' });
+  const res = await call(`${ACLS_URL}?${q.toString()}`, { headers: restHeaders(accessToken) });
+  if (!res.ok) throw new LinkedInError(`Could not read your LinkedIn Pages: ${await errorText(res)}`, res.status);
+  const j = await res.json() as { elements?: Array<{ organization?: string; organizationTarget?: string; role?: string; roleAssignee?: string; state?: string }> };
+  let memberId: string | null = null;
+  const byUrn = new Map<string, Organization>();
+  for (const e of j.elements ?? []) {
+    const urn = e.organization ?? e.organizationTarget ?? '';
+    const assignee = /^urn:li:person:([\w-]{1,100})$/.exec(e.roleAssignee ?? '');
+    if (assignee) memberId = assignee[1];
+    if (!ORG_URN_RE.test(urn) || !POSTING_ROLES.has(String(e.role)) || (e.state && e.state !== 'APPROVED')) continue;
+    if (!byUrn.has(urn)) byUrn.set(urn, { urn, name: null, role: String(e.role) });
+  }
+  const organizations = [...byUrn.values()].slice(0, 20);
+  /* Names are cosmetic: a failed lookup leaves the id. */
+  await Promise.all(organizations.map(async (o) => {
+    try {
+      const r = await call(`${ORGS_URL}/${ORG_URN_RE.exec(o.urn)![1]}`, { headers: restHeaders(accessToken) });
+      if (!r.ok) return;
+      const org = await r.json() as { localizedName?: string };
+      if (typeof org.localizedName === 'string') o.name = org.localizedName.slice(0, 200);
+    } catch { /* keep the id */ }
+  }));
+  return { memberId, organizations };
+}
+
+/* Publishes a public text post as `author` (urn:li:person:… or
+   urn:li:organization:…). Returns the post URN. */
+export async function createPost(accessToken: string, author: string, commentary: string): Promise<string> {
   const res = await call(POSTS_URL, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      'LinkedIn-Version': c.apiVersion,
-      'X-Restli-Protocol-Version': '2.0.0',
-    },
+    headers: { ...restHeaders(accessToken), 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      author: `urn:li:person:${memberId}`,
+      author,
       commentary,
       visibility: 'PUBLIC',
       distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] },

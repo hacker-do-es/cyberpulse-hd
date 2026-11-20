@@ -512,6 +512,106 @@ describe('multitenant API', () => {
     }
   });
 
+  it('publishes as a LinkedIn Company Page when Community Management is enabled', async () => {
+    const { setLinkedInFetch } = await import('../services/linkedin/client');
+    const calls: Array<{ url: string; init: any }> = [];
+    let postStatus = 201;
+    let grantedScope = 'openid,profile,w_member_social,w_organization_social,r_organization_admin';
+    let acls: any[] = [
+      { roleAssignee: 'urn:li:person:abc123XYZ', role: 'ADMINISTRATOR', state: 'APPROVED', organization: 'urn:li:organization:111' },
+      { roleAssignee: 'urn:li:person:abc123XYZ', role: 'ANALYST', state: 'APPROVED', organization: 'urn:li:organization:222' },
+    ];
+    setLinkedInFetch((async (url: any, init: any) => {
+      calls.push({ url: String(url), init });
+      const u = String(url);
+      if (u.endsWith('/oauth/v2/accessToken')) return new Response(JSON.stringify({ access_token: 'li-org-token', expires_in: 5183999, scope: grantedScope }), { status: 200 });
+      if (u.endsWith('/v2/userinfo')) return new Response(JSON.stringify({ sub: 'abc123XYZ', name: 'Alice Example' }), { status: 200 });
+      if (u.includes('/rest/organizationAcls?')) return new Response(JSON.stringify({ elements: acls }), { status: 200 });
+      if (u.endsWith('/rest/organizations/111')) return new Response(JSON.stringify({ localizedName: 'Hacker-Do' }), { status: 200 });
+      if (u.endsWith('/rest/organizations/333')) return new Response(JSON.stringify({ localizedName: 'Other Page' }), { status: 200 });
+      if (u.endsWith('/rest/posts')) return new Response(postStatus === 201 ? '' : JSON.stringify({ message: 'Not enough permissions' }), { status: postStatus, headers: postStatus === 201 ? { 'x-restli-id': 'urn:li:share:7300000000000000001' } : {} });
+      if (u.endsWith('/oauth/v2/revoke')) return new Response('', { status: 200 });
+      return new Response('nope', { status: 404 });
+    }) as typeof fetch);
+    const connect = async () => {
+      const r = await fetch(base + '/api/linkedin/connect?return=generate', { headers: { cookie: memberA.cookie }, redirect: 'manual' });
+      const loc = new URL(r.headers.get('location')!);
+      const cb = await fetch(base + `/api/linkedin/callback?code=c&state=${encodeURIComponent(loc.searchParams.get('state')!)}`);
+      expect(await cb.text()).toContain('linkedin=connected');
+      return loc.searchParams.get('scope');
+    };
+    try {
+      process.env.LINKEDIN_CLIENT_ID = 'cid123';
+      process.env.LINKEDIN_CLIENT_SECRET = 'csecret456';
+      process.env.LINKEDIN_REDIRECT_URI = 'https://cyberpulse.example/api/linkedin/callback';
+
+      /* Off by default: the Page scopes are not requested. */
+      expect((await memberA.req('GET', '/api/linkedin')).body.orgPosting).toBe(false);
+      process.env.LINKEDIN_ORG_POSTING = '1';
+      expect(await connect()).toBe('openid profile w_member_social w_organization_social r_organization_admin');
+
+      /* Only Pages with a posting role, with their names. */
+      const st = (await memberA.req('GET', '/api/linkedin')).body;
+      expect(st).toMatchObject({ orgPosting: true, connected: true, canPostAsMember: true, canPostAsOrganization: true });
+      expect(st.organizations).toEqual([{ urn: 'urn:li:organization:111', name: 'Hacker-Do', role: 'ADMINISTRATOR' }]);
+
+      /* Post as the Page; the audit row records the author. */
+      const pub = await memberA.req('POST', '/api/linkedin/posts', { text: 'Hello from the Page', author: 'urn:li:organization:111' });
+      expect(pub.status).toBe(201);
+      const post = calls.filter((c) => c.url.endsWith('/rest/posts')).pop()!;
+      expect(JSON.parse(post.init.body).author).toBe('urn:li:organization:111');
+      const { getSqlite } = await import('../db/client');
+      expect((getSqlite().prepare('SELECT author FROM linkedin_posts ORDER BY id DESC LIMIT 1').get() as { author: string }).author).toBe('urn:li:organization:111');
+
+      /* A Page the member does not hold a posting role on is refused locally. */
+      const before = calls.length;
+      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'x', author: 'urn:li:organization:222' })).status).toBe(400);
+      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'x', author: 'urn:li:person:someoneElse' })).status).toBe(400);
+      expect(calls.length).toBe(before);
+      /* Still possible as the member. */
+      const asMe = await memberA.req('POST', '/api/linkedin/posts', { text: 'Me', author: 'member' });
+      expect(asMe.status).toBe(201);
+      expect(JSON.parse(calls.filter((c) => c.url.endsWith('/rest/posts')).pop()!.init.body).author).toBe('urn:li:person:abc123XYZ');
+
+      /* LinkedIn refuses the Page (role removed): clear 403, connection kept. */
+      postStatus = 403;
+      const denied = await memberA.req('POST', '/api/linkedin/posts', { text: 'x', author: 'urn:li:organization:111' });
+      expect(denied.status).toBe(403);
+      expect(denied.body.error).toContain('admin');
+      expect((await memberA.req('GET', '/api/linkedin')).body.connected).toBe(true);
+      postStatus = 201;
+
+      /* Refresh picks up a new Page. */
+      acls = [...acls, { roleAssignee: 'urn:li:person:abc123XYZ', role: 'CONTENT_ADMINISTRATOR', state: 'APPROVED', organization: 'urn:li:organization:333' }];
+      const ref = await memberA.req('POST', '/api/linkedin/organizations/refresh');
+      expect(ref.status).toBe(200);
+      expect(ref.body.organizations.map((o: any) => o.name)).toEqual(['Hacker-Do', 'Other Page']);
+
+      /* An app with only Community Management (no OpenID): member id from the
+         page roles, posting as the member refused. */
+      process.env.LINKEDIN_SCOPES = 'w_organization_social r_organization_admin';
+      grantedScope = 'w_organization_social,r_organization_admin';
+      expect(await connect()).toBe('w_organization_social r_organization_admin');
+      const st2 = (await memberA.req('GET', '/api/linkedin')).body;
+      expect(st2).toMatchObject({ canPostAsMember: false, canPostAsOrganization: true, name: null });
+      expect(st2.organizations).toHaveLength(2);
+      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'x', author: 'member' })).status).toBe(400);
+      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'x', author: 'urn:li:organization:333' })).status).toBe(201);
+
+      /* A token without the Page scope never exposes Pages. */
+      delete process.env.LINKEDIN_SCOPES;
+      grantedScope = 'openid,profile,w_member_social';
+      await connect();
+      const st3 = (await memberA.req('GET', '/api/linkedin')).body;
+      expect(st3).toMatchObject({ canPostAsOrganization: false, organizations: [] });
+      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'x', author: 'urn:li:organization:111' })).status).toBe(400);
+      expect((await memberA.req('DELETE', '/api/linkedin')).status).toBe(200);
+    } finally {
+      setLinkedInFetch(null);
+      for (const k of ['LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET', 'LINKEDIN_REDIRECT_URI', 'LINKEDIN_ORG_POSTING', 'LINKEDIN_SCOPES']) delete process.env[k];
+    }
+  });
+
   it('cuts off a disabled company immediately', async () => {
     await root.req('PATCH', `/api/admin/tenants/${tenantA}`, { active: false });
     expect((await adminA.req('GET', '/api/tech-stack')).status).toBe(401);

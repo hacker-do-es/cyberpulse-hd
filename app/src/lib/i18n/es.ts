@@ -636,6 +636,20 @@ export const ES: Record<string, string> = {
   'Message': 'Mensaje',
   'User · Company · IP': 'Usuario · Empresa · IP',
   'Load older lines': 'Cargar líneas anteriores',
+  // LinkedIn Company Pages
+  'my profile': 'mi perfil',
+  'Publish as': 'Publicar como',
+  'This creates a public post on the LinkedIn Page {page}. Review the text: it is published exactly as shown.': 'Esto crea una publicación pública en la página de LinkedIn {page}. Revisa el texto: se publica exactamente como se ve.',
+  'To publish as a Company Page, disconnect LinkedIn in My account and connect it again to grant the Page permission.': 'Para publicar como página de empresa, desconecta LinkedIn en Mi cuenta y vuelve a conectarlo para dar el permiso de páginas.',
+  'LinkedIn shows no Page where you are an admin or content admin. Check your Page role, then refresh the Pages in My account.': 'LinkedIn no muestra ninguna página donde seas admin o content admin. Revisa tu rol en la página y actualiza las páginas en Mi cuenta.',
+  '{n} LinkedIn Page(s) found': '{n} página(s) de LinkedIn encontradas',
+  'Company Pages you can publish as': 'Páginas de empresa donde puedes publicar',
+  'None yet. You must be an admin or content admin of the Page on LinkedIn.': 'Ninguna todavía. Tienes que ser admin o content admin de la página en LinkedIn.',
+  'To publish as a Company Page, disconnect and connect LinkedIn again to grant the Page permission.': 'Para publicar como página de empresa, desconecta y vuelve a conectar LinkedIn para dar el permiso de páginas.',
+  'This LinkedIn connection can only post as a Company Page': 'Esta conexión de LinkedIn solo puede publicar como página de empresa',
+  'You cannot post as that LinkedIn Page': 'No puedes publicar como esa página de LinkedIn',
+  'LinkedIn did not let you post as this Page. You need to be an admin or content admin of it.': 'LinkedIn no te dejó publicar como esta página. Tienes que ser admin o content admin.',
+  'This LinkedIn connection cannot post as a Company Page. Connect it again.': 'Esta conexión de LinkedIn no puede publicar como página de empresa. Vuelve a conectarla.',
 };
 
 /* Server messages with values in them. */
@@ -647,6 +661,7 @@ export const ES_PATTERNS: Array<[RegExp, string]> = [
   [/^JUST NOW$/, 'AHORA'],
   [/^LinkedIn posts can have at most (\d+) characters$/, 'Los posts de LinkedIn pueden tener como máximo $1 caracteres'],
   [/^LinkedIn rejected the post: (.*)$/, 'LinkedIn rechazó el post: $1'],
+  [/^Could not read your LinkedIn Pages: (.*)$/, 'No se pudieron leer tus páginas de LinkedIn: $1'],
   [/^(\d+) recipients? · (.*)$/, '$1 destinatario(s) · $2'],
   [/^Password must be at least (\d+) characters$/, 'La contraseña tiene que tener al menos $1 caracteres'],
   [/^Admin password: Password must be at least (\d+) characters$/, 'Contraseña del admin: tiene que tener al menos $1 caracteres'],

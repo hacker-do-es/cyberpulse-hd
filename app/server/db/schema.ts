@@ -229,6 +229,9 @@ export const linkedinAccounts = sqliteTable('linkedin_accounts', {
   scope: text('scope'),
   expiresAt: text('expires_at').notNull(),
   connectedAt: text('connected_at').default(now),
+  /* JSON [{urn,name,role}]: Company Pages the member can post as
+     (Community Management only); null = not looked up. */
+  organizations: text('organizations'),
 });
 
 export type LinkedinAccountRow = typeof linkedinAccounts.$inferSelect;
@@ -239,6 +242,8 @@ export const linkedinPosts = sqliteTable('linkedin_posts', {
   userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   tenantId: integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
   postUrn: text('post_urn').notNull(),
+  /* urn:li:person:… or urn:li:organization:… (null on rows before 0003). */
+  author: text('author'),
   chars: integer('chars').notNull(),
   createdAt: text('created_at').default(now),
 }, (t) => [index('idx_linkedin_posts_user').on(t.userId, t.createdAt)]);

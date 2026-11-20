@@ -40,7 +40,17 @@ export const linkedinConfig = () => {
   const clientSecret = (process.env.LINKEDIN_CLIENT_SECRET || '').trim();
   const redirectUri = (process.env.LINKEDIN_REDIRECT_URI || '').trim();
   return clientId && clientSecret && redirectUri
-    ? { clientId, clientSecret, redirectUri, apiVersion: (process.env.LINKEDIN_API_VERSION || '202609').trim() }
+    ? {
+      clientId, clientSecret, redirectUri,
+      apiVersion: (process.env.LINKEDIN_API_VERSION || '202609').trim(),
+      /* Posting as a Company Page needs LinkedIn's Community Management API
+         product (reviewed by LinkedIn). Asking for its scopes before the app
+         has it makes LinkedIn reject the whole sign-in, so it is opt-in. */
+      orgPosting: (process.env.LINKEDIN_ORG_POSTING || '').trim() === '1',
+      /* Optional override, e.g. when Community Management lives in an app
+         without "Sign In with LinkedIn": "w_organization_social r_organization_admin". */
+      scopes: (process.env.LINKEDIN_SCOPES || '').trim().split(/[\s,]+/).filter(Boolean),
+    }
     : null;
 };
 

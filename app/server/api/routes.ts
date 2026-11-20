@@ -103,6 +103,7 @@ export function apiRouter(appVersion: string): express.Router {
   api.get('/linkedin', handle(linkedinController.status));
   api.get('/linkedin/connect', writeLimiter, handle(linkedinController.connect));
   api.delete('/linkedin', writeLimiter, handle(linkedinController.disconnect));
+  api.post('/linkedin/organizations/refresh', sendLimiter, handle(linkedinController.refreshOrganizations));
   api.post('/linkedin/posts', sendLimiter, handle(linkedinController.publish));
 
   /* Post generation */

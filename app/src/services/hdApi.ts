@@ -252,9 +252,20 @@ export const adminApi = {
 /*  LinkedIn publishing (per user)                                     */
 /* ------------------------------------------------------------------ */
 
+export interface LinkedInOrganization {
+  urn: string;
+  name: string | null;
+  role: string;
+}
+
 export interface LinkedInStatus {
   configured: boolean;
+  /* The server asks for Company Page permissions (Community Management). */
+  orgPosting: boolean;
   connected: boolean;
+  canPostAsMember: boolean;
+  canPostAsOrganization: boolean;
+  organizations: LinkedInOrganization[];
   expired: boolean;
   name: string | null;
   pictureUrl: string | null;
@@ -267,7 +278,9 @@ export const linkedinApi = {
   /* Full-page navigation: LinkedIn's consent screen, then back to the app. */
   connectUrl: (returnTo: 'generate' | 'account') => `/api/linkedin/connect?return=${returnTo}`,
   disconnect: () => call<{ success: true }>('DELETE', '/api/linkedin'),
-  publish: (text: string) => call<{ urn: string; url: string }>('POST', '/api/linkedin/posts', { text }),
+  /* author: 'member' or a Page URN from status.organizations. */
+  publish: (text: string, author: string) => call<{ urn: string; url: string }>('POST', '/api/linkedin/posts', { text, author }),
+  refreshOrganizations: () => call<{ organizations: LinkedInOrganization[] }>('POST', '/api/linkedin/organizations/refresh'),
 };
 
 /* ------------------------------------------------------------------ */
