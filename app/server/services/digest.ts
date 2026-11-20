@@ -4,7 +4,7 @@ import { complete, getTenantAiConfig } from './ai';
 import { toSqlUtc } from './schedule';
 import { matchChunked } from './stackNews';
 import type { TechStackItem } from './techMatcher';
-import { renderMessage, renderTestPreview, type DigestItem } from './webhooks';
+import { renderMessage, renderTestPreview, type DigestItem, renderPlain } from './webhooks';
 import { renderEmailHtml, renderEmailText, type EmailDigest } from './mail/render';
 import type { OutgoingEmail } from './mail/send';
 
@@ -181,7 +181,7 @@ export function testText(channel: ChannelRow, tenant: Pick<TenantRow, 'name' | '
       footer: footer(channel, labels),
     });
   }
-  return labels.test(company);
+  return renderPlain(channel.type, labels.test(company));
 }
 
 /* ------------------------------------------------------------------ */

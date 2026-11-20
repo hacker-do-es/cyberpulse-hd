@@ -11,12 +11,15 @@ import { MAX_HTML_LENGTH, sanitizeEmailHtml } from '../services/mail/html';
 import { MailError } from '../services/mail/send';
 import { parseRecipients, parseSmtp, parseStoredTarget, publicTarget, serializeTarget, type EmailTarget } from '../services/mail/target';
 import { previewEmail } from '../services/digest';
+import { parseStoredTelegramTarget, parseTelegramTarget, publicTelegramTarget, serializeTelegramTarget, type TelegramTarget } from '../services/webhooks/telegram';
 import { tenantRepository } from '../repositories/tenantRepository';
 import { runChannelDigest, sendChannelTest } from '../useCases/runChannelDigest';
 
 export const MAX_HEADER_LENGTH = 150;
 export const MAX_FOOTER_LENGTH = 300;
 const MAX_CHANNELS_PER_TENANT = 20;
+/* Channel types that deliver news digests. */
+const DIGEST_TYPES = ['slack', 'rocketchat', 'discord', 'telegram', 'email'] as const;
 
 function storedTarget(row: ChannelRow): EmailTarget | null {
   if (row.type !== 'email') return null;
@@ -27,12 +30,24 @@ function storedTarget(row: ChannelRow): EmailTarget | null {
   }
 }
 
+function storedTelegram(row: ChannelRow): TelegramTarget | null {
+  if (row.type !== 'telegram') return null;
+  try {
+    return parseStoredTelegramTarget(decryptSecret(row.webhookUrl));
+  } catch {
+    return null;
+  }
+}
+
 function channelOut(row: ChannelRow) {
   const target = storedTarget(row);
+  const tg = storedTelegram(row);
   let hint = '';
   if (target) {
     hint = `${target.recipients.length} recipient${target.recipients.length === 1 ? '' : 's'} · ${target.smtp.host}:${target.smtp.port}`;
-  } else if (row.type !== 'email') {
+  } else if (tg) {
+    hint = `chat ${tg.chatId} · bot ${tg.botToken.split(':')[0]}`;
+  } else if (row.type !== 'email' && row.type !== 'telegram') {
     const url = decryptSecret(row.webhookUrl);
     try {
       hint = `${new URL(url).host}/…${url.slice(-4)}`;
@@ -45,6 +60,8 @@ function channelOut(row: ChannelRow) {
     webhookHint: hint,
     /* Email channels: recipients and SMTP settings, never the password. */
     email: target ? publicTarget(target) : null,
+    /* Telegram channels: chat and bot id, never the token. */
+    telegram: tg ? publicTelegramTarget(tg) : null,
     active: row.active,
     schedule: {
       type: row.scheduleType,
@@ -124,11 +141,20 @@ function parseChannelInput(body: any, existing?: ChannelRow): Omit<ChannelValues
   const name = str(body?.name, 80) ?? existing?.name;
   if (!name) throw badRequest('Name is required (max 80 characters)');
   const type = (body?.type ?? existing?.type) as ChannelType;
-  if (type !== 'slack' && type !== 'rocketchat' && type !== 'email') throw badRequest('type must be "slack", "rocketchat" or "email"');
+  if (!(DIGEST_TYPES as readonly string[]).includes(type)) {
+    throw badRequest('type must be "slack", "rocketchat", "discord", "telegram" or "email"');
+  }
 
   let webhookUrl: string | undefined;
   if (type === 'email') {
     webhookUrl = parseEmailTarget(body, existing);
+  } else if (type === 'telegram') {
+    const prev = existing ? storedTelegram(existing) : null;
+    if (body?.telegram === undefined) {
+      if (!prev) throw badRequest('Telegram bot token and chat ID are required');
+    } else {
+      webhookUrl = serializeTelegramTarget(parseTelegramTarget(body.telegram, prev));
+    }
   } else if (body?.webhookUrl !== undefined && body.webhookUrl !== '') {
     const v = validateWebhookUrl(type, body.webhookUrl);
     if ('error' in v) throw badRequest(v.error);
@@ -219,7 +245,7 @@ export const channelController = {
       await sendChannelTest(channel);
     } catch (err) {
       if (err instanceof WebhookError || err instanceof MailError) throw new HttpError(502, err.message);
-      throw new HttpError(502, channel.type === 'email' ? 'Email delivery failed' : 'Webhook request failed');
+      throw new HttpError(502, channel.type === 'email' ? 'Email delivery failed' : channel.type === 'telegram' ? 'Telegram request failed' : 'Webhook request failed');
     }
     res.json({ ok: true });
   },

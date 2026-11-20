@@ -304,6 +304,78 @@ describe('multitenant API', () => {
     expect(received[0].body.text).toMatch(/^Mensaje de prueba de Hacker-Do CyberPulse para Acme/);
   });
 
+  it('delivers digests to Discord and Telegram', async () => {
+    const { setWebhookTransport } = await import('../services/webhooks');
+    const sent: Array<{ url: string; body: any }> = [];
+    setWebhookTransport(async (url: URL, payload: unknown) => {
+      sent.push({ url: url.toString(), body: payload });
+      return { status: 200, body: '{"ok":true}' };
+    });
+    try {
+      const sched = { type: 'interval', intervalHours: 6 };
+      /* Validation */
+      expect((await adminA.req('POST', '/api/channels', { name: 'd', type: 'discord', webhookUrl: 'https://evil.example/api/webhooks/1/x', schedule: sched })).status).toBe(400);
+      expect((await adminA.req('POST', '/api/channels', { name: 't', type: 'telegram', telegram: { botToken: 'nope', chatId: '123' }, schedule: sched })).status).toBe(400);
+      expect((await adminA.req('POST', '/api/channels', { name: 't', type: 'telegram', telegram: { botToken: '123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', chatId: 'not a chat' }, schedule: sched })).status).toBe(400);
+      expect((await adminA.req('POST', '/api/channels', { name: 'l', type: 'linkedin', webhookUrl: 'x', schedule: sched })).status).toBe(400);
+
+      const dc = await adminA.req('POST', '/api/channels', { name: 'Discord SOC', type: 'discord', webhookUrl: 'https://discord.com/api/webhooks/123456/SECRETtokenXYZ', minSeverity: 'low', schedule: sched });
+      expect(dc.status).toBe(201);
+      expect(JSON.stringify(dc.body)).not.toContain('SECRETtokenXYZ');
+      const token = '123456789:AAFakeTokenFakeTokenFakeTokenFake12';
+      const tg = await adminA.req('POST', '/api/channels', { name: 'Telegram SOC', type: 'telegram', telegram: { botToken: token, chatId: '-1001234567890' }, minSeverity: 'low', schedule: sched });
+      expect(tg.status).toBe(201);
+      expect(JSON.stringify(tg.body)).not.toContain('AAFakeToken');
+      expect(tg.body.channel.telegram).toEqual({ chatId: '-1001234567890', botId: '123456789', tokenSet: true });
+
+      const { getSqlite } = await import('../db/client');
+      getSqlite().prepare(`INSERT INTO articles (title, summary, source, severity, category, published_at, url) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+        .run('FortiOS <script> & @everyone [bug]', 'Fortinet FortiOS', 'TestFeed', 'critical', 'VULNERABILITY', new Date().toISOString(), 'https://news.example/fortios-dc');
+
+      expect((await adminA.req('POST', `/api/channels/${dc.body.channel.id}/run`)).body.status).toBe('sent');
+      const d = sent.pop()!;
+      expect(d.url).toBe('https://discord.com/api/webhooks/123456/SECRETtokenXYZ');
+      expect(d.body.allowed_mentions).toEqual({ parse: [] });
+      expect(d.body.content).toContain('🔴');
+      expect(d.body.content).toContain('(<https://news.example/fortios-dc>)');
+      expect(d.body.content).toContain('\\[bug\\]');
+
+      expect((await adminA.req('POST', `/api/channels/${tg.body.channel.id}/run`)).body.status).toBe('sent');
+      const t = sent.pop()!;
+      expect(t.url).toBe(`https://api.telegram.org/bot${token}/sendMessage`);
+      expect(t.body).toMatchObject({ chat_id: '-1001234567890', parse_mode: 'HTML', disable_web_page_preview: true });
+      expect(t.body.text).toContain('<a href="https://news.example/fortios-dc">FortiOS &lt;script&gt; &amp; @everyone [bug]</a>');
+
+      /* Updating without a token keeps the stored one; the chat can change. */
+      const upd = await adminA.req('PUT', `/api/channels/${tg.body.channel.id}`, { telegram: { chatId: '@schub_alerts' } });
+      expect(upd.status).toBe(200);
+      expect(upd.body.channel.telegram.chatId).toBe('@schub_alerts');
+      expect((await adminA.req('POST', `/api/channels/${tg.body.channel.id}/test`)).status).toBe(200);
+      expect(sent.pop()!.url).toContain(token);
+
+      /* Telegram errors come back readable, without the token. */
+      setWebhookTransport(async () => ({ status: 400, body: '{"ok":false,"description":"Bad Request: chat not found"}' }));
+      const fail = await adminA.req('POST', `/api/channels/${tg.body.channel.id}/test`);
+      expect(fail.status).toBe(502);
+      expect(fail.body.error).toContain('chat not found');
+      expect(fail.body.error).not.toContain('AAFake');
+
+      await adminA.req('DELETE', `/api/channels/${dc.body.channel.id}`);
+      await adminA.req('DELETE', `/api/channels/${tg.body.channel.id}`);
+    } finally {
+      setWebhookTransport(null);
+    }
+  });
+
+  it('splits long messages for Discord and Telegram', async () => {
+    const { splitMessage } = await import('../services/webhooks');
+    const text = Array.from({ length: 300 }, (_, i) => `line ${i} ${'x'.repeat(20)}`).join('\n');
+    const parts = splitMessage(text, 1900);
+    expect(parts.length).toBeGreaterThan(1);
+    expect(parts.every((p) => p.length <= 1900)).toBe(true);
+    expect(parts.join('\n')).toBe(text);
+  });
+
   it('blocks private webhook targets unless explicitly allowed', async () => {
     process.env.CYBERPULSE_ALLOW_PRIVATE_WEBHOOKS = 'false';
     try {

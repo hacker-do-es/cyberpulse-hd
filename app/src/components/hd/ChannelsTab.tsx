@@ -13,7 +13,7 @@ import { inputCls, selectCls, notifyError, formatDateTime, WEEKDAYS } from './he
 import { getLang, tr, trMessage } from '@/lib/i18n';
 
 const SEVERITY_LABEL: Record<Severity, string> = { low: 'Low and above', medium: 'Medium and above', high: 'High and above', critical: 'Critical only' };
-const TYPE_LABEL = { slack: 'Slack', rocketchat: 'Rocket.Chat', email: 'Email' } as const;
+const TYPE_LABEL = { slack: 'Slack', rocketchat: 'Rocket.Chat', discord: 'Discord', telegram: 'Telegram', email: 'Email' } as const;
 
 function describeSchedule(c: Channel['schedule']): string {
   if (c.type === 'interval') return tr('Every {n} h', { n: c.intervalHours ?? '' });
@@ -76,13 +76,13 @@ export default function ChannelsTab() {
       <Panel
         title={tr("Channels")}
         icon={<Radio size={18} />}
-        description={tr("Slack and Rocket.Chat incoming webhooks, or email through your own SMTP server. Articles are never sent twice to the same channel; when nothing new matches, nothing is sent.")}
+        description={tr("Slack, Rocket.Chat and Discord webhooks, a Telegram bot, or email through your own SMTP server. Articles are never sent twice to the same channel; when nothing new matches, nothing is sent.")}
         actions={<Button size="sm" onClick={() => setEditing('new')}><Plus size={14} /> {tr("New channel")}</Button>}
       >
         {loading ? (
           <p className="text-sm text-text-tertiary">{tr("Loading…")}</p>
         ) : channels.length === 0 ? (
-          <EmptyState>{tr("No channels yet. Add a Slack or Rocket.Chat webhook, or an email list, to start sending digests.")}</EmptyState>
+          <EmptyState>{tr("No channels yet. Add a Slack, Rocket.Chat or Discord webhook, a Telegram bot or an email list to start sending digests.")}</EmptyState>
         ) : (
           <ul className="space-y-3">
             {channels.map((c) => (
@@ -176,6 +176,7 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
   const [busy, setBusy] = useState(false);
   const [recipients, setRecipients] = useState('');
   const [smtp, setSmtp] = useState<SmtpForm>(EMPTY_SMTP);
+  const [tg, setTg] = useState({ botToken: '', chatId: '' });
 
   useEffect(() => {
     if (channel === null) return;
@@ -184,11 +185,13 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
       setPreset('weekdays');
       setRecipients('');
       setSmtp(EMPTY_SMTP);
+      setTg({ botToken: '', chatId: '' });
     } else {
       setF({ ...toInput(channel), webhookUrl: '', header: channel.header, footer: channel.footer, headerHtml: channel.headerHtml, footerHtml: channel.footerHtml });
       setPreset(presetOf(channel.schedule));
       setRecipients(channel.email?.recipients.join('\n') ?? '');
       setSmtp(channel.email ? { ...channel.email.smtp, password: '' } : EMPTY_SMTP);
+      setTg({ botToken: '', chatId: channel.telegram?.chatId ?? '' });
     }
   }, [channel]);
 
@@ -212,9 +215,11 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
     setBusy(true);
     try {
       const isEmail = f.type === 'email';
+      const isTelegram = f.type === 'telegram';
       const payload: ChannelInput = {
         ...f,
-        webhookUrl: isEmail ? undefined : f.webhookUrl?.trim() || undefined,
+        webhookUrl: isEmail || isTelegram ? undefined : f.webhookUrl?.trim() || undefined,
+        telegram: isTelegram ? { botToken: tg.botToken.trim() || undefined, chatId: tg.chatId.trim() } : undefined,
         header: f.header?.trim() || null,
         /* Footer on but empty = default; footer off = '' (none). */
         footer: f.footer === '' ? '' : f.footer?.trim() || null,
@@ -246,7 +251,9 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
           <DialogDescription className="text-text-tertiary text-xs">
             {f.type === 'email'
               ? tr('Digests are emailed to a list of recipients through your own SMTP server.')
-              : tr('Digests go to a {platform} channel through an incoming webhook.', { platform: f.type === 'slack' ? 'Slack' : 'Rocket.Chat' })}
+              : f.type === 'telegram'
+                ? tr('Digests are posted to a Telegram group or channel by your own bot.')
+                : tr('Digests go to a {platform} channel through an incoming webhook.', { platform: TYPE_LABEL[f.type] })}
           </DialogDescription>
         </DialogHeader>
 
@@ -259,6 +266,8 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
               <select id="ch-type" className={selectCls} value={f.type} onChange={(e) => setF({ ...f, type: e.target.value as ChannelType })}>
                 <option value="slack">{tr("Slack")}</option>
                 <option value="rocketchat">{tr("Rocket.Chat")}</option>
+                <option value="discord">Discord</option>
+                <option value="telegram">Telegram</option>
                 <option value="email">{tr("Email")}</option>
               </select>
             </Field>
@@ -273,6 +282,22 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
               passwordSaved={Boolean(!isNew && channel && channel.type === 'email' && channel.email?.smtp.passwordSet)}
               defaultOpen={isNew || Boolean(typeChanged)}
             />
+          ) : f.type === 'telegram' ? (
+            <>
+              <WebhookHelp key={f.type} type={f.type} defaultOpen={isNew || Boolean(typeChanged)} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  label={tr('Bot token')}
+                  htmlFor="ch-tg-token"
+                  hint={!isNew && channel && channel.type === 'telegram' && !typeChanged ? tr('Saved (bot {id}). Leave empty to keep it.', { id: channel.telegram?.botId ?? '' }) : tr('Stored encrypted. Treat it like a password.')}
+                >
+                  <Input id="ch-tg-token" type="password" autoComplete="off" value={tg.botToken} onChange={(e) => setTg({ ...tg, botToken: e.target.value })} className={`${inputCls} font-jetbrains text-xs`} placeholder="123456789:AA…" required={isNew || Boolean(typeChanged)} />
+                </Field>
+                <Field label={tr('Chat ID')} htmlFor="ch-tg-chat" hint={tr('Number (groups and channels start with -100) or @channelname.')}>
+                  <Input id="ch-tg-chat" value={tg.chatId} onChange={(e) => setTg({ ...tg, chatId: e.target.value })} className={`${inputCls} font-jetbrains text-xs`} placeholder="-1001234567890" required />
+                </Field>
+              </div>
+            </>
           ) : (
             <>
               <WebhookHelp key={f.type} type={f.type} defaultOpen={isNew || Boolean(typeChanged)} />
@@ -289,7 +314,7 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
                   value={f.webhookUrl ?? ''}
                   onChange={(e) => setF({ ...f, webhookUrl: e.target.value })}
                   className={`${inputCls} font-jetbrains text-xs`}
-                  placeholder={f.type === 'slack' ? 'https://hooks.slack.com/services/…' : 'https://chat.example.com/hooks/…'}
+                  placeholder={f.type === 'slack' ? 'https://hooks.slack.com/services/…' : f.type === 'discord' ? 'https://discord.com/api/webhooks/…' : 'https://chat.example.com/hooks/…'}
                   required={isNew || Boolean(typeChanged)}
                 />
               </Field>
@@ -424,6 +449,60 @@ type WebhookGuide = { title: string; steps: React.ReactNode[]; notes: React.Reac
 function webhookSteps(type: Exclude<ChannelType, 'email'>): WebhookGuide {
   const es = getLang() === 'es';
   const mono = (s: string) => <span className="font-jetbrains">{s}</span>;
+  if (type === 'discord') {
+    return es ? {
+      title: 'Cómo obtener la URL del webhook de Discord',
+      steps: [
+        <>En Discord, abre el servidor y entra en <b>Editar canal</b> (el engranaje junto al canal de texto).</>,
+        <>Ve a <b>Integraciones</b> → <b>Webhooks</b> → <b>Nuevo webhook</b>.</>,
+        <>Ponle un nombre (p. ej. “Security Alerts”) y, si quieres, un avatar. Verifica que el canal sea el correcto.</>,
+        <>Haz clic en <b>Copiar URL del webhook</b> ({mono('https://discord.com/api/webhooks/…')}) y pégala abajo.</>,
+      ],
+      notes: [
+        'Hace falta el permiso “Gestionar webhooks” en ese canal.',
+        'CyberPulse nunca menciona a @everyone ni a nadie, y no genera vistas previas de los enlaces.',
+      ],
+    } : {
+      title: 'How to get a Discord webhook URL',
+      steps: [
+        <>In Discord, open the server and click <b>Edit Channel</b> (the gear next to the text channel).</>,
+        <>Go to <b>Integrations</b> → <b>Webhooks</b> → <b>New Webhook</b>.</>,
+        <>Name it (e.g. “Security Alerts”) and optionally set an avatar. Check it posts to the right channel.</>,
+        <>Click <b>Copy Webhook URL</b> ({mono('https://discord.com/api/webhooks/…')}) and paste it below.</>,
+      ],
+      notes: [
+        'You need the “Manage Webhooks” permission on that channel.',
+        'CyberPulse never pings @everyone or anyone else, and suppresses link previews.',
+      ],
+    };
+  }
+  if (type === 'telegram') {
+    return es ? {
+      title: 'Cómo crear el bot de Telegram y obtener el chat ID',
+      steps: [
+        <>En Telegram, abre <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="text-accent underline">@BotFather</a>, envía {mono('/newbot')} y sigue los pasos. Copia el <b>token</b> que te da ({mono('123456789:AA…')}).</>,
+        <>Agrega el bot al grupo, o como <b>administrador</b> al canal, donde quieras recibir las alertas.</>,
+        <>Chat ID: en un canal público puedes usar {mono('@nombredelcanal')}. Para grupos o canales privados, envía un mensaje en el chat y abre {mono('https://api.telegram.org/bot<TOKEN>/getUpdates')}: el número de {mono('"chat":{"id":…}')} (empieza con {mono('-100')}) es el chat ID.</>,
+        <>Pega el token y el chat ID abajo y usa <b>Probar</b> para confirmar.</>,
+      ],
+      notes: [
+        'En grupos, si el bot no ve los mensajes para getUpdates, desactiva su “privacy mode” en @BotFather (/setprivacy) o menciónalo.',
+        'Usa un bot propio para CyberPulse; no reutilices el token de otro bot.',
+      ],
+    } : {
+      title: 'How to create the Telegram bot and get the chat ID',
+      steps: [
+        <>In Telegram, open <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" className="text-accent underline">@BotFather</a>, send {mono('/newbot')} and follow the steps. Copy the <b>token</b> it gives you ({mono('123456789:AA…')}).</>,
+        <>Add the bot to the group, or as an <b>administrator</b> to the channel, where alerts should go.</>,
+        <>Chat ID: for a public channel you can use {mono('@channelname')}. For groups or private channels, send a message in the chat and open {mono('https://api.telegram.org/bot<TOKEN>/getUpdates')}: the number in {mono('"chat":{"id":…}')} (starts with {mono('-100')}) is the chat ID.</>,
+        <>Paste the token and the chat ID below and use <b>Test</b> to confirm.</>,
+      ],
+      notes: [
+        'In groups, if the bot does not see messages for getUpdates, turn off its privacy mode in @BotFather (/setprivacy) or mention it.',
+        'Use a dedicated bot for CyberPulse; do not reuse another bot’s token.',
+      ],
+    };
+  }
   if (type === 'slack') {
     return es ? {
       title: 'Cómo obtener la URL del webhook de Slack',
@@ -499,7 +578,7 @@ function WebhookHelp({ type, defaultOpen }: { type: Exclude<ChannelType, 'email'
       <ul className="mt-2 space-y-0.5 text-text-tertiary">
         {h.notes.map((n, i) => <li key={i}>· {n}</li>)}
       </ul>
-      <p className="mt-2 text-text-tertiary">{tr("The URL works like a password: anyone who has it can post to the channel. Don’t share it by chat or email.")}</p>
+      <p className="mt-2 text-text-tertiary">{type === 'telegram' ? tr('The bot token works like a password: anyone who has it controls the bot. Don’t share it by chat or email.') : tr("The URL works like a password: anyone who has it can post to the channel. Don’t share it by chat or email.")}</p>
     </details>
   );
 }

@@ -124,7 +124,7 @@ export interface ChannelSchedule {
   weekdays: number[];
 }
 
-export type ChannelType = 'slack' | 'rocketchat' | 'email';
+export type ChannelType = 'slack' | 'rocketchat' | 'discord' | 'telegram' | 'email';
 export type SmtpSecurity = 'tls' | 'starttls';
 
 export interface SmtpSettings {
@@ -143,6 +143,8 @@ export interface Channel {
   webhookHint: string;
   /** Email channels only; the SMTP password is never returned. */
   email: { recipients: string[]; smtp: SmtpSettings & { passwordSet: boolean } } | null;
+  /** Telegram channels only; the bot token is never returned. */
+  telegram: { chatId: string; botId: string; tokenSet: true } | null;
   active: boolean;
   schedule: ChannelSchedule;
   minSeverity: Severity;
@@ -165,6 +167,8 @@ export interface ChannelInput {
   name: string;
   type: ChannelType;
   webhookUrl?: string;
+  /** Telegram: empty botToken on update = keep the stored one. */
+  telegram?: { botToken?: string; chatId: string };
   recipients?: string[];
   /** Empty password on update = keep the stored one. */
   smtp?: SmtpSettings & { password?: string };

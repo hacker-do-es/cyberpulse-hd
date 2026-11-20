@@ -44,6 +44,8 @@ const REDACTIONS: Array<[RegExp, string]> = [
   [/\b(?:ghp|gho|ghs|github_pat)_[A-Za-z0-9_]{20,}/g, '[REDACTED]'],
   [/\bxox[abposr]-[A-Za-z0-9-]{10,}/g, '[REDACTED]'],
   [/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED]'],
+  /* Telegram bot tokens (also inside api.telegram.org/bot<token>/ URLs) */
+  [/\b\d{5,15}:[A-Za-z0-9_-]{30,64}\b/g, '[REDACTED]'],
   [/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, '[REDACTED]'],
   /* Webhook URLs carry their secret in the path */
   [/(https:\/\/hooks\.slack\.com\/services\/)[^\s"']+/gi, '$1[REDACTED]'],

@@ -132,7 +132,7 @@ export const techStack = sqliteTable('user_tech_stack', {
   createdAt: text('created_at').default(now),
 }, (t) => [index('idx_tech_stack_tenant').on(t.tenantId)]);
 
-export const CHANNEL_TYPES = ['slack', 'rocketchat', 'email'] as const;
+export const CHANNEL_TYPES = ['slack', 'rocketchat', 'email', 'telegram', 'discord', 'linkedin'] as const;
 export type ChannelType = (typeof CHANNEL_TYPES)[number];
 export const SCHEDULE_TYPES = ['interval', 'weekly'] as const;
 
@@ -141,9 +141,10 @@ export const channels = sqliteTable('channels', {
   tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   type: text('type', { enum: CHANNEL_TYPES }).notNull(),
-  /* Encrypted at rest (AES-256-GCM, see lib/crypto.ts). Slack/Rocket.Chat:
-     the webhook URL. Email: JSON with the recipients and the channel's own
-     SMTP settings, password included (services/mail/target.ts). */
+  /* Encrypted at rest (AES-256-GCM, see lib/crypto.ts). Slack/Rocket.Chat/
+     Discord: the webhook URL. Email: JSON with the recipients and the
+     channel's own SMTP settings, password included (services/mail/target.ts).
+     Telegram: JSON {botToken, chatId} (services/webhooks/telegram.ts). */
   webhookUrl: text('webhook_url').notNull(),
   active: integer('active', { mode: 'boolean' }).notNull().default(true),
   scheduleType: text('schedule_type', { enum: SCHEDULE_TYPES }).notNull().default('weekly'),
@@ -167,7 +168,7 @@ export const channels = sqliteTable('channels', {
 }, (t) => [
   index('idx_channels_tenant').on(t.tenantId),
   index('idx_channels_next_run').on(t.nextRunAt),
-  check('channels_type_check', sql`${t.type} IN ('slack', 'rocketchat', 'email')`),
+  check('channels_type_check', sql`${t.type} IN ('slack', 'rocketchat', 'email', 'telegram', 'discord', 'linkedin')`),
   check('channels_schedule_type_check', sql`${t.scheduleType} IN ('interval', 'weekly')`),
 ]);
 

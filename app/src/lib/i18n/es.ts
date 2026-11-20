@@ -658,6 +658,23 @@ export const ES: Record<string, string> = {
   'My profile': 'Mi perfil',
   'Company Pages': 'Páginas de empresa',
   'Connect to publish as the Company Pages you administer on LinkedIn.': 'Conecta para publicar como las páginas de empresa que administras en LinkedIn.',
+
+  // Discord / Telegram channels
+  'Digests are posted to a Telegram group or channel by your own bot.': 'Los resúmenes los publica tu propio bot en un grupo o canal de Telegram.',
+  'Bot token': 'Token del bot',
+  'Saved (bot {id}). Leave empty to keep it.': 'Guardado (bot {id}). Déjalo vacío para conservarlo.',
+  'Chat ID': 'Chat ID',
+  'Number (groups and channels start with -100) or @channelname.': 'Número (los grupos y canales empiezan con -100) o @nombredelcanal.',
+  'Slack, Rocket.Chat and Discord webhooks, a Telegram bot, or email through your own SMTP server. Articles are never sent twice to the same channel; when nothing new matches, nothing is sent.': 'Webhooks de Slack, Rocket.Chat y Discord, un bot de Telegram o email por tu propio servidor SMTP. Nunca se envía dos veces la misma noticia al mismo canal; si no hay nada nuevo, no se envía nada.',
+  'No channels yet. Add a Slack, Rocket.Chat or Discord webhook, a Telegram bot or an email list to start sending digests.': 'Todavía no hay canales. Agrega un webhook de Slack, Rocket.Chat o Discord, un bot de Telegram o una lista de email para empezar a enviar resúmenes.',
+  'The bot token works like a password: anyone who has it controls the bot. Don’t share it by chat or email.': 'El token del bot es como una contraseña: quien lo tenga controla el bot. No lo compartas por chat ni por email.',
+  'Telegram bot token is required': 'Falta el token del bot de Telegram',
+  'That does not look like a Telegram bot token (123456789:AA…)': 'Eso no parece un token de bot de Telegram (123456789:AA…)',
+  'Telegram chat ID must be a number (e.g. -1001234567890) or @channelname': 'El chat ID de Telegram tiene que ser un número (p. ej. -1001234567890) o @nombredelcanal',
+  'Telegram bot token and chat ID are required': 'Faltan el token del bot y el chat ID de Telegram',
+  'Discord webhook URLs look like https://discord.com/api/webhooks/…': 'Las URLs de webhook de Discord son del tipo https://discord.com/api/webhooks/…',
+  'Telegram request failed': 'Falló el envío a Telegram',
+  'Telegram channel is misconfigured: set the bot token and chat ID again': 'El canal de Telegram está mal configurado: vuelve a cargar el token y el chat ID',
 };
 
 /* Server messages with values in them. */
@@ -669,6 +686,8 @@ export const ES_PATTERNS: Array<[RegExp, string]> = [
   [/^JUST NOW$/, 'AHORA'],
   [/^LinkedIn posts can have at most (\d+) characters$/, 'Los posts de LinkedIn pueden tener como máximo $1 caracteres'],
   [/^LinkedIn rejected the post: (.*)$/, 'LinkedIn rechazó el post: $1'],
+  [/^Telegram refused the message \(HTTP (\d+)\)(.*)$/, 'Telegram rechazó el mensaje (HTTP $1)$2'],
+  [/^Discord answered HTTP (\d+): (.*)$/, 'Discord respondió HTTP $1: $2'],
   [/^Could not read your LinkedIn Pages: (.*)$/, 'No se pudieron leer tus páginas de LinkedIn: $1'],
   [/^(\d+) recipients? · (.*)$/, '$1 destinatario(s) · $2'],
   [/^Password must be at least (\d+) characters$/, 'La contraseña tiene que tener al menos $1 caracteres'],
