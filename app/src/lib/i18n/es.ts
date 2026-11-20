@@ -596,6 +596,28 @@ export const ES: Record<string, string> = {
   'LinkedIn no longer accepts this connection. Connect it again.': 'LinkedIn ya no acepta esta conexión. Vuelve a conectarla.',
   'Could not reach LinkedIn': 'No se pudo conectar con LinkedIn',
   'LinkedIn request failed': 'Falló la petición a LinkedIn',
+
+  // Article picker (post generator)
+  'Search title, summary, source or CVE…': 'Busca por título, resumen, fuente o CVE…',
+  'Search articles': 'Buscar artículos',
+  'Clear search': 'Borrar búsqueda',
+  'Critical': 'Crítica',
+  'High': 'Alta',
+  'Medium': 'Media',
+  'Low': 'Baja',
+  'Only my stack': 'Solo mi stack',
+  'Show only articles that match your company stack': 'Mostrar solo artículos que coinciden con el stack de tu empresa',
+  'All sources': 'Todas las fuentes',
+  'All categories': 'Todas las categorías',
+  'selected': 'seleccionados',
+  'Select visible': 'Seleccionar visibles',
+  'Clear selection': 'Quitar selección',
+  'Reset filters': 'Quitar filtros',
+  'selected · hidden by filters': 'elegido · oculto por los filtros',
+  'Loading your stack…': 'Cargando tu stack…',
+  'No articles match your stack yet.': 'Todavía no hay artículos que coincidan con tu stack.',
+  'No articles match these filters.': 'Ningún artículo coincide con estos filtros.',
+  'Show more': 'Ver más',
 };
 
 /* Server messages with values in them. */

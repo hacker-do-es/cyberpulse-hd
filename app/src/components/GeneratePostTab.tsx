@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { timeAgo } from '@/lib/dateUtils';
+import ArticlePicker, { type StackFilterSource } from './ArticlePicker';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
@@ -1452,9 +1453,11 @@ interface GeneratePostTabProps {
   onBackToNewsFeed: () => void;
   /* The company has a Claude or OpenAI key configured server-side. */
   aiAvailable: boolean;
+  /* Company-stack matches, for the "Only my stack" filter of the picker. */
+  stack: StackFilterSource;
 }
 
-export default function GeneratePostTab({ articles, selectedArticleId: propArticleId, onBackToNewsFeed, aiAvailable }: GeneratePostTabProps) {
+export default function GeneratePostTab({ articles, selectedArticleId: propArticleId, onBackToNewsFeed, aiAvailable, stack }: GeneratePostTabProps) {
   /* NOTE: every hook below must run on each render. The "no articles" guard
      lives just above the main return, after the last hook — putting it here
      would change the hook count when articles load and crash React. */
@@ -1671,78 +1674,11 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
       <div className="w-full lg:w-1/2 lg:border-r border-[#2A3140] pr-0 lg:pr-6 pb-6 lg:pb-0 overflow-y-auto">
         <SectionHeader label={labels.sourceArticle} />
 
-        {/* Single Article Selector (non-Daily Digest) */}
-        {!isDailyDigest && (
-          <div className="mb-4">
-            <Select value={selectedArticleId} onValueChange={setSelectedArticleId}>
-              <SelectTrigger className="w-full bg-[#1A1F2E] border-[#2A3140] text-[#E6EDF3] font-inter text-sm rounded-lg h-10 hover:border-[#636E7B] transition-colors [&>svg]:text-[#636E7B]">
-                <SelectValue placeholder={tr("Select an article")} />
-              </SelectTrigger>
-              <SelectContent className="bg-[#1A1F2E] border-[#2A3140] rounded-lg">
-                {articles.map((article) => (
-                  <SelectItem
-                    key={article.id}
-                    value={article.id}
-                    className="text-[#E6EDF3] font-inter text-sm focus:bg-[rgba(232, 83, 63,0.1)] focus:text-[#E6EDF3] cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2 h-2 rounded-full ${severityColor(article.severity)}`} />
-                      <span className="truncate max-w-[380px]">{article.title}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-
-        {/* Multi-article selector (Daily Digest mode) */}
-        {isDailyDigest && (
-          <div className="mb-4 bg-[#161B22] border border-[#2A3140] rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-[#2A3140] flex items-center justify-between">
-              <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B]">
-                {labels.selectArticles}
-              </span>
-              <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#E8533F]">
-                {selectedArticleIds.length} {labels.selected}
-              </span>
-            </div>
-            <div className="max-h-[360px] overflow-y-auto">
-              {articles.map((article) => {
-                const isSelected = selectedArticleIds.includes(article.id);
-                return (
-                  <label
-                    key={article.id}
-                    className={`flex items-start gap-3 px-4 py-3 cursor-pointer border-b border-[#1A1F2E] transition-all duration-200 hover:bg-[#1A1F2E] ${isSelected ? 'bg-[rgba(232, 83, 63,0.05)]' : ''}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedArticleIds((prev) => [...prev, article.id]);
-                        } else {
-                          setSelectedArticleIds((prev) => prev.filter((id) => id !== article.id));
-                        }
-                      }}
-                      className="mt-1 w-4 h-4 rounded border-[#2A3140] bg-[#1A1F2E] text-[#E8533F] accent-[#E8533F] cursor-pointer shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`w-2 h-2 rounded-full ${severityColor(article.severity)}`} />
-                        <span className="text-[10px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B]">
-                          {article.source}
-                        </span>
-                      </div>
-                      <p className="text-[13px] font-inter text-[#E6EDF3] leading-[1.4] line-clamp-2">
-                        {article.title}
-                      </p>
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
+        {/* Source article picker: searchable + filterable (single or digest) */}
+        {!isDailyDigest ? (
+          <ArticlePicker mode="single" articles={articles} stack={stack} selectedId={selectedArticleId} onSelect={setSelectedArticleId} />
+        ) : (
+          <ArticlePicker mode="multi" articles={articles} stack={stack} selectedIds={selectedArticleIds} onChange={setSelectedArticleIds} />
         )}
 
         {/* Article Preview Card (single article mode only) */}

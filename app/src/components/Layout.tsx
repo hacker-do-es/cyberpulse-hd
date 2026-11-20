@@ -213,6 +213,22 @@ export default function Layout() {
     }
   }, []);
 
+  /* Another company's matches must not leak into the picker after a switch. */
+  useEffect(() => {
+    setStackLastUpdated(null);
+    setStackNews([]);
+  }, [me?.activeTenant?.id]);
+
+  /* "Only my stack" filter in the post generator: loaded on demand. */
+  const stackIds = useMemo(
+    () => (stackLastUpdated ? new Set(stackNews.map((a) => a.id)) : null),
+    [stackNews, stackLastUpdated]
+  );
+  const pickerStack = useMemo(
+    () => ({ available: hasTenant, ids: stackIds, loading: loadingStack || refreshingStack, load: loadStackNews }),
+    [hasTenant, stackIds, loadingStack, refreshingStack, loadStackNews]
+  );
+
   // Load tech stack news on mount and when switching to my-stack tab
   useEffect(() => {
     if (activeTab === 'my-stack' && hasTenant) {
@@ -268,6 +284,7 @@ export default function Layout() {
               selectedArticleId={selectedArticleId}
               onBackToNewsFeed={() => setActiveTab('news')}
               aiAvailable={Boolean(me?.activeTenant?.aiConfigured)}
+              stack={pickerStack}
             />
           </Suspense>
         );
