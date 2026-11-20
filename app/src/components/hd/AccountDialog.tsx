@@ -9,6 +9,16 @@ import { useAuth } from '@/lib/auth';
 import { Field } from './ui';
 import { inputCls, notifyError } from './helpers';
 import { tr } from '@/lib/i18n';
+import { LinkedInAccountSection } from './LinkedIn';
+
+function LinkedInSectionWithRule() {
+  return (
+    <>
+      <hr className="border-border-default my-2" />
+      <LinkedInAccountSection />
+    </>
+  );
+}
 
 export default function AccountDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const { me, refresh } = useAuth();
@@ -137,6 +147,8 @@ export default function AccountDialog({ open, onOpenChange }: { open: boolean; o
             </div>
           )}
         </section>
+
+        <LinkedInSectionWithRule />
       </DialogContent>
     </Dialog>
   );

@@ -419,6 +419,97 @@ describe('multitenant API', () => {
     }
   });
 
+  it('connects a LinkedIn account per user and publishes as that member', async () => {
+    const { setLinkedInFetch } = await import('../services/linkedin/client');
+    const calls: Array<{ url: string; init: any }> = [];
+    let postStatus = 201;
+    setLinkedInFetch((async (url: any, init: any) => {
+      calls.push({ url: String(url), init });
+      const u = String(url);
+      if (u.endsWith('/oauth/v2/accessToken')) return new Response(JSON.stringify({ access_token: 'li-token-SECRET-123', expires_in: 5183999, scope: 'openid,profile,w_member_social' }), { status: 200 });
+      if (u.endsWith('/v2/userinfo')) return new Response(JSON.stringify({ sub: 'abc123XYZ', name: 'Alice Example', picture: 'https://media.licdn.com/x.jpg' }), { status: 200 });
+      if (u.endsWith('/rest/posts')) return new Response(postStatus === 201 ? '' : JSON.stringify({ message: 'Unauthorized' }), { status: postStatus, headers: postStatus === 201 ? { 'x-restli-id': 'urn:li:share:7212345678901234567' } : {} });
+      if (u.endsWith('/oauth/v2/revoke')) return new Response('', { status: 200 });
+      return new Response('nope', { status: 404 });
+    }) as typeof fetch);
+    try {
+      /* Not configured: status says so, publishing is refused. */
+      expect((await adminA.req('GET', '/api/linkedin')).body.configured).toBe(false);
+      expect((await adminA.req('POST', '/api/linkedin/posts', { text: 'x' })).status).toBe(400);
+
+      process.env.LINKEDIN_CLIENT_ID = 'cid123';
+      process.env.LINKEDIN_CLIENT_SECRET = 'csecret456';
+      process.env.LINKEDIN_REDIRECT_URI = 'https://cyberpulse.example/api/linkedin/callback';
+      expect((await adminA.req('GET', '/api/linkedin')).body).toMatchObject({ configured: true, connected: false });
+
+      /* Connect: redirect to LinkedIn with our state and the three scopes. */
+      const r = await fetch(base + '/api/linkedin/connect?return=account', { headers: { cookie: memberA.cookie }, redirect: 'manual' });
+      expect(r.status).toBe(302);
+      const loc = new URL(r.headers.get('location')!);
+      expect(loc.origin + loc.pathname).toBe('https://www.linkedin.com/oauth/v2/authorization');
+      expect(loc.searchParams.get('client_id')).toBe('cid123');
+      expect(loc.searchParams.get('scope')).toBe('openid profile w_member_social');
+      const state = loc.searchParams.get('state')!;
+      expect(state.length).toBeGreaterThan(30);
+      /* Needs a session. */
+      expect((await fetch(base + '/api/linkedin/connect', { redirect: 'manual' })).status).toBe(401);
+
+      /* Callback without a valid state does nothing. */
+      const forged = await fetch(base + '/api/linkedin/callback?code=x&state=forged');
+      expect(await forged.text()).toContain('linkedin=error');
+      expect(calls).toHaveLength(0);
+
+      /* Real callback (no cookie: LinkedIn's redirect does not carry it). */
+      const cb = await fetch(base + `/api/linkedin/callback?code=authcode1&state=${encodeURIComponent(state)}`);
+      const html = await cb.text();
+      expect(html).toContain('linkedin=connected');
+      expect(html).toContain('view=account');
+      expect(calls[0].init.body).toContain('client_secret=csecret456');
+      /* State is single use. */
+      expect(await (await fetch(base + `/api/linkedin/callback?code=authcode1&state=${encodeURIComponent(state)}`)).text()).toContain('reason=expired');
+
+      const st = await memberA.req('GET', '/api/linkedin');
+      expect(st.body).toMatchObject({ connected: true, name: 'Alice Example' });
+      expect(JSON.stringify(st.body)).not.toContain('li-token');
+      /* Stored encrypted. */
+      const { getSqlite } = await import('../db/client');
+      const raw = getSqlite().prepare('SELECT access_token FROM linkedin_accounts').get() as { access_token: string };
+      expect(raw.access_token).not.toContain('li-token');
+      /* Another user is not connected. */
+      expect((await adminA.req('GET', '/api/linkedin')).body.connected).toBe(false);
+
+      /* Publish: escaped little-text, hashtags, versioned Posts API, CSRF required. */
+      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'x' }, { csrf: false })).status).toBe(403);
+      expect((await memberA.req('POST', '/api/linkedin/posts', { text: '   ' })).status).toBe(400);
+      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'a'.repeat(3001) })).status).toBe(400);
+      const pub = await memberA.req('POST', '/api/linkedin/posts', { text: 'Patch FortiOS (CVE-2026-1) now @team #CyberSecurity #FortiOS' });
+      expect(pub.status).toBe(201);
+      expect(pub.body.url).toBe('https://www.linkedin.com/feed/update/urn:li:share:7212345678901234567/');
+      const post = calls.find((c) => c.url.endsWith('/rest/posts'))!;
+      expect(post.init.headers.Authorization).toBe('Bearer li-token-SECRET-123');
+      expect(post.init.headers['LinkedIn-Version']).toMatch(/^\d{6}$/);
+      const body = JSON.parse(post.init.body);
+      expect(body.author).toBe('urn:li:person:abc123XYZ');
+      expect(body.commentary).toBe('Patch FortiOS \\(CVE-2026-1\\) now \\@team {hashtag|\\#|CyberSecurity} {hashtag|\\#|FortiOS}');
+      expect((getSqlite().prepare('SELECT COUNT(*) n FROM linkedin_posts').get() as { n: number }).n).toBe(1);
+
+      /* LinkedIn revoked the token: the connection is dropped and the user asked to reconnect. */
+      postStatus = 401;
+      const gone = await memberA.req('POST', '/api/linkedin/posts', { text: 'again' });
+      expect(gone.status).toBe(409);
+      expect(gone.body.code).toBe('LINKEDIN_RECONNECT');
+      expect((await memberA.req('GET', '/api/linkedin')).body.connected).toBe(false);
+
+      /* Disconnect is idempotent. */
+      expect((await memberA.req('DELETE', '/api/linkedin')).status).toBe(200);
+    } finally {
+      setLinkedInFetch(null);
+      delete process.env.LINKEDIN_CLIENT_ID;
+      delete process.env.LINKEDIN_CLIENT_SECRET;
+      delete process.env.LINKEDIN_REDIRECT_URI;
+    }
+  });
+
   it('cuts off a disabled company immediately', async () => {
     await root.req('PATCH', `/api/admin/tenants/${tenantA}`, { active: false });
     expect((await adminA.req('GET', '/api/tech-stack')).status).toBe(401);

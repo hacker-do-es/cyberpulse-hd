@@ -247,3 +247,25 @@ export const adminApi = {
     call<{ tenant: TenantSummary }>('PATCH', `/api/admin/tenants/${id}`, t).then((r) => r.tenant),
   remove: (id: number, confirmName: string) => call<{ success: true }>('DELETE', `/api/admin/tenants/${id}`, { confirmName }),
 };
+
+/* ------------------------------------------------------------------ */
+/*  LinkedIn publishing (per user)                                     */
+/* ------------------------------------------------------------------ */
+
+export interface LinkedInStatus {
+  configured: boolean;
+  connected: boolean;
+  expired: boolean;
+  name: string | null;
+  pictureUrl: string | null;
+  expiresAt: string | null;
+  maxChars: number;
+}
+
+export const linkedinApi = {
+  status: () => call<LinkedInStatus>('GET', '/api/linkedin'),
+  /* Full-page navigation: LinkedIn's consent screen, then back to the app. */
+  connectUrl: (returnTo: 'generate' | 'account') => `/api/linkedin/connect?return=${returnTo}`,
+  disconnect: () => call<{ success: true }>('DELETE', '/api/linkedin'),
+  publish: (text: string) => call<{ urn: string; url: string }>('POST', '/api/linkedin/posts', { text }),
+};

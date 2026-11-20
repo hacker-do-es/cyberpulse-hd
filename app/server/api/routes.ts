@@ -2,6 +2,7 @@ import express from 'express';
 import { adminController } from '../controllers/adminController';
 import { authController } from '../controllers/authController';
 import { channelController } from '../controllers/channelController';
+import { linkedinController } from '../controllers/linkedinController';
 import {
   generateController, healthController, mcpController, newsController, scrapeController, sourceController,
 } from '../controllers/newsController';
@@ -25,6 +26,10 @@ export function apiRouter(appVersion: string): express.Router {
 
   api.post('/auth/login', loginLimiter, handle(authController.login));
   api.post('/auth/logout', handle(authController.logout));
+
+  /* LinkedIn sends the browser back here; the user is identified by the
+     single-use OAuth state (the Strict session cookie is not sent). */
+  api.get('/linkedin/callback', writeLimiter, handle(linkedinController.callback));
 
   /* Machine access for AI agents (X-API-Key), read-mostly. */
   api.post('/mcp', writeLimiter, requireMcpKey, handle(mcpController.handle));
@@ -87,6 +92,12 @@ export function apiRouter(appVersion: string): express.Router {
   api.delete('/sources/:id', writeLimiter, requireRole('superadmin'), handle(sourceController.remove));
   api.get('/scrape/status', handle(scrapeController.status));
   api.post('/scrape', writeLimiter, requireRole('superadmin'), handle(scrapeController.start));
+
+  /* LinkedIn publishing, per user */
+  api.get('/linkedin', handle(linkedinController.status));
+  api.get('/linkedin/connect', writeLimiter, handle(linkedinController.connect));
+  api.delete('/linkedin', writeLimiter, handle(linkedinController.disconnect));
+  api.post('/linkedin/posts', sendLimiter, handle(linkedinController.publish));
 
   /* Post generation */
   api.post('/generate', writeLimiter, handle(generateController.template));

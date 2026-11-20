@@ -33,6 +33,17 @@ export const config = {
 
 export const DEFAULT_SCRAPE_CRON = '*/15 * * * *';
 
+/* LinkedIn app (developers.linkedin.com) for "Publish to LinkedIn". Read
+   lazily so tests can set them. Publishing is off unless all three are set. */
+export const linkedinConfig = () => {
+  const clientId = (process.env.LINKEDIN_CLIENT_ID || '').trim();
+  const clientSecret = (process.env.LINKEDIN_CLIENT_SECRET || '').trim();
+  const redirectUri = (process.env.LINKEDIN_REDIRECT_URI || '').trim();
+  return clientId && clientSecret && redirectUri
+    ? { clientId, clientSecret, redirectUri, apiVersion: (process.env.LINKEDIN_API_VERSION || '202609').trim() }
+    : null;
+};
+
 export const flags = {
   cookieSecure: () => process.env.CYBERPULSE_COOKIE_SECURE,
   allowHttpWebhooks: () => process.env.CYBERPULSE_ALLOW_HTTP_WEBHOOKS === 'true',

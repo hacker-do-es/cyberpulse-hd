@@ -75,7 +75,7 @@ describe('legacy database conversion', () => {
     }).toEqual({ tenants: 2, users: 3, sessions: 1, stack: 3, articles: 5, channels: 1, deliveries: 1, sent: 2, log: 1 });
     expect(n('sources')).toBeGreaterThan(100);
     expect(db.prepare(`SELECT custom, article_count FROM sources WHERE name = 'CERT-EU'`).get()).toEqual({ custom: 0, article_count: 0 });
-    expect(db.prepare(`SELECT name FROM sqlite_master WHERE name LIKE 'linkedin%' OR name = 'schema_metadata' OR name LIKE '__legacy_%'`).all()).toEqual([]);
+    expect(db.prepare(`SELECT name FROM sqlite_master WHERE (name LIKE 'linkedin%' AND name NOT IN ('linkedin_accounts', 'linkedin_posts')) OR name = 'schema_metadata' OR name LIKE '__legacy_%'`).all()).toEqual([]);
     expect(db.prepare(`SELECT failed_logins FROM users WHERE username = 'bob'`).get()).toEqual({ failed_logins: 2 });
   });
 

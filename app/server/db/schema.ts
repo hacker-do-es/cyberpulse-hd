@@ -212,3 +212,33 @@ export type StackRow = typeof techStack.$inferSelect;
 export type ChannelRow = typeof channels.$inferSelect;
 export type NewChannel = typeof channels.$inferInsert;
 export type DeliveryRow = typeof deliveries.$inferSelect;
+
+/* ------------------------------------------------------------------ */
+/*  LinkedIn publishing (per user)                                     */
+/* ------------------------------------------------------------------ */
+
+/* One connected LinkedIn member per CyberPulse user. The access token is
+   encrypted at rest (lib/crypto.ts) and never returned by the API. */
+export const linkedinAccounts = sqliteTable('linkedin_accounts', {
+  userId: integer('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  /* OpenID Connect `sub`: the member id used in urn:li:person:<id>. */
+  memberId: text('member_id').notNull(),
+  name: text('name'),
+  pictureUrl: text('picture_url'),
+  accessToken: text('access_token').notNull(),
+  scope: text('scope'),
+  expiresAt: text('expires_at').notNull(),
+  connectedAt: text('connected_at').default(now),
+});
+
+export type LinkedinAccountRow = typeof linkedinAccounts.$inferSelect;
+
+/* Audit trail: who published what, from which company. */
+export const linkedinPosts = sqliteTable('linkedin_posts', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  userId: integer('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tenantId: integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+  postUrn: text('post_urn').notNull(),
+  chars: integer('chars').notNull(),
+  createdAt: text('created_at').default(now),
+}, (t) => [index('idx_linkedin_posts_user').on(t.userId, t.createdAt)]);

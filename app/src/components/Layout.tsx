@@ -26,6 +26,9 @@ import { useRSSFeeds } from '@/hooks/useRSSFeeds';
 import { countArticlesBySource, type TimeRange } from '@/lib/timeRange';
 import { createSource, deleteSource, fetchTechStackNews, fetchTechStack, type TechStackNewsArticle } from '@/services/apiService';
 import { LanguageToggle, tr, useI18n } from '@/lib/i18n';
+import { toast } from 'sonner';
+import { LinkedInPublishDialog } from './hd/LinkedIn';
+import { takeDraft, useLinkedInStatus } from './hd/linkedinHelpers';
 
 function TabLoading() {
   return (
@@ -68,6 +71,39 @@ export default function Layout() {
   const [localSources, setLocalSources] = useState<SourceInfo[]>(sources);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  /* Back from LinkedIn's consent screen (?linkedin=connected|error): report it,
+     return to where the user started and offer to publish a kept draft. */
+  const linkedin = useLinkedInStatus();
+  const [pendingPost, setPendingPost] = useState<string | null>(null);
+  const [linkedinReturn] = useState(() => {
+    const q = new URLSearchParams(window.location.search);
+    const result = q.get('linkedin');
+    if (!result) return null;
+    window.history.replaceState(null, '', window.location.pathname);
+    return { result, reason: q.get('reason'), view: q.get('view') };
+  });
+  useEffect(() => {
+    if (!linkedinReturn) return;
+    const { result, reason, view } = linkedinReturn;
+    if (result === 'connected') {
+      toast.success(tr('LinkedIn connected'));
+      void linkedin.reload();
+      if (view === 'account') setAccountOpen(true);
+      else {
+        setActiveTab('generate');
+        const draft = takeDraft();
+        if (draft) setPendingPost(draft);
+      }
+    } else {
+      toast.error(reason === 'cancelled' ? tr('LinkedIn connection cancelled')
+        : reason === 'expired' ? tr('The LinkedIn sign-in took too long. Try again.')
+          : reason === 'scope' ? tr('LinkedIn did not grant permission to publish. Try again and accept all permissions.')
+            : tr('Could not connect LinkedIn. Try again.'));
+      if (view === 'account') setAccountOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedinReturn]);
   /* Lives here rather than in NewsFeedTab so the sidebar counts describe the
      same window the feed is showing. */
   const [timeRange, setTimeRange] = useState<TimeRange>('all');
@@ -332,6 +368,8 @@ export default function Layout() {
             <LanguageToggle />
           </div>
           <AccountDialog open={accountOpen} onOpenChange={setAccountOpen} />
+          <LinkedInPublishDialog text={pendingPost ?? ''} open={pendingPost !== null} onClose={() => setPendingPost(null)}
+            status={linkedin.status} onStatusChange={() => void linkedin.reload()} />
         </div>
 
         {/* Content Area */}

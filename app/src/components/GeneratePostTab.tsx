@@ -34,6 +34,7 @@ import {
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import type { NewsArticle } from '@/data/mockNews';
 import { generateAiPost, type GenerateAiPostParams } from '@/services/apiService';import { getLang, tr } from '@/lib/i18n';
+import { LinkedInPublishButton } from './hd/LinkedIn';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -2028,6 +2029,7 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
                   <Save size={16} />
                   {labels.save}
                 </Button>
+                <LinkedInPublishButton content={generatedContent} className="font-inter text-sm font-semibold flex-1 rounded-button h-10" />
               </div>
             </motion.div>
           )}
