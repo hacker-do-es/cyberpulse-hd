@@ -1,4 +1,5 @@
 import { toast } from 'sonner';
+import { locale, tr, trMessage } from '@/lib/i18n';
 
 /* Non-component helpers shared by the Hacker-Do management screens. */
 
@@ -7,14 +8,14 @@ export const selectCls =
   'h-9 w-full rounded-md border border-border-default bg-bg-input px-3 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent/40';
 
 export function notifyError(err: unknown, fallback = 'Something went wrong') {
-  toast.error(err instanceof Error ? err.message : fallback);
+  toast.error(err instanceof Error ? trMessage(err.message) : tr(fallback));
 }
 
 export function formatDateTime(value: string | null | undefined, timeZone?: string): string {
   if (!value) return '—';
   const d = new Date(value.includes('T') ? value : value.replace(' ', 'T') + 'Z');
   if (isNaN(d.getTime())) return '—';
-  return d.toLocaleString('es-ES', { timeZone, dateStyle: 'short', timeStyle: 'short' });
+  return d.toLocaleString(locale(), { timeZone, dateStyle: 'short', timeStyle: 'short' });
 }
 
 export const WEEKDAYS = [

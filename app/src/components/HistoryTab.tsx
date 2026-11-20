@@ -19,6 +19,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { tr } from '@/lib/i18n';
+import { timeAgo } from '@/lib/dateUtils';
 
 // ------------------------------------------------------------------
 // Types
@@ -47,20 +49,6 @@ interface Toast {
 // ------------------------------------------------------------------
 const STORAGE_KEY = 'cyberpulse_history';
 
-function getRelativeTime(isoDate: string): string {
-  const now = new Date().getTime();
-  const then = new Date(isoDate).getTime();
-  const diffMs = now - then;
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return 'JUST NOW';
-  if (diffMins < 60) return `${diffMins} MIN${diffMins > 1 ? 'S' : ''} AGO`;
-  if (diffHours < 24) return `${diffHours} HR${diffHours > 1 ? 'S' : ''} AGO`;
-  if (diffDays === 1) return '1 DAY AGO';
-  return `${diffDays} DAYS AGO`;
-}
 
 function generateMockPosts(): SavedPost[] {
   const now = new Date();
@@ -354,7 +342,7 @@ function HistoryCard({
 
         {/* Date */}
         <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-text-tertiary shrink-0">
-          {getRelativeTime(post.createdAt)}
+          {timeAgo(post.createdAt)}
         </span>
 
         {/* Badges */}
@@ -371,26 +359,26 @@ function HistoryCard({
         <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={handleCopy}
-            title="Copy to clipboard"
+            title={tr("Copy to clipboard")}
             className="relative p-1.5 text-text-tertiary hover:text-text-primary transition-colors duration-200 cursor-pointer"
           >
             <ClipboardCopy size={16} />
             {copied && (
               <span className="absolute -top-7 left-1/2 -translate-x-1/2 px-2 py-0.5 text-[10px] font-medium font-jetbrains uppercase tracking-[0.08em] bg-bg-elevated text-accent rounded-pill border border-border-default whitespace-nowrap">
-                Copied!
+                {tr("Copied!")}
               </span>
             )}
           </button>
           <button
             onClick={() => onDelete(post.id)}
-            title="Delete post"
+            title={tr("Delete post")}
             className="p-1.5 text-text-tertiary hover:text-critical transition-colors duration-200 cursor-pointer"
           >
             <Trash2 size={16} />
           </button>
           <button
             onClick={toggleExpanded}
-            title={expanded ? 'Collapse' : 'Expand'}
+            title={expanded ? tr('Collapse') : tr('Expand')}
             className="p-1.5 text-text-tertiary hover:text-text-primary transition-colors duration-200 cursor-pointer"
           >
             <motion.div
@@ -462,14 +450,14 @@ function HistoryCard({
                 className="flex items-center gap-2 px-5 py-2.5 bg-accent text-text-inverse text-sm font-semibold font-inter rounded-button hover:brightness-110 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
               >
                 <ClipboardCopy size={14} />
-                Copy to Clipboard
+                {tr("Copy to Clipboard")}
               </button>
               <button
                 onClick={() => onDelete(post.id)}
                 className="flex items-center gap-2 px-5 py-2.5 text-critical text-sm font-medium font-inter rounded-button hover:bg-[rgba(239,68,68,0.1)] transition-all duration-200 cursor-pointer"
               >
                 <Trash2 size={14} />
-                Delete Post
+                {tr("Delete Post")}
               </button>
             </div>
           </motion.div>
@@ -511,7 +499,7 @@ export default function HistoryTab() {
   // Handle copy
   const handleCopy = useCallback(
     (_content: string) => {
-      addToast('Copied to clipboard', 'success');
+      addToast(tr('Copied to clipboard'), 'success');
     },
     [addToast]
   );
@@ -530,7 +518,7 @@ export default function HistoryTab() {
       return next;
     });
     setDeleteTargetId(null);
-    addToast('Post deleted', 'success');
+    addToast(tr('Post deleted'), 'success');
   }, [deleteTargetId, addToast]);
 
   // Cancel delete
@@ -569,7 +557,7 @@ export default function HistoryTab() {
           transition={{ duration: 0.4, delay: 0.2 }}
           className="mt-6 text-lg font-semibold text-text-primary font-inter"
         >
-          No saved posts yet
+          {tr("No saved posts yet")}
         </motion.h2>
         <motion.p
           initial={{ opacity: 0 }}
@@ -577,16 +565,16 @@ export default function HistoryTab() {
           transition={{ duration: 0.4, delay: 0.3 }}
           className="mt-2 text-sm font-normal text-text-secondary font-inter"
         >
-          Generate your first post from the News Feed
+          {tr("Generate your first post from the News Feed")}
         </motion.p>
         <motion.button
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.4, delay: 0.4 }}
-          onClick={() => console.log('Navigate to News Feed')}
+          onClick={() => console.log(tr('Navigate to News Feed'))}
           className="mt-6 px-5 py-2.5 bg-accent text-text-inverse text-sm font-semibold font-inter rounded-button hover:brightness-110 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
         >
-          Go to News Feed
+          {tr("Go to News Feed")}
         </motion.button>
       </div>
     );
@@ -597,7 +585,7 @@ export default function HistoryTab() {
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <h1 className="text-2xl font-bold text-text-primary font-inter leading-tight tracking-[-0.02em]">
-          History
+          {tr("History")}
         </h1>
 
         {/* Search Input */}
@@ -611,7 +599,7 @@ export default function HistoryTab() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search saved posts..."
+            placeholder={tr("Search saved posts...")}
             className="
               w-[240px] pl-9 pr-8 py-2.5
               bg-bg-input border border-border-default rounded-input
@@ -656,10 +644,10 @@ export default function HistoryTab() {
         >
           <DialogHeader className="text-center">
             <DialogTitle className="text-lg font-bold text-text-primary font-inter">
-              Delete Post?
+              {tr("Delete Post?")}
             </DialogTitle>
             <DialogDescription className="text-sm font-normal text-text-secondary font-inter mt-2">
-              This action cannot be undone.
+              {tr("This action cannot be undone.")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex flex-row justify-center gap-3 mt-2">
@@ -667,13 +655,13 @@ export default function HistoryTab() {
               onClick={cancelDelete}
               className="px-5 py-2.5 bg-transparent border border-border-default text-text-primary text-sm font-medium font-inter rounded-button hover:border-text-secondary hover:bg-bg-elevated transition-all duration-200 cursor-pointer"
             >
-              Cancel
+              {tr("Cancel")}
             </button>
             <button
               onClick={confirmDelete}
               className="px-5 py-2.5 text-critical text-sm font-medium font-inter rounded-button hover:bg-[rgba(239,68,68,0.1)] transition-all duration-200 cursor-pointer"
             >
-              Delete
+              {tr("Delete")}
             </button>
           </DialogFooter>
         </DialogContent>

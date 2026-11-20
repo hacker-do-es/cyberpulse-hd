@@ -1,6 +1,7 @@
 import { Newspaper, FileText, History, Server, Radio, Settings, Building2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Role } from '@/services/hdApi';
+import { tr } from '@/lib/i18n';
 
 export type TabId = 'news' | 'my-stack' | 'generate' | 'history' | 'channels' | 'settings' | 'admin';
 
@@ -34,7 +35,7 @@ interface NavbarProps {
 export default function Navbar({ activeTab, onTabChange, role }: NavbarProps) {
   const visible = tabs.filter((t) => !t.roles || (role && t.roles.includes(role)));
   return (
-    <nav className="flex items-center h-14 min-w-0 overflow-x-auto bg-bg-primary shrink" aria-label="Main">
+    <nav className="flex items-center h-14 min-w-0 overflow-x-auto bg-bg-primary shrink" aria-label={tr("Main")}>
       <div className="flex items-center gap-0.5">
         {visible.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -43,7 +44,7 @@ export default function Navbar({ activeTab, onTabChange, role }: NavbarProps) {
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
               aria-current={isActive ? 'page' : undefined}
-              title={tab.label}
+              title={tr(tab.label)}
               className={`
                 relative flex items-center gap-2 px-2.5 xl:px-3.5 py-2 text-[15px] font-semibold font-rajdhani tracking-wide whitespace-nowrap
                 transition-colors duration-200 ease-out cursor-pointer
@@ -51,7 +52,7 @@ export default function Navbar({ activeTab, onTabChange, role }: NavbarProps) {
               `}
             >
               {tab.icon}
-              <span className="hidden xl:inline">{tab.label}</span>
+              <span className="hidden xl:inline">{tr(tab.label)}</span>
               {isActive && (
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent rounded-full" />
               )}

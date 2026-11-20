@@ -5,6 +5,7 @@ import type { SourceInfo } from '@/hooks/useRSSFeeds';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { tr, trMessage } from '@/lib/i18n';
 
 /* `count` is how many articles the source contributes to the window currently
    shown in the feed. A source can legitimately be quiet — Project Zero and ZDI
@@ -49,7 +50,7 @@ export default function Sidebar({ sources, onToggleSource, onToggleAll, onClose,
   const handleAddSource = async () => {
     if (!onAddSource) return;
     if (!newSourceName.trim() || !newSourceUrl.trim()) {
-      setError('Name and URL are required');
+      setError(tr('Name and URL are required'));
       return;
     }
 
@@ -62,7 +63,7 @@ export default function Sidebar({ sources, onToggleSource, onToggleAll, onClose,
       setNewSourceCategory('GENERAL');
       setIsAddDialogOpen(false);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to add source';
+      const message = err instanceof Error ? trMessage(err.message) : tr('Failed to add source');
       setError(message);
     } finally {
       setIsSubmitting(false);
@@ -72,12 +73,12 @@ export default function Sidebar({ sources, onToggleSource, onToggleAll, onClose,
   const handleDeleteSource = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!onDeleteSource) return;
-    if (!confirm('Are you sure you want to delete this source?')) return;
+    if (!confirm(tr("Are you sure you want to delete this source?"))) return;
 
     try {
       await onDeleteSource(id);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to delete source';
+      const message = err instanceof Error ? trMessage(err.message) : tr('Failed to delete source');
       alert(message);
     }
   };
@@ -102,13 +103,13 @@ export default function Sidebar({ sources, onToggleSource, onToggleAll, onClose,
           <button
             onClick={onClose}
             className="lg:hidden p-1.5 rounded-lg text-text-tertiary hover:text-text-primary hover:bg-bg-elevated transition-colors cursor-pointer"
-            aria-label="Close menu"
+            aria-label={tr("Close menu")}
           >
             <X size={20} />
           </button>
         </div>
         <p className="mt-1 text-[10px] font-medium font-jetbrains uppercase tracking-[0.1em] text-text-tertiary">
-          THREAT INTEL FOR YOUR STACK
+          {tr("THREAT INTEL FOR YOUR STACK")}
         </p>
       </div>
 
@@ -116,7 +117,7 @@ export default function Sidebar({ sources, onToggleSource, onToggleAll, onClose,
       <div className="flex-1 overflow-y-auto py-3">
         <div className="flex items-center justify-between px-6 pb-2">
           <p className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-text-tertiary">
-            SOURCES
+            {tr("SOURCES")}
           </p>
           <div className="flex items-center gap-2">
             {onAddSource && (
@@ -124,27 +125,27 @@ export default function Sidebar({ sources, onToggleSource, onToggleAll, onClose,
                 <DialogTrigger asChild>
                   <button
                     className="flex items-center gap-1 text-[10px] font-medium font-jetbrains uppercase tracking-[0.08em] text-text-tertiary hover:text-accent transition-colors cursor-pointer"
-                    title="Add custom RSS source"
+                    title={tr("Add custom RSS source")}
                   >
                     <Plus size={10} />
-                    Add
+                    {tr("Add")}
                   </button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[425px]">
                   <DialogHeader>
-                    <DialogTitle>Add RSS Source</DialogTitle>
+                    <DialogTitle>{tr("Add RSS Source")}</DialogTitle>
                     <DialogDescription>
-                      Add a custom RSS feed to your sources
+                      {tr("Add a custom RSS feed to your sources")}
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
                       <label htmlFor="name" className="text-sm font-medium">
-                        Source Name
+                        {tr("Source Name")}
                       </label>
                       <Input
                         id="name"
-                        placeholder="e.g., My Security Blog"
+                        placeholder={tr("e.g., My Security Blog")}
                         value={newSourceName}
                         onChange={(e) => setNewSourceName(e.target.value)}
                         disabled={isSubmitting}
@@ -152,7 +153,7 @@ export default function Sidebar({ sources, onToggleSource, onToggleAll, onClose,
                     </div>
                     <div className="grid gap-2">
                       <label htmlFor="url" className="text-sm font-medium">
-                        RSS Feed URL
+                        {tr("RSS Feed URL")}
                       </label>
                       <Input
                         id="url"
@@ -165,7 +166,7 @@ export default function Sidebar({ sources, onToggleSource, onToggleAll, onClose,
                     </div>
                     <div className="grid gap-2">
                       <label htmlFor="category" className="text-sm font-medium">
-                        Category
+                        {tr("Category")}
                       </label>
                       <select
                         id="category"
@@ -174,23 +175,23 @@ export default function Sidebar({ sources, onToggleSource, onToggleAll, onClose,
                         disabled={isSubmitting}
                         className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        <option value="GENERAL">General</option>
-                        <option value="VULNERABILITY">Vulnerability</option>
-                        <option value="MALWARE">Malware</option>
-                        <option value="THREAT INTEL">Threat Intel</option>
-                        <option value="DATA BREACH">Data Breach</option>
-                        <option value="PHISHING">Phishing</option>
-                        <option value="COMPLIANCE">Compliance</option>
-                        <option value="RESEARCH">Research</option>
-                        <option value="PRIVACY">Privacy</option>
-                        <option value="POLICY">Policy</option>
-                        <option value="INDUSTRY">Industry</option>
-                        <option value="ALERT">Alert</option>
-                        <option value="AWARENESS">Awareness</option>
+                        <option value="GENERAL">{tr("General")}</option>
+                        <option value="VULNERABILITY">{tr("Vulnerability")}</option>
+                        <option value="MALWARE">{tr("Malware")}</option>
+                        <option value="THREAT INTEL">{tr("Threat Intel")}</option>
+                        <option value="DATA BREACH">{tr("Data Breach")}</option>
+                        <option value="PHISHING">{tr("Phishing")}</option>
+                        <option value="COMPLIANCE">{tr("Compliance")}</option>
+                        <option value="RESEARCH">{tr("Research")}</option>
+                        <option value="PRIVACY">{tr("Privacy")}</option>
+                        <option value="POLICY">{tr("Policy")}</option>
+                        <option value="INDUSTRY">{tr("Industry")}</option>
+                        <option value="ALERT">{tr("Alert")}</option>
+                        <option value="AWARENESS">{tr("Awareness")}</option>
                       </select>
                     </div>
                     {error && (
-                      <p className="text-sm text-destructive">{error}</p>
+                      <p className="text-sm text-destructive">{trMessage(error)}</p>
                     )}
                   </div>
                   <DialogFooter>
@@ -200,14 +201,14 @@ export default function Sidebar({ sources, onToggleSource, onToggleAll, onClose,
                       onClick={() => setIsAddDialogOpen(false)}
                       disabled={isSubmitting}
                     >
-                      Cancel
+                      {tr("Cancel")}
                     </Button>
                     <Button
                       type="submit"
                       onClick={handleAddSource}
                       disabled={isSubmitting}
                     >
-                      {isSubmitting ? 'Adding...' : 'Add Source'}
+                      {isSubmitting ? tr('Adding...') : tr('Add Source')}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
@@ -217,10 +218,10 @@ export default function Sidebar({ sources, onToggleSource, onToggleAll, onClose,
               <button
                 onClick={() => onToggleAll(activeCount === 0)}
                 className="flex items-center gap-1 text-[10px] font-medium font-jetbrains uppercase tracking-[0.08em] text-text-tertiary hover:text-accent transition-colors cursor-pointer"
-                title={activeCount === 0 ? 'Enable all sources' : 'Disable all sources'}
+                title={activeCount === 0 ? tr('Enable all sources') : tr('Disable all sources')}
               >
                 <Power size={10} />
-                {activeCount === 0 ? 'Enable all' : 'Disable all'}
+                {activeCount === 0 ? tr('Enable all') : tr('Disable all')}
               </button>
             )}
           </div>
@@ -282,10 +283,10 @@ export default function Sidebar({ sources, onToggleSource, onToggleAll, onClose,
               {source.neverDelivered ? (
                 <span
                   className="flex items-center gap-1 text-[10px] font-jetbrains uppercase tracking-[0.06em] text-high shrink-0"
-                  title="This feed has never returned an article — the URL is probably dead"
+                  title={tr("This feed has never returned an article — the URL is probably dead")}
                 >
                   <AlertTriangle size={11} aria-hidden="true" />
-                  No data
+                  {tr("No data")}
                 </span>
               ) : (
                 <span
@@ -295,7 +296,7 @@ export default function Sidebar({ sources, onToggleSource, onToggleAll, onClose,
                   `}
                   title={
                     source.count === 0
-                      ? `Nothing in the selected window (${source.lifetimeCount ?? 0} stored in total)`
+                      ? tr('Nothing in the selected window ({n} stored in total)', { n: source.lifetimeCount ?? 0 })
                       : undefined
                   }
                 >
@@ -306,8 +307,8 @@ export default function Sidebar({ sources, onToggleSource, onToggleAll, onClose,
                 <button
                   onClick={(e) => handleDeleteSource(source.id, e)}
                   className="p-1 rounded hover:bg-bg-elevated text-text-tertiary hover:text-destructive transition-colors"
-                  title="Delete custom source"
-                  aria-label="Delete source"
+                  title={tr("Delete custom source")}
+                  aria-label={tr("Delete source")}
                 >
                   <Trash2 size={12} />
                 </button>
@@ -328,7 +329,7 @@ export default function Sidebar({ sources, onToggleSource, onToggleAll, onClose,
               className={`transition-transform duration-200 ${showEmpty ? 'rotate-180' : ''}`}
               aria-hidden="true"
             />
-            {showEmpty ? 'Hide' : 'Show'} {empty.length} with no data
+            {showEmpty ? tr('Hide') : tr('Show')} {empty.length} {tr("with no data")}
           </button>
         )}
       </div>
@@ -337,10 +338,10 @@ export default function Sidebar({ sources, onToggleSource, onToggleAll, onClose,
       <div className="px-6 py-4 border-t border-border-default bg-bg-card">
         <div className="flex flex-col gap-0.5">
           <span className="text-[11px] font-normal font-jetbrains text-text-tertiary">
-            Active: {activeCount} sources
+            {tr("Active:")} {activeCount} {tr("sources")}
           </span>
           <span className="text-[11px] font-normal font-jetbrains text-text-tertiary">
-            Total: {totalArticles} articles
+            {tr("Total:")} {totalArticles} {tr("articles")}
           </span>
         </div>
       </div>

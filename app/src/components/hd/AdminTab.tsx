@@ -8,6 +8,7 @@ import { adminApi, type TenantSummary } from '@/services/hdApi';
 import { useAuth } from '@/lib/auth';
 import { Panel, PageHeader, Field, Badge, EmptyState } from './ui';
 import { inputCls, selectCls, notifyError, formatDateTime, TIMEZONES } from './helpers';
+import { tr } from '@/lib/i18n';
 
 export default function AdminTab({ onEnterTenant }: { onEnterTenant: () => void }) {
   const { me, switchTenant, refresh } = useAuth();
@@ -41,7 +42,7 @@ export default function AdminTab({ onEnterTenant }: { onEnterTenant: () => void 
   };
 
   const toggle = async (t: TenantSummary) => {
-    if (t.active && !window.confirm(`Disable "${t.name}"? Its users are logged out and its channels stop sending.`)) return;
+    if (t.active && !window.confirm(tr('Disable "{name}"? Its users are logged out and its channels stop sending.', { name: t.name }))) return;
     try {
       await adminApi.update(t.id, { active: !t.active });
       await load();
@@ -53,26 +54,26 @@ export default function AdminTab({ onEnterTenant }: { onEnterTenant: () => void 
 
   return (
     <div className="max-w-5xl mx-auto pb-12">
-      <PageHeader title="Companies" subtitle="Hacker-Do superadmin. Each company has its own stack, AI key, users and channels." />
+      <PageHeader title={tr("Companies")} subtitle={tr("Hacker-Do superadmin. Each company has its own stack, AI key, users and channels.")} />
       <Panel
-        title={`${tenants.length} ${tenants.length === 1 ? 'company' : 'companies'}`}
+        title={tenants.length === 1 ? tr('1 company') : tr('{n} companies', { n: tenants.length })}
         icon={<Building2 size={18} />}
-        actions={<Button size="sm" onClick={() => setCreateOpen(true)}><Plus size={14} /> New company</Button>}
+        actions={<Button size="sm" onClick={() => setCreateOpen(true)}><Plus size={14} /> {tr("New company")}</Button>}
       >
-        {loading ? <p className="text-sm text-text-tertiary">Loading…</p> : tenants.length === 0 ? (
-          <EmptyState>No companies yet. Create the first one and its admin user.</EmptyState>
+        {loading ? <p className="text-sm text-text-tertiary">{tr("Loading…")}</p> : tenants.length === 0 ? (
+          <EmptyState>{tr("No companies yet. Create the first one and its admin user.")}</EmptyState>
         ) : (
           <div className="overflow-x-auto border border-border-default rounded-lg">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-[10px] font-jetbrains uppercase tracking-[0.08em] text-text-tertiary bg-bg-elevated">
-                  <th className="px-3 py-2 font-medium">Company</th>
-                  <th className="px-3 py-2 font-medium">Users</th>
-                  <th className="px-3 py-2 font-medium">Stack</th>
-                  <th className="px-3 py-2 font-medium">Channels</th>
-                  <th className="px-3 py-2 font-medium">AI</th>
-                  <th className="px-3 py-2 font-medium">Created</th>
-                  <th className="px-3 py-2"><span className="sr-only">Actions</span></th>
+                  <th className="px-3 py-2 font-medium">{tr("Company")}</th>
+                  <th className="px-3 py-2 font-medium">{tr("Users")}</th>
+                  <th className="px-3 py-2 font-medium">{tr("Stack")}</th>
+                  <th className="px-3 py-2 font-medium">{tr("Channels")}</th>
+                  <th className="px-3 py-2 font-medium">{tr("AI")}</th>
+                  <th className="px-3 py-2 font-medium">{tr("Created")}</th>
+                  <th className="px-3 py-2"><span className="sr-only">{tr("Actions")}</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -81,8 +82,8 @@ export default function AdminTab({ onEnterTenant }: { onEnterTenant: () => void 
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
                         <span className="text-text-primary font-medium">{t.name}</span>
-                        {!t.active && <Badge tone="bad">Disabled</Badge>}
-                        {me?.activeTenant?.id === t.id && <Badge tone="accent">Selected</Badge>}
+                        {!t.active && <Badge tone="bad">{tr("Disabled")}</Badge>}
+                        {me?.activeTenant?.id === t.id && <Badge tone="accent">{tr("Selected")}</Badge>}
                       </div>
                       <div className="text-[11px] text-text-tertiary">{t.timezone} · {t.language.toUpperCase()}</div>
                     </td>
@@ -93,10 +94,10 @@ export default function AdminTab({ onEnterTenant }: { onEnterTenant: () => void 
                     <td className="px-3 py-2 text-xs text-text-tertiary">{formatDateTime(t.createdAt)}</td>
                     <td className="px-3 py-2">
                       <div className="flex justify-end gap-1">
-                        <Button size="sm" variant="ghost" className="h-7 text-xs text-accent" onClick={() => void enter(t)}><LogIn size={13} /> Manage</Button>
-                        <Button size="icon-sm" variant="ghost" className="text-text-secondary" onClick={() => setRenaming(t)} aria-label={`Rename ${t.name}`}><Pencil size={13} /></Button>
-                        <Button size="sm" variant="ghost" className="h-7 text-xs text-text-secondary" onClick={() => void toggle(t)}>{t.active ? 'Disable' : 'Enable'}</Button>
-                        <Button size="icon-sm" variant="ghost" className="text-text-tertiary hover:text-critical" onClick={() => setDeleting(t)} aria-label={`Delete ${t.name}`}><Trash2 size={13} /></Button>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs text-accent" onClick={() => void enter(t)}><LogIn size={13} /> {tr("Manage")}</Button>
+                        <Button size="icon-sm" variant="ghost" className="text-text-secondary" onClick={() => setRenaming(t)} aria-label={tr('Rename {name}', { name: t.name })}><Pencil size={13} /></Button>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs text-text-secondary" onClick={() => void toggle(t)}>{t.active ? tr('Disable') : tr('Enable')}</Button>
+                        <Button size="icon-sm" variant="ghost" className="text-text-tertiary hover:text-critical" onClick={() => setDeleting(t)} aria-label={tr('Delete {name}', { name: t.name })}><Trash2 size={13} /></Button>
                       </div>
                     </td>
                   </tr>
@@ -109,7 +110,7 @@ export default function AdminTab({ onEnterTenant }: { onEnterTenant: () => void 
 
       <CreateTenantDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={async () => { await load(); await refresh(); }} />
       <RenameDialog tenant={renaming} onClose={() => setRenaming(null)} onSaved={async () => { await load(); await refresh(); }} />
-      <DeleteDialog tenant={deleting} onClose={() => setDeleting(null)} onDeleted={async () => { await load(); await refresh(); toast.success('Company deleted'); }} />
+      <DeleteDialog tenant={deleting} onClose={() => setDeleting(null)} onDeleted={async () => { await load(); await refresh(); toast.success(tr("Company deleted")); }} />
     </div>
   );
 }
@@ -128,7 +129,7 @@ function CreateTenantDialog({ open, onOpenChange, onCreated }: { open: boolean; 
         timezone: f.timezone,
         admin: f.withAdmin ? { username: f.username, password: f.password, displayName: f.displayName || undefined } : undefined,
       });
-      toast.success(`Company ${f.name} created`);
+      toast.success(tr('Company {name} created', { name: f.name }));
       setF(empty);
       onOpenChange(false);
       await onCreated();
@@ -143,20 +144,20 @@ function CreateTenantDialog({ open, onOpenChange, onCreated }: { open: boolean; 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-bg-card border-border-default text-text-primary sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-rajdhani text-xl">New company</DialogTitle>
-          <DialogDescription className="text-text-tertiary text-xs">The admin user can then load the stack, AI key and channels by themselves.</DialogDescription>
+          <DialogTitle className="font-rajdhani text-xl">{tr("New company")}</DialogTitle>
+          <DialogDescription className="text-text-tertiary text-xs">{tr("The admin user can then load the stack, AI key and channels by themselves.")}</DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-          <Field label="Company name" htmlFor="nt-name">
+          <Field label={tr("Company name")} htmlFor="nt-name">
             <Input id="nt-name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={inputCls} required maxLength={100} />
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Digest language" htmlFor="nt-lang">
+            <Field label={tr("Digest language")} htmlFor="nt-lang">
               <select id="nt-lang" className={selectCls} value={f.language} onChange={(e) => setF({ ...f, language: e.target.value })}>
-                <option value="es">Español</option><option value="en">English</option>
+                <option value="es">{tr("Español")}</option><option value="en">{tr("English")}</option>
               </select>
             </Field>
-            <Field label="Time zone" htmlFor="nt-tz">
+            <Field label={tr("Time zone")} htmlFor="nt-tz">
               <select id="nt-tz" className={selectCls} value={f.timezone} onChange={(e) => setF({ ...f, timezone: e.target.value })}>
                 {TIMEZONES.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
               </select>
@@ -164,24 +165,24 @@ function CreateTenantDialog({ open, onOpenChange, onCreated }: { open: boolean; 
           </div>
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input type="checkbox" checked={f.withAdmin} onChange={(e) => setF({ ...f, withAdmin: e.target.checked })} className="accent-[#E8533F]" />
-            <span className="text-text-primary">Create the company admin now</span>
+            <span className="text-text-primary">{tr("Create the company admin now")}</span>
           </label>
           {f.withAdmin && (
             <div className="grid gap-4 sm:grid-cols-2 border border-border-default rounded-lg p-4">
-              <Field label="Admin username" htmlFor="nt-user">
+              <Field label={tr("Admin username")} htmlFor="nt-user">
                 <Input id="nt-user" autoComplete="off" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value })} className={inputCls} required />
               </Field>
-              <Field label="Full name (optional)" htmlFor="nt-dn">
+              <Field label={tr("Full name (optional)")} htmlFor="nt-dn">
                 <Input id="nt-dn" value={f.displayName} onChange={(e) => setF({ ...f, displayName: e.target.value })} className={inputCls} />
               </Field>
               <div className="sm:col-span-2">
-                <Field label="Initial password" htmlFor="nt-pw" hint="At least 12 characters.">
+                <Field label={tr("Initial password")} htmlFor="nt-pw" hint={tr("At least 12 characters.")}>
                   <Input id="nt-pw" type="password" autoComplete="new-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} className={inputCls} required minLength={12} />
                 </Field>
               </div>
             </div>
           )}
-          <DialogFooter><Button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create company'}</Button></DialogFooter>
+          <DialogFooter><Button type="submit" disabled={busy}>{busy ? tr('Creating…') : tr('Create company')}</Button></DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
@@ -204,10 +205,10 @@ function RenameDialog({ tenant, onClose, onSaved }: { tenant: TenantSummary | nu
   return (
     <Dialog open={tenant !== null} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="bg-bg-card border-border-default text-text-primary sm:max-w-md">
-        <DialogHeader><DialogTitle className="font-rajdhani text-xl">Rename company</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle className="font-rajdhani text-xl">{tr("Rename company")}</DialogTitle></DialogHeader>
         <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-          <Input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} required maxLength={100} aria-label="Company name" />
-          <DialogFooter><Button type="submit">Save</Button></DialogFooter>
+          <Input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} required maxLength={100} aria-label={tr("Company name")} />
+          <DialogFooter><Button type="submit">{tr("Save")}</Button></DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
@@ -235,18 +236,18 @@ function DeleteDialog({ tenant, onClose, onDeleted }: { tenant: TenantSummary | 
     <Dialog open={tenant !== null} onOpenChange={(o) => { if (!o) { setConfirm(''); onClose(); } }}>
       <DialogContent className="bg-bg-card border-border-default text-text-primary sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-rajdhani text-xl text-critical">Delete {tenant?.name}</DialogTitle>
+          <DialogTitle className="font-rajdhani text-xl text-critical">{tr("Delete")} {tenant?.name}</DialogTitle>
           <DialogDescription className="text-text-tertiary text-xs">
-            Permanently deletes the company with its users, stack, channels and delivery history. This cannot be undone.
+            {tr("Permanently deletes the company with its users, stack, channels and delivery history. This cannot be undone.")}
           </DialogDescription>
         </DialogHeader>
         <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-          <Field label={`Type "${tenant?.name}" to confirm`} htmlFor="del-confirm">
+          <Field label={tr('Type "{name}" to confirm', { name: tenant?.name ?? '' })} htmlFor="del-confirm">
             <Input id="del-confirm" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={inputCls} autoComplete="off" />
           </Field>
           <DialogFooter>
             <Button type="submit" variant="destructive" disabled={busy || confirm.trim().toLowerCase() !== tenant?.name.toLowerCase()}>
-              {busy ? 'Deleting…' : 'Delete company'}
+              {busy ? tr('Deleting…') : tr('Delete company')}
             </Button>
           </DialogFooter>
         </form>

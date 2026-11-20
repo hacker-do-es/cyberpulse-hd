@@ -4,7 +4,8 @@ import { toast } from 'sonner';
 import { Search, Clock, RefreshCw, RotateCcw, CloudDownload, ExternalLink, Thermometer, ChevronLeft, ChevronRight } from 'lucide-react';
 import type { NewsArticle } from '@/data/mockNews';
 import { articleTime, isWithinRange, rangeCutoff, timeRangeOptions, type TimeRange } from '@/lib/timeRange';
-import { timeAgo } from '@/lib/dateUtils';
+import { publishDate, timeAgo } from '@/lib/dateUtils';
+import { locale, tr, trMessage, useI18n } from '@/lib/i18n';
 
 interface NewsFeedTabProps {
   articles: NewsArticle[];
@@ -176,11 +177,11 @@ export default function NewsFeedTab({
 
     const { totalNew, errors } = lastSyncResult;
     if (errors.length > 0) {
-      toast.error(`Sync finished with ${errors.length} error(s)`);
+      toast.error(tr('Sync finished with {n} error(s)', { n: errors.length }));
     } else if (totalNew > 0) {
-      toast.success(`${totalNew} new article${totalNew === 1 ? '' : 's'} found`);
+      toast.success(totalNew === 1 ? tr('1 new article found') : tr('{n} new articles found', { n: totalNew }));
     } else {
-      toast.info('No new articles found');
+      toast.info(tr("No new articles found"));
     }
   }, [lastSyncResult]);
 
@@ -194,10 +195,10 @@ export default function NewsFeedTab({
           <RefreshCw size={32} className="text-accent" />
         </motion.div>
         <p className="text-text-secondary text-sm font-inter font-medium">
-          Loading latest cybersecurity news...
+          {tr("Loading latest cybersecurity news...")}
         </p>
         <p className="text-text-tertiary text-xs font-jetbrains">
-          Fetching from 8 RSS sources
+          {tr("Fetching from 8 RSS sources")}
         </p>
       </div>
     );
@@ -223,7 +224,7 @@ export default function NewsFeedTab({
                   }
                 `}
               >
-                {option.label}
+                {tr(option.label)}
               </button>
             ))}
           </div>
@@ -233,7 +234,7 @@ export default function NewsFeedTab({
             onClick={onRefresh}
             disabled={refreshing}
             className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium font-inter rounded-md text-accent bg-accent-dim hover:brightness-110 transition-all cursor-pointer disabled:opacity-50"
-            title={lastUpdated ? `Last updated: ${lastUpdated.toLocaleTimeString()}` : 'Refresh feeds'}
+            title={lastUpdated ? tr('Last updated: {time}', { time: lastUpdated.toLocaleTimeString(locale()) }) : tr('Refresh feeds')}
           >
             <motion.span
               animate={refreshing ? { rotate: 360 } : { rotate: 0 }}
@@ -241,17 +242,17 @@ export default function NewsFeedTab({
             >
               <RefreshCw size={14} />
             </motion.span>
-            {refreshing ? 'Updating...' : 'Refresh'}
+            {refreshing ? tr('Updating...') : tr('Refresh')}
           </button>
 
           {/* Force Reload Button */}
           <button
             onClick={onForceReload}
             className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium font-inter rounded-md text-text-tertiary hover:text-accent hover:bg-accent-dim transition-all cursor-pointer"
-            title="Clear cache and reload all feeds from scratch"
+            title={tr("Clear cache and reload all feeds from scratch")}
           >
             <RotateCcw size={14} />
-            Reload
+            {tr("Reload")}
           </button>
 
           {/* Sync Button — fetch new articles from RSS sources */}
@@ -259,7 +260,7 @@ export default function NewsFeedTab({
             onClick={onSyncFeeds}
             disabled={syncing}
             className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium font-inter rounded-md text-accent bg-accent-dim hover:brightness-110 transition-all cursor-pointer disabled:opacity-50"
-            title="Scrape RSS sources and fetch new articles now"
+            title={tr("Scrape RSS sources and fetch new articles now")}
           >
             <motion.span
               animate={syncing ? { rotate: 360 } : { rotate: 0 }}
@@ -267,7 +268,7 @@ export default function NewsFeedTab({
             >
               <CloudDownload size={14} />
             </motion.span>
-            {syncing ? 'Syncing...' : 'Sync'}
+            {syncing ? tr('Syncing...') : tr('Sync')}
           </button>}
         </div>
 
@@ -275,7 +276,7 @@ export default function NewsFeedTab({
         <div className="flex items-center gap-3">
           {lastUpdated && (
             <span className="text-[11px] font-jetbrains text-text-tertiary">
-              Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {tr("Updated")} {lastUpdated.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
           <div className="relative w-full sm:w-60">
@@ -285,7 +286,7 @@ export default function NewsFeedTab({
             />
             <input
               type="text"
-              placeholder="Search articles..."
+              placeholder={tr("Search articles...")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className={`
@@ -305,7 +306,7 @@ export default function NewsFeedTab({
       {/* Time range */}
       <div className="mb-3 flex items-center gap-2 flex-wrap">
         <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B] mr-1">
-          Window
+          {tr("Window")}
         </span>
         {timeRangeOptions.map((option) => {
           const active = timeRange === option.key;
@@ -323,7 +324,7 @@ export default function NewsFeedTab({
                 }
               `}
             >
-              {option.label}
+              {tr(option.label)}
             </button>
           );
         })}
@@ -343,7 +344,7 @@ export default function NewsFeedTab({
               }
             `}
           >
-            All
+            {tr("All")}
           </button>
           {categories.map((category) => {
             const active = selectedCategories.includes(category);
@@ -364,7 +365,7 @@ export default function NewsFeedTab({
                   }
                 `}
               >
-                {category}
+                {tr(category)}
               </button>
             );
           })}
@@ -373,7 +374,7 @@ export default function NewsFeedTab({
               onClick={() => setSelectedCategories([])}
               className="text-[11px] font-medium font-inter text-text-tertiary hover:text-accent transition-colors cursor-pointer"
             >
-              Clear
+              {tr("Clear")}
             </button>
           )}
         </div>
@@ -384,11 +385,11 @@ export default function NewsFeedTab({
         <span className="text-[11px] font-jetbrains uppercase tracking-[0.08em] text-text-tertiary">
           {filteredAndSorted.length === 0
             ? '0 articles'
-            : `${startIndex + 1}-${Math.min(startIndex + pageSize, filteredAndSorted.length)} of ${filteredAndSorted.length} articles`}
+            : tr('{from}-{to} of {total} articles', { from: startIndex + 1, to: Math.min(startIndex + pageSize, filteredAndSorted.length), total: filteredAndSorted.length })}
         </span>
         {(syncing || refreshing) && (
           <span className="text-[11px] font-jetbrains text-accent animate-pulse">
-            {syncing ? 'Syncing RSS feeds...' : 'Refreshing...'}
+            {syncing ? tr('Syncing RSS feeds...') : tr('Refreshing...')}
           </span>
         )}
       </div>
@@ -423,7 +424,7 @@ export default function NewsFeedTab({
       {filteredAndSorted.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20">
           <p className="text-text-secondary text-sm font-inter">
-            No articles match your search
+            {tr("No articles match your search")}
           </p>
         </div>
       )}
@@ -436,25 +437,25 @@ export default function NewsFeedTab({
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
               className="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-elevated disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-              aria-label="Previous page"
+              aria-label={tr("Previous page")}
             >
               <ChevronLeft size={18} />
             </button>
             <span className="text-[11px] font-medium font-jetbrains text-text-secondary min-w-[90px] text-center">
-              Page {page} of {totalPages}
+              {tr("Page")} {page} {tr("of")} {totalPages}
             </span>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
               className="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-elevated disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-              aria-label="Next page"
+              aria-label={tr("Next page")}
             >
               <ChevronRight size={18} />
             </button>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-jetbrains text-text-tertiary">Show</span>
+            <span className="text-[11px] font-jetbrains text-text-tertiary">{tr("Show")}</span>
             <select
               value={pageSize}
               onChange={(e) => setPageSize(Number(e.target.value))}
@@ -484,6 +485,7 @@ interface NewsCardProps {
    a poll. Their props are primitives plus a stable article object, so a
    shallow comparison keeps all but the genuinely changed ones still. */
 const NewsCard = memo(function NewsCard({ article, isSelected, isHot, onClick }: NewsCardProps) {
+  useI18n();
   const dotColor = severityColor[article.severity] || 'bg-medium';
 
   return (
@@ -526,7 +528,7 @@ const NewsCard = memo(function NewsCard({ article, isSelected, isHot, onClick }:
           {article.source}
         </span>
         <span className="text-[11px] font-medium font-jetbrains text-text-tertiary shrink-0">
-          {timeAgo(article.publishedAt)}
+          {timeAgo(article.publishedAtIso ?? article.publishedAt)}
         </span>
       </div>
 
@@ -539,7 +541,7 @@ const NewsCard = memo(function NewsCard({ article, isSelected, isHot, onClick }:
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
-          title="Read the original article"
+          title={tr("Read the original article")}
           className="text-text-primary hover:text-accent hover:underline decoration-1 underline-offset-2 transition-colors"
         >
           {article.title}
@@ -548,7 +550,7 @@ const NewsCard = memo(function NewsCard({ article, isSelected, isHot, onClick }:
 
       {/* Row 3: Publish date */}
       <p className="text-[11px] font-medium font-jetbrains text-text-tertiary mb-2">
-        {article.publishDate}
+        {article.publishedAtIso ? publishDate(article.publishedAtIso) : article.publishDate}
       </p>
 
       {/* Row 4: Summary */}
@@ -562,11 +564,11 @@ const NewsCard = memo(function NewsCard({ article, isSelected, isHot, onClick }:
           {isHot && (
             <span className="inline-flex items-center gap-1 px-2 py-1 bg-orange-500/10 text-orange-500 text-[11px] font-medium font-jetbrains uppercase tracking-wide rounded-pill">
               <Thermometer size={12} />
-              Hot
+              {tr("Hot")}
             </span>
           )}
           <span className="inline-flex items-center px-2 py-1 bg-accent-dim text-accent text-[11px] font-medium font-jetbrains uppercase tracking-wide rounded-pill">
-            {article.category}
+            {tr(article.category)}
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -574,16 +576,16 @@ const NewsCard = memo(function NewsCard({ article, isSelected, isHot, onClick }:
             href={article.url}
             target="_blank"
             rel="noopener noreferrer"
-            title="Open original article"
+            title={tr("Open original article")}
             onClick={(e) => e.stopPropagation()}
             className="flex items-center gap-1 text-[11px] font-medium font-jetbrains text-accent hover:text-accent/80 transition-colors"
           >
             <ExternalLink size={12} />
-            Source
+            {tr("Source")}
           </a>
           <span className="flex items-center gap-1.5 text-[11px] font-medium font-jetbrains text-text-tertiary">
             <Clock size={12} />
-            {article.readTime}
+            {trMessage(article.readTime)}
           </span>
         </div>
       </div>

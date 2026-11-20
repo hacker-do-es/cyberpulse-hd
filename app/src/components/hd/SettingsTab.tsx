@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/auth';
 import StackManager from './StackManager';
 import { Panel, PageHeader, Field, Badge, EmptyState } from './ui';
 import { inputCls, selectCls, notifyError, formatDateTime, TIMEZONES } from './helpers';
+import { tr } from '@/lib/i18n';
 
 export default function SettingsTab({ onStackChanged }: { onStackChanged?: () => void }) {
   const { me } = useAuth();
@@ -17,8 +18,8 @@ export default function SettingsTab({ onStackChanged }: { onStackChanged?: () =>
   return (
     <div className="max-w-5xl mx-auto pb-12">
       <PageHeader
-        title={`${me?.activeTenant?.name ?? 'Company'} · Settings`}
-        subtitle={isAdmin ? 'Stack, AI provider and users of this company.' : 'The technology stack your company monitors.'}
+        title={`${me?.activeTenant?.name ?? tr('Company')} · ${tr('Settings')}`}
+        subtitle={isAdmin ? tr('Stack, AI provider and users of this company.') : tr('The technology stack your company monitors.')}
       />
       <div className="space-y-6">
         <StackManager canEdit={isAdmin} onChanged={onStackChanged} />
@@ -80,7 +81,7 @@ function CompanyAndAi() {
       });
       apply(d);
       await refresh();
-      toast.success('Settings saved');
+      toast.success(tr("Settings saved"));
     } catch (err) {
       notifyError(err);
     } finally {
@@ -92,7 +93,7 @@ function CompanyAndAi() {
     try {
       apply(await settingsApi.update({ ai: { apiKey: '' } }));
       await refresh();
-      toast.success('API key removed');
+      toast.success(tr("API key removed"));
     } catch (err) {
       notifyError(err);
     }
@@ -102,7 +103,7 @@ function CompanyAndAi() {
     setTesting(true);
     try {
       const r = await settingsApi.testAi();
-      toast.success(`${r.provider === 'anthropic' ? 'Claude' : 'OpenAI'} (${r.model}) answered correctly`);
+      toast.success(tr('{provider} ({model}) answered correctly', { provider: r.provider === 'anthropic' ? 'Claude' : 'OpenAI', model: r.model }));
     } catch (err) {
       notifyError(err);
     } finally {
@@ -115,62 +116,62 @@ function CompanyAndAi() {
 
   return (
     <Panel
-      title="Company & AI"
+      title={tr("Company & AI")}
       icon={<Bot size={18} />}
-      description="Language and time zone apply to channel digests and schedules. The AI key writes the digest summaries and the AI posts; it is stored encrypted and never shown again."
+      description={tr("Language and time zone apply to channel digests and schedules. The AI key writes the digest summaries and the AI posts; it is stored encrypted and never shown again.")}
       actions={
         <>
           {s.ai.keySet && s.ai.provider !== 'none' && (
             <Button size="sm" variant="outline" className="border-border-default bg-transparent text-text-secondary" disabled={testing} onClick={() => void test()}>
-              {testing ? 'Testing…' : 'Test connection'}
+              {testing ? tr('Testing…') : tr('Test connection')}
             </Button>
           )}
-          <Button size="sm" onClick={() => void save()} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
+          <Button size="sm" onClick={() => void save()} disabled={saving}>{saving ? tr('Saving…') : tr('Save')}</Button>
         </>
       }
     >
       <div className="grid gap-5 md:grid-cols-2">
-        <Field label="Digest language" htmlFor="lang">
+        <Field label={tr("Digest language")} htmlFor="lang">
           <select id="lang" className={selectCls} value={language} onChange={(e) => setLanguage(e.target.value as 'es' | 'en')}>
-            <option value="es">Español</option>
-            <option value="en">English</option>
+            <option value="es">{tr("Español")}</option>
+            <option value="en">{tr("English")}</option>
           </select>
         </Field>
-        <Field label="Time zone" htmlFor="tz">
+        <Field label={tr("Time zone")} htmlFor="tz">
           <select id="tz" className={selectCls} value={timezone} onChange={(e) => setTimezone(e.target.value)}>
             {[...new Set([timezone, ...TIMEZONES])].map((tz) => <option key={tz} value={tz}>{tz}</option>)}
           </select>
         </Field>
 
-        <Field label="AI provider" htmlFor="provider">
+        <Field label={tr("AI provider")} htmlFor="provider">
           <select id="provider" className={selectCls} value={provider} onChange={(e) => changeProvider(e.target.value as 'none' | 'anthropic' | 'openai')}>
-            <option value="none">None (templates only)</option>
-            <option value="anthropic">Claude (Anthropic)</option>
-            <option value="openai">ChatGPT (OpenAI)</option>
+            <option value="none">{tr("None (templates only)")}</option>
+            <option value="anthropic">{tr("Claude (Anthropic)")}</option>
+            <option value="openai">{tr("ChatGPT (OpenAI)")}</option>
           </select>
         </Field>
 
         {provider === 'anthropic' && (
-          <Field label="Model" htmlFor="model" hint="Opus gives the best summaries; Haiku is the cheapest.">
+          <Field label={tr("Model")} htmlFor="model" hint={tr("Opus gives the best summaries; Haiku is the cheapest.")}>
             <select id="model" className={selectCls} value={model} onChange={(e) => setModel(e.target.value)}>
               {s.options.anthropicModels.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </Field>
         )}
         {provider === 'openai' && (
-          <Field label="Model" htmlFor="model">
+          <Field label={tr("Model")} htmlFor="model">
             <Input id="model" value={model} onChange={(e) => setModel(e.target.value)} className={inputCls} placeholder={s.options.defaultOpenAiModel} />
           </Field>
         )}
 
         {provider !== 'none' && (
           <Field
-            label="API key"
+            label={tr("API key")}
             htmlFor="apikey"
             hint={
               s.ai.keySet && !providerChanged
-                ? <>Saved key: <span className="font-jetbrains">{s.ai.keyHint}</span>. Leave empty to keep it.</>
-                : provider === 'anthropic' ? 'Create one at console.anthropic.com → API keys.' : 'Create one at platform.openai.com → API keys.'
+                ? <>{tr("Saved key:")} <span className="font-jetbrains">{s.ai.keyHint}</span>{tr(". Leave empty to keep it.")}</>
+                : provider === 'anthropic' ? tr('Create one at console.anthropic.com → API keys.') : tr('Create one at platform.openai.com → API keys.')
             }
           >
             <div className="flex gap-2">
@@ -184,7 +185,7 @@ function CompanyAndAi() {
                 placeholder={provider === 'anthropic' ? 'sk-ant-…' : 'sk-…'}
               />
               {s.ai.keySet && !providerChanged && (
-                <Button variant="outline" className="border-border-default bg-transparent text-text-secondary" onClick={() => void removeKey()} aria-label="Remove saved key">
+                <Button variant="outline" className="border-border-default bg-transparent text-text-secondary" onClick={() => void removeKey()} aria-label={tr("Remove saved key")}>
                   <Trash2 size={14} />
                 </Button>
               )}
@@ -193,13 +194,13 @@ function CompanyAndAi() {
         )}
 
         {provider === 'openai' && (
-          <Field label="Base URL (optional)" htmlFor="baseurl" hint="Only for OpenAI-compatible endpoints on the server allowlist.">
+          <Field label={tr("Base URL (optional)")} htmlFor="baseurl" hint={tr("Only for OpenAI-compatible endpoints on the server allowlist.")}>
             <Input id="baseurl" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} className={inputCls} placeholder="https://api.openai.com/v1" />
           </Field>
         )}
       </div>
       {providerChanged && s.ai.keySet && !apiKey && provider !== 'none' && (
-        <p className="mt-4 text-xs text-medium">Switching provider discards the saved key: paste the key for the new provider.</p>
+        <p className="mt-4 text-xs text-medium">{tr("Switching provider discards the saved key: paste the key for the new provider.")}</p>
       )}
     </Panel>
   );
@@ -238,7 +239,7 @@ function UsersPanel() {
   };
 
   const remove = async (u: TenantUser) => {
-    if (!window.confirm(`Delete user "${u.username}"? This cannot be undone.`)) return;
+    if (!window.confirm(tr('Delete user "{name}"? This cannot be undone.', { name: u.username }))) return;
     try {
       await usersApi.remove(u.id);
       await load();
@@ -249,23 +250,23 @@ function UsersPanel() {
 
   return (
     <Panel
-      title="Users"
+      title={tr("Users")}
       icon={<Users size={18} />}
-      description="Admins manage the stack, AI and channels. Members can read news and generate posts."
-      actions={<Button size="sm" onClick={() => setCreateOpen(true)}><UserPlus size={14} /> New user</Button>}
+      description={tr("Admins manage the stack, AI and channels. Members can read news and generate posts.")}
+      actions={<Button size="sm" onClick={() => setCreateOpen(true)}><UserPlus size={14} /> {tr("New user")}</Button>}
     >
       {users.length === 0 ? (
-        <EmptyState>No users in this company yet.</EmptyState>
+        <EmptyState>{tr("No users in this company yet.")}</EmptyState>
       ) : (
         <div className="overflow-x-auto border border-border-default rounded-lg">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-[10px] font-jetbrains uppercase tracking-[0.08em] text-text-tertiary bg-bg-elevated">
-                <th className="px-3 py-2 font-medium">User</th>
-                <th className="px-3 py-2 font-medium">Role</th>
-                <th className="px-3 py-2 font-medium">Status</th>
-                <th className="px-3 py-2 font-medium">Last login</th>
-                <th className="px-3 py-2"><span className="sr-only">Actions</span></th>
+                <th className="px-3 py-2 font-medium">{tr("User")}</th>
+                <th className="px-3 py-2 font-medium">{tr("Role")}</th>
+                <th className="px-3 py-2 font-medium">{tr("Status")}</th>
+                <th className="px-3 py-2 font-medium">{tr("Last login")}</th>
+                <th className="px-3 py-2"><span className="sr-only">{tr("Actions")}</span></th>
               </tr>
             </thead>
             <tbody>
@@ -274,7 +275,7 @@ function UsersPanel() {
                 return (
                   <tr key={u.id} className="border-t border-border-default">
                     <td className="px-3 py-2">
-                      <div className="text-text-primary font-medium">{u.username}{self && <span className="text-text-tertiary font-normal"> (you)</span>}</div>
+                      <div className="text-text-primary font-medium">{u.username}{self && <span className="text-text-tertiary font-normal"> {tr("(you)")}</span>}</div>
                       {u.displayName && <div className="text-xs text-text-tertiary">{u.displayName}</div>}
                     </td>
                     <td className="px-3 py-2">
@@ -282,35 +283,35 @@ function UsersPanel() {
                         className={`${selectCls} h-8 w-28 text-xs`}
                         value={u.role}
                         disabled={self}
-                        onChange={(e) => void update(u, { role: e.target.value as 'admin' | 'member' }, 'Role updated')}
-                        aria-label={`Role of ${u.username}`}
+                        onChange={(e) => void update(u, { role: e.target.value as 'admin' | 'member' }, tr('Role updated'))}
+                        aria-label={tr('Role of {name}', { name: u.username })}
                       >
-                        <option value="admin">Admin</option>
-                        <option value="member">Member</option>
+                        <option value="admin">{tr("Admin")}</option>
+                        <option value="member">{tr("Member")}</option>
                       </select>
                     </td>
                     <td className="px-3 py-2 space-x-1">
-                      {u.active ? <Badge tone="ok">Active</Badge> : <Badge tone="bad">Disabled</Badge>}
-                      {u.totpEnabled && <Badge tone="accent"><ShieldCheck size={10} /> 2FA</Badge>}
+                      {u.active ? <Badge tone="ok">{tr("Active")}</Badge> : <Badge tone="bad">{tr("Disabled")}</Badge>}
+                      {u.totpEnabled && <Badge tone="accent"><ShieldCheck size={10} /> {tr("2FA")}</Badge>}
                     </td>
                     <td className="px-3 py-2 text-xs text-text-secondary">{formatDateTime(u.lastLoginAt)}</td>
                     <td className="px-3 py-2">
                       <div className="flex justify-end gap-1">
-                        <Button size="sm" variant="ghost" className="h-7 text-xs text-text-secondary" onClick={() => setResetFor(u)} title="Set a new password">
+                        <Button size="sm" variant="ghost" className="h-7 text-xs text-text-secondary" onClick={() => setResetFor(u)} title={tr("Set a new password")}>
                           <KeyRound size={13} />
                         </Button>
                         {u.totpEnabled && (
-                          <Button size="sm" variant="ghost" className="h-7 text-xs text-text-secondary" onClick={() => void update(u, { resetTotp: true }, '2FA removed')}>
-                            Reset 2FA
+                          <Button size="sm" variant="ghost" className="h-7 text-xs text-text-secondary" onClick={() => void update(u, { resetTotp: true }, tr('2FA removed'))}>
+                            {tr("Reset 2FA")}
                           </Button>
                         )}
                         {!self && (
-                          <Button size="sm" variant="ghost" className="h-7 text-xs text-text-secondary" onClick={() => void update(u, { active: !u.active }, u.active ? 'User disabled' : 'User enabled')}>
-                            {u.active ? 'Disable' : 'Enable'}
+                          <Button size="sm" variant="ghost" className="h-7 text-xs text-text-secondary" onClick={() => void update(u, { active: !u.active }, u.active ? tr('User disabled') : tr('User enabled'))}>
+                            {u.active ? tr('Disable') : tr('Enable')}
                           </Button>
                         )}
                         {!self && (
-                          <Button size="sm" variant="ghost" className="h-7 text-text-tertiary hover:text-critical" onClick={() => void remove(u)} aria-label={`Delete ${u.username}`}>
+                          <Button size="sm" variant="ghost" className="h-7 text-text-tertiary hover:text-critical" onClick={() => void remove(u)} aria-label={tr('Delete {name}', { name: u.username })}>
                             <Trash2 size={13} />
                           </Button>
                         )}
@@ -337,7 +338,7 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; on
     setBusy(true);
     try {
       await usersApi.create({ ...f, displayName: f.displayName || undefined });
-      toast.success(`User ${f.username} created`);
+      toast.success(tr('User {name} created', { name: f.username }));
       setF({ username: '', displayName: '', password: '', role: 'member' });
       onOpenChange(false);
       await onCreated();
@@ -350,25 +351,25 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; on
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-bg-card border-border-default text-text-primary sm:max-w-md">
-        <DialogHeader><DialogTitle className="font-rajdhani text-xl flex items-center gap-2"><Building2 size={18} className="text-accent" /> New user</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle className="font-rajdhani text-xl flex items-center gap-2"><Building2 size={18} className="text-accent" /> {tr("New user")}</DialogTitle></DialogHeader>
         <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-          <Field label="Username" htmlFor="nu-user" hint="Letters, digits and . _ @ -">
+          <Field label={tr("Username")} htmlFor="nu-user" hint={tr("Letters, digits and . _ @ -")}>
             <Input id="nu-user" autoComplete="off" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value })} className={inputCls} required />
           </Field>
-          <Field label="Full name (optional)" htmlFor="nu-name">
+          <Field label={tr("Full name (optional)")} htmlFor="nu-name">
             <Input id="nu-name" value={f.displayName} onChange={(e) => setF({ ...f, displayName: e.target.value })} className={inputCls} />
           </Field>
-          <Field label="Initial password" htmlFor="nu-pw" hint="At least 12 characters. Share it securely; they can change it after logging in.">
+          <Field label={tr("Initial password")} htmlFor="nu-pw" hint={tr("At least 12 characters. Share it securely; they can change it after logging in.")}>
             <Input id="nu-pw" type="password" autoComplete="new-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} className={inputCls} required minLength={12} />
           </Field>
-          <Field label="Role" htmlFor="nu-role">
+          <Field label={tr("Role")} htmlFor="nu-role">
             <select id="nu-role" className={selectCls} value={f.role} onChange={(e) => setF({ ...f, role: e.target.value as 'admin' | 'member' })}>
-              <option value="member">Member (read-only)</option>
-              <option value="admin">Admin</option>
+              <option value="member">{tr("Member (read-only)")}</option>
+              <option value="admin">{tr("Admin")}</option>
             </select>
           </Field>
           <DialogFooter>
-            <Button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create user'}</Button>
+            <Button type="submit" disabled={busy}>{busy ? tr('Creating…') : tr('Create user')}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -384,7 +385,7 @@ function ResetPasswordDialog({ user, onClose }: { user: TenantUser | null; onClo
     setBusy(true);
     try {
       await usersApi.update(user.id, { password: pw });
-      toast.success(`Password updated for ${user.username}; their sessions were closed`);
+      toast.success(tr('Password updated for {name}; their sessions were closed', { name: user.username }));
       setPw('');
       onClose();
     } catch (err) {
@@ -396,12 +397,12 @@ function ResetPasswordDialog({ user, onClose }: { user: TenantUser | null; onClo
   return (
     <Dialog open={user !== null} onOpenChange={(o) => { if (!o) { setPw(''); onClose(); } }}>
       <DialogContent className="bg-bg-card border-border-default text-text-primary sm:max-w-md">
-        <DialogHeader><DialogTitle className="font-rajdhani text-xl">New password for {user?.username}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle className="font-rajdhani text-xl">{tr("New password for")} {user?.username}</DialogTitle></DialogHeader>
         <form className="space-y-4" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
-          <Field label="Password" htmlFor="rp-pw" hint="At least 12 characters.">
+          <Field label={tr("Password")} htmlFor="rp-pw" hint={tr("At least 12 characters.")}>
             <Input id="rp-pw" type="password" autoComplete="new-password" value={pw} onChange={(e) => setPw(e.target.value)} className={inputCls} required minLength={12} />
           </Field>
-          <DialogFooter><Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Set password'}</Button></DialogFooter>
+          <DialogFooter><Button type="submit" disabled={busy}>{busy ? tr('Saving…') : tr('Set password')}</Button></DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

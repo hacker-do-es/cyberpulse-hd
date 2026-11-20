@@ -33,7 +33,8 @@ import {
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import type { NewsArticle } from '@/data/mockNews';
-import { generateAiPost, type GenerateAiPostParams } from '@/services/apiService';
+import { generateAiPost, type GenerateAiPostParams } from '@/services/apiService';import { getLang, tr } from '@/lib/i18n';
+
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
@@ -1052,14 +1053,14 @@ function LinkedInPreview({ content, lang }: { content: string; lang: Language })
             background: 'linear-gradient(135deg, #E8533F 0%, #008F6B 100%)',
           }}
         >
-          AC
+          {tr("AC")}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-[14px] text-[#232A36] font-inter">Alex Chen</span>
+            <span className="font-semibold text-[14px] text-[#232A36] font-inter">{tr("Alex Chen")}</span>
           </div>
           <p className="text-[12px] text-[#768390] font-inter leading-tight">
-            Cybersecurity Analyst | CISSP | Cloud Security
+            {tr("Cybersecurity Analyst | CISSP | Cloud Security")}
           </p>
           <div className="flex items-center gap-1 mt-0.5">
             <span className="text-[12px] text-[#768390] font-inter">
@@ -1135,10 +1136,10 @@ function CarouselPreview({ content, lang }: { content: string; lang: Language })
             background: 'linear-gradient(135deg, #E8533F 0%, #008F6B 100%)',
           }}
         >
-          AC
+          {tr("AC")}
         </div>
         <div>
-          <div className="font-semibold text-[13px] text-[#232A36] font-inter">Alex Chen</div>
+          <div className="font-semibold text-[13px] text-[#232A36] font-inter">{tr("Alex Chen")}</div>
           <div className="text-[11px] text-[#768390] font-inter">
             {lang === 'es' ? 'Documento de LinkedIn' : 'LinkedIn Document'}
           </div>
@@ -1464,7 +1465,8 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
   const [tone, setTone] = useState<Tone>('Professional');
   const [format, setFormat] = useState<Format>('News Analysis');
   const [length, setLength] = useState<Length>('medium');
-  const [language, setLanguage] = useState<Language>('en');
+  /* Post language starts as the interface language; the user can change it. */
+  const [language, setLanguage] = useState<Language>(getLang());
   const [generatedContent, setGeneratedContent] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasGenerated, setHasGenerated] = useState(false);
@@ -1648,13 +1650,13 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
     return (
       <div className="h-full flex flex-col items-center justify-center gap-4">
         <p className="text-text-secondary text-sm font-inter font-medium">
-          No articles available. Go back to News Feed to load articles.
+          {tr("No articles available. Go back to News Feed to load articles.")}
         </p>
         <button
           onClick={onBackToNewsFeed}
           className="px-4 py-2 bg-accent text-[#0D1117] font-inter text-sm font-semibold rounded-button hover:brightness-110 transition-all cursor-pointer"
         >
-          Go to News Feed
+          {tr("Go to News Feed")}
         </button>
       </div>
     );
@@ -1673,7 +1675,7 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
           <div className="mb-4">
             <Select value={selectedArticleId} onValueChange={setSelectedArticleId}>
               <SelectTrigger className="w-full bg-[#1A1F2E] border-[#2A3140] text-[#E6EDF3] font-inter text-sm rounded-lg h-10 hover:border-[#636E7B] transition-colors [&>svg]:text-[#636E7B]">
-                <SelectValue placeholder="Select an article" />
+                <SelectValue placeholder={tr("Select an article")} />
               </SelectTrigger>
               <SelectContent className="bg-[#1A1F2E] border-[#2A3140] rounded-lg">
                 {articles.map((article) => (
@@ -1848,7 +1850,7 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
                     language === 'en' ? 'text-[#E6EDF3]' : 'text-[#8B949E]'
                   }`}
                 >
-                  🇬🇧 English
+                  {tr("🇬🇧 English")}
                 </label>
               </div>
               <div className="flex items-center gap-2">
@@ -1863,7 +1865,7 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
                     language === 'es' ? 'text-[#E6EDF3]' : 'text-[#8B949E]'
                   }`}
                 >
-                  🇪🇸 Español
+                  {tr("🇪🇸 Español")}
                 </label>
               </div>
             </RadioGroup>
@@ -1885,7 +1887,7 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
                     value={t}
                     className="text-[#E6EDF3] font-inter text-sm focus:bg-[rgba(232, 83, 63,0.1)] focus:text-[#E6EDF3] cursor-pointer"
                   >
-                    {toneLabel(t)}
+                    {tr(toneLabel(t))}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1908,7 +1910,7 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
                     value={f}
                     className="text-[#E6EDF3] font-inter text-sm focus:bg-[rgba(232, 83, 63,0.1)] focus:text-[#E6EDF3] cursor-pointer"
                   >
-                    {f === 'Thread' ? 'Thread / Carousel' : f === 'Contrarian' ? 'Contrarian Take' : f}
+                    {tr(f === 'Thread' ? 'Thread / Carousel' : f === 'Contrarian' ? 'Contrarian Take' : f)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1989,7 +1991,7 @@ export default function GeneratePostTab({ articles, selectedArticleId: propArtic
                 <div className="mb-3 flex items-center gap-2 rounded-lg border border-border-default bg-bg-elevated px-3 py-2">
                   <AlertCircle size={14} className="text-accent shrink-0" />
                   <span className="text-xs font-inter text-text-secondary">
-                    AI unavailable — using local templates
+                    {tr("AI unavailable — using local templates")}
                   </span>
                 </div>
               )}

@@ -25,12 +25,13 @@ import {
 import { useRSSFeeds } from '@/hooks/useRSSFeeds';
 import { countArticlesBySource, type TimeRange } from '@/lib/timeRange';
 import { createSource, deleteSource, fetchTechStackNews, fetchTechStack, type TechStackNewsArticle } from '@/services/apiService';
+import { LanguageToggle, tr, useI18n } from '@/lib/i18n';
 
 function TabLoading() {
   return (
     <div className="h-full flex items-center justify-center">
       <span className="text-[11px] font-jetbrains uppercase tracking-[0.08em] text-text-tertiary">
-        Loading…
+        {tr("Loading…")}
       </span>
     </div>
   );
@@ -46,14 +47,16 @@ function NeedsCompany({ onPick }: { onPick: () => void }) {
   return (
     <div className="h-full flex flex-col items-center justify-center text-center gap-3">
       <Building2 size={28} className="text-accent" />
-      <p className="text-text-secondary text-sm max-w-sm">Pick a company in the selector at the top right (or in Companies) to see its stack, channels and settings.</p>
-      <button onClick={onPick} className="text-accent text-sm hover:underline cursor-pointer">Go to Companies</button>
+      <p className="text-text-secondary text-sm max-w-sm">{tr("Pick a company in the selector at the top right (or in Companies) to see its stack, channels and settings.")}</p>
+      <button onClick={onPick} className="text-accent text-sm hover:underline cursor-pointer">{tr("Go to Companies")}</button>
     </div>
   );
 }
 
 export default function Layout() {
   const { me, logout, switchTenant } = useAuth();
+  /* Subscribes the whole shell to language changes: every screen below re-renders with it. */
+  useI18n();
   const role = me?.user.role;
   const hasTenant = Boolean(me?.activeTenant);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -286,7 +289,7 @@ export default function Layout() {
           <button
             onClick={() => setSidebarOpen(true)}
             className="lg:hidden mr-3 p-2 -ml-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-elevated transition-colors cursor-pointer"
-            aria-label="Open menu"
+            aria-label={tr("Open menu")}
           >
             <Menu size={20} />
           </button>
@@ -294,12 +297,12 @@ export default function Layout() {
           <div className="ml-auto flex items-center gap-2 pl-3 shrink-0">
             {role === 'superadmin' ? (
               <select
-                aria-label="Active company"
+                aria-label={tr("Active company")}
                 value={me?.activeTenant?.id ?? ''}
                 onChange={(e) => { void switchTenant(e.target.value ? Number(e.target.value) : null); }}
                 className="h-8 max-w-[180px] rounded-md border border-border-default bg-bg-input px-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent/40"
               >
-                <option value="">— No company —</option>
+                <option value="">{tr("— No company —")}</option>
                 {me?.tenants.map((t) => (
                   <option key={t.id} value={t.id}>{t.name}{t.active ? '' : ' (disabled)'}</option>
                 ))}
@@ -319,13 +322,14 @@ export default function Layout() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="bg-bg-card border-border-default text-text-primary">
                 <DropdownMenuLabel className="text-xs text-text-tertiary font-normal">
-                  {me?.user.role === 'superadmin' ? 'Hacker-Do superadmin' : me?.user.role === 'admin' ? 'Company admin' : 'Member'}
+                  {me?.user.role === 'superadmin' ? tr('Hacker-Do superadmin') : me?.user.role === 'admin' ? tr('Company admin') : tr('Member')}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator className="bg-border-default" />
-                <DropdownMenuItem onClick={() => setAccountOpen(true)} className="cursor-pointer"><UserCog size={14} /> My account</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => void logout()} className="cursor-pointer"><LogOut size={14} /> Sign out</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setAccountOpen(true)} className="cursor-pointer"><UserCog size={14} /> {tr("My account")}</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => void logout()} className="cursor-pointer"><LogOut size={14} /> {tr("Sign out")}</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <LanguageToggle />
           </div>
           <AccountDialog open={accountOpen} onOpenChange={setAccountOpen} />
         </div>

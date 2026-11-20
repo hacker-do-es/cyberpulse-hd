@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Clock, RefreshCw, ExternalLink, Thermometer, ChevronLeft, ChevronRight, Server, TrendingUp, AlertTriangle } from 'lucide-react';
 import type { TechStackNewsArticle } from '@/services/apiService';
 import { timeAgo } from '@/lib/dateUtils';
+import { locale, tr, trMessage, useI18n } from '@/lib/i18n';
 
 interface MyStackTabProps {
   articles: TechStackNewsArticle[];
@@ -130,14 +131,13 @@ export default function MyStackTab({
       <div className="h-full flex flex-col items-center justify-center gap-4 px-8 text-center">
         <Server size={48} className="text-text-tertiary" />
         <h3 className="text-lg font-semibold font-inter text-text-primary">
-          Configure Your Tech Stack
+          {tr("Configure Your Tech Stack")}
         </h3>
         <p className="text-sm text-text-secondary font-inter max-w-md">
-          Add your technologies (PHP, Apache, WordPress, etc.) in Settings to receive
-          personalized security news relevant to your infrastructure.
+          {tr("Add your technologies (PHP, Apache, WordPress, etc.) in Settings to receive personalized security news relevant to your infrastructure.")}
         </p>
         <p className="text-xs text-text-tertiary font-jetbrains">
-          Settings → My Technology Stack
+          {tr("Settings → My Technology Stack")}
         </p>
       </div>
     );
@@ -153,10 +153,10 @@ export default function MyStackTab({
           <RefreshCw size={32} className="text-accent" />
         </motion.div>
         <p className="text-text-secondary text-sm font-inter font-medium">
-          Analyzing articles for your tech stack...
+          {tr("Analyzing articles for your tech stack...")}
         </p>
         <p className="text-text-tertiary text-xs font-jetbrains">
-          Matching against {techStackCount} {techStackCount === 1 ? 'technology' : 'technologies'}
+          {tr("Matching against")} {techStackCount} {techStackCount === 1 ? 'technology' : 'technologies'}
         </p>
       </div>
     );
@@ -170,14 +170,14 @@ export default function MyStackTab({
           <div className="flex items-center gap-2 mb-1">
             <TrendingUp size={16} className="text-accent" />
             <span className="text-xs font-jetbrains uppercase tracking-wide text-text-tertiary">
-              Matched Articles
+              {tr("Matched Articles")}
             </span>
           </div>
           <p className="text-2xl font-bold font-inter text-text-primary">
             {statistics.matchedArticles}
           </p>
           <p className="text-xs text-text-tertiary font-jetbrains mt-1">
-            from {statistics.totalArticles} total
+            {tr("from")} {statistics.totalArticles} {tr("total")}
           </p>
         </div>
 
@@ -185,14 +185,14 @@ export default function MyStackTab({
           <div className="flex items-center gap-2 mb-1">
             <Server size={16} className="text-accent" />
             <span className="text-xs font-jetbrains uppercase tracking-wide text-text-tertiary">
-              Technologies
+              {tr("Technologies")}
             </span>
           </div>
           <p className="text-2xl font-bold font-inter text-text-primary">
             {Object.keys(statistics.byTechnology).length}
           </p>
           <p className="text-xs text-text-tertiary font-jetbrains mt-1">
-            in your stack
+            {tr("in your stack")}
           </p>
         </div>
 
@@ -200,14 +200,14 @@ export default function MyStackTab({
           <div className="flex items-center gap-2 mb-1">
             <AlertTriangle size={16} className="text-accent" />
             <span className="text-xs font-jetbrains uppercase tracking-wide text-text-tertiary">
-              Top Category
+              {tr("Top Category")}
             </span>
           </div>
           <p className="text-lg font-bold font-inter text-text-primary truncate">
             {Object.entries(statistics.bySeverity).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A'}
           </p>
           <p className="text-xs text-text-tertiary font-jetbrains mt-1">
-            {Object.entries(statistics.bySeverity).sort((a, b) => b[1] - a[1])[0]?.[1] || 0} articles
+            {Object.entries(statistics.bySeverity).sort((a, b) => b[1] - a[1])[0]?.[1] || 0} {tr("articles")}
           </p>
         </div>
       </div>
@@ -229,7 +229,7 @@ export default function MyStackTab({
                   }
                 `}
               >
-                {option.label}
+                {tr(option.label)}
               </button>
             ))}
           </div>
@@ -238,7 +238,7 @@ export default function MyStackTab({
             onClick={onRefresh}
             disabled={refreshing}
             className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium font-inter rounded-md text-accent bg-accent-dim hover:brightness-110 transition-all cursor-pointer disabled:opacity-50"
-            title={lastUpdated ? `Last updated: ${lastUpdated.toLocaleTimeString()}` : 'Refresh'}
+            title={lastUpdated ? tr('Last updated: {time}', { time: lastUpdated.toLocaleTimeString(locale()) }) : tr('Refresh')}
           >
             <motion.span
               animate={refreshing ? { rotate: 360 } : { rotate: 0 }}
@@ -246,14 +246,14 @@ export default function MyStackTab({
             >
               <RefreshCw size={14} />
             </motion.span>
-            {refreshing ? 'Updating...' : 'Refresh'}
+            {refreshing ? tr('Updating...') : tr('Refresh')}
           </button>
         </div>
 
         <div className="flex items-center gap-3">
           {lastUpdated && (
             <span className="text-[11px] font-jetbrains text-text-tertiary">
-              Updated {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {tr("Updated")} {lastUpdated.toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
           <div className="relative w-full sm:w-60">
@@ -263,7 +263,7 @@ export default function MyStackTab({
             />
             <input
               type="text"
-              placeholder="Search articles..."
+              placeholder={tr("Search articles...")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className={`
@@ -284,7 +284,7 @@ export default function MyStackTab({
       {technologies.length > 0 && (
         <div className="mb-3 flex items-center gap-2 flex-wrap">
           <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B] mr-1">
-            Technologies
+            {tr("Technologies")}
           </span>
           <button
             onClick={() => setSelectedTech([])}
@@ -297,7 +297,7 @@ export default function MyStackTab({
               }
             `}
           >
-            All
+            {tr("All")}
           </button>
           {technologies.slice(0, 10).map((tech) => {
             const active = selectedTech.includes(tech);
@@ -330,7 +330,7 @@ export default function MyStackTab({
       {categories.length > 0 && (
         <div className="mb-3 flex items-center gap-2 flex-wrap">
           <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B] mr-1">
-            Categories
+            {tr("Categories")}
           </span>
           <button
             onClick={() => setSelectedCategories([])}
@@ -343,7 +343,7 @@ export default function MyStackTab({
               }
             `}
           >
-            All
+            {tr("All")}
           </button>
           {categories.map((category) => {
             const active = selectedCategories.includes(category);
@@ -364,7 +364,7 @@ export default function MyStackTab({
                   }
                 `}
               >
-                {category}
+                {tr(category)}
               </button>
             );
           })}
@@ -376,11 +376,11 @@ export default function MyStackTab({
         <span className="text-[11px] font-jetbrains uppercase tracking-[0.08em] text-text-tertiary">
           {filteredAndSorted.length === 0
             ? '0 articles'
-            : `${startIndex + 1}-${Math.min(startIndex + pageSize, filteredAndSorted.length)} of ${filteredAndSorted.length} articles`}
+            : tr('{from}-{to} of {total} articles', { from: startIndex + 1, to: Math.min(startIndex + pageSize, filteredAndSorted.length), total: filteredAndSorted.length })}
         </span>
         {refreshing && (
           <span className="text-[11px] font-jetbrains text-accent animate-pulse">
-            Refreshing...
+            {tr("Refreshing...")}
           </span>
         )}
       </div>
@@ -414,7 +414,7 @@ export default function MyStackTab({
       {filteredAndSorted.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20">
           <p className="text-text-secondary text-sm font-inter">
-            No articles match your filters
+            {tr("No articles match your filters")}
           </p>
         </div>
       )}
@@ -427,25 +427,25 @@ export default function MyStackTab({
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
               className="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-elevated disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-              aria-label="Previous page"
+              aria-label={tr("Previous page")}
             >
               <ChevronLeft size={18} />
             </button>
             <span className="text-[11px] font-medium font-jetbrains text-text-secondary min-w-[90px] text-center">
-              Page {page} of {totalPages}
+              {tr("Page")} {page} {tr("of")} {totalPages}
             </span>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
               className="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-elevated disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-              aria-label="Next page"
+              aria-label={tr("Next page")}
             >
               <ChevronRight size={18} />
             </button>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-jetbrains text-text-tertiary">Show</span>
+            <span className="text-[11px] font-jetbrains text-text-tertiary">{tr("Show")}</span>
             <select
               value={pageSize}
               onChange={(e) => setPageSize(Number(e.target.value))}
@@ -471,6 +471,7 @@ interface StackNewsCardProps {
 }
 
 const StackNewsCard = memo(function StackNewsCard({ article, isSelected, onClick }: StackNewsCardProps) {
+  useI18n();
   const dotColor = severityColor[article.severity] || 'bg-medium';
 
   return (
@@ -511,7 +512,7 @@ const StackNewsCard = memo(function StackNewsCard({ article, isSelected, onClick
           {article.source}
         </span>
         <span className="text-[11px] font-medium font-jetbrains text-text-tertiary shrink-0">
-          {timeAgo(article.publishedAt)}
+          {timeAgo(article.publishedAtIso ?? article.publishedAt)}
         </span>
       </div>
 
@@ -522,7 +523,7 @@ const StackNewsCard = memo(function StackNewsCard({ article, isSelected, onClick
           target="_blank"
           rel="noopener noreferrer"
           onClick={(e) => e.stopPropagation()}
-          title="Read the original article"
+          title={tr("Read the original article")}
           className="text-text-primary hover:text-accent hover:underline decoration-1 underline-offset-2 transition-colors"
         >
           {article.title}
@@ -541,7 +542,7 @@ const StackNewsCard = memo(function StackNewsCard({ article, isSelected, onClick
         ))}
         {article.matchedTechnologies.length > 3 && (
           <span className="text-[10px] font-jetbrains text-text-tertiary">
-            +{article.matchedTechnologies.length - 3} more
+            +{article.matchedTechnologies.length - 3} {tr("more")}
           </span>
         )}
       </div>
@@ -555,7 +556,7 @@ const StackNewsCard = memo(function StackNewsCard({ article, isSelected, onClick
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center px-2 py-1 bg-accent-dim text-accent text-[11px] font-medium font-jetbrains uppercase tracking-wide rounded-pill">
-            {article.category}
+            {tr(article.category)}
           </span>
         </div>
         <div className="flex items-center gap-3">
@@ -563,16 +564,16 @@ const StackNewsCard = memo(function StackNewsCard({ article, isSelected, onClick
             href={article.url}
             target="_blank"
             rel="noopener noreferrer"
-            title="Open original article"
+            title={tr("Open original article")}
             onClick={(e) => e.stopPropagation()}
             className="flex items-center gap-1 text-[11px] font-medium font-jetbrains text-accent hover:text-accent/80 transition-colors"
           >
             <ExternalLink size={12} />
-            Source
+            {tr("Source")}
           </a>
           <span className="flex items-center gap-1.5 text-[11px] font-medium font-jetbrains text-text-tertiary">
             <Clock size={12} />
-            {article.readTime}
+            {trMessage(article.readTime)}
           </span>
         </div>
       </div>

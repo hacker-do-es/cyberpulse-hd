@@ -8,6 +8,7 @@ import { fetchTechStack, createTechStackItem, deleteTechStackItem, updateTechSta
 import { stackApi, type ImportSummary } from '@/services/hdApi';
 import { Panel, EmptyState, Badge } from './ui';
 import { inputCls, notifyError } from './helpers';
+import { tr, trMessage } from '@/lib/i18n';
 
 export default function StackManager({ canEdit, onChanged }: { canEdit: boolean; onChanged?: () => void }) {
   const [stack, setStack] = useState<TechStackItem[]>([]);
@@ -23,7 +24,7 @@ export default function StackManager({ canEdit, onChanged }: { canEdit: boolean;
     try {
       setStack(await fetchTechStack());
     } catch (err) {
-      notifyError(err, 'Could not load the stack');
+      notifyError(err, tr("Could not load the stack"));
     } finally {
       setLoading(false);
     }
@@ -102,17 +103,17 @@ export default function StackManager({ canEdit, onChanged }: { canEdit: boolean;
 
   return (
     <Panel
-      title="Technology stack"
+      title={tr("Technology stack")}
       icon={<Server size={18} />}
-      description="News is matched against these technologies, both on the My Stack tab and in the channel digests."
+      description={tr("News is matched against these technologies, both on the My Stack tab and in the channel digests.")}
       actions={
         <>
           <Button asChild variant="outline" size="sm" className="border-border-default bg-transparent text-text-secondary">
-            <a href="/api/tech-stack/export.csv"><Download size={14} /> Export CSV</a>
+            <a href="/api/tech-stack/export.csv"><Download size={14} /> {tr("Export CSV")}</a>
           </Button>
           {canEdit && (
             <Button size="sm" onClick={() => setImportOpen(true)}>
-              <FileUp size={14} /> Import CSV
+              <FileUp size={14} /> {tr("Import CSV")}
             </Button>
           )}
         </>
@@ -123,36 +124,36 @@ export default function StackManager({ canEdit, onChanged }: { canEdit: boolean;
           className="grid grid-cols-1 sm:grid-cols-[2fr_1fr_1.3fr_1.3fr_auto] gap-2 mb-5"
           onSubmit={(e) => { e.preventDefault(); void add(); }}
         >
-          <Input placeholder="Technology *" aria-label="Technology" value={form.technology} onChange={(e) => setForm({ ...form, technology: e.target.value })} className={inputCls} maxLength={100} />
-          <Input placeholder="Version" aria-label="Version" value={form.version} onChange={(e) => setForm({ ...form, version: e.target.value })} className={inputCls} maxLength={100} />
-          <Input placeholder="Vendor" aria-label="Vendor" value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} className={inputCls} maxLength={100} />
-          <Input placeholder="Category" aria-label="Category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className={inputCls} maxLength={100} />
+          <Input placeholder={tr("Technology *")} aria-label={tr("Technology")} value={form.technology} onChange={(e) => setForm({ ...form, technology: e.target.value })} className={inputCls} maxLength={100} />
+          <Input placeholder={tr("Version")} aria-label={tr("Version")} value={form.version} onChange={(e) => setForm({ ...form, version: e.target.value })} className={inputCls} maxLength={100} />
+          <Input placeholder={tr("Vendor")} aria-label={tr("Vendor")} value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} className={inputCls} maxLength={100} />
+          <Input placeholder={tr("Category")} aria-label={tr("Category")} value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className={inputCls} maxLength={100} />
           <Button type="submit" disabled={adding || !form.technology.trim()}>
-            <Plus size={14} /> Add
+            <Plus size={14} /> {tr("Add")}
           </Button>
         </form>
       )}
 
       {stack.length > 8 && (
-        <Input placeholder={`Filter ${stack.length} technologies…`} value={filter} onChange={(e) => setFilter(e.target.value)} className={`${inputCls} mb-3 max-w-xs`} />
+        <Input placeholder={tr('Filter {n} technologies…', { n: stack.length })} value={filter} onChange={(e) => setFilter(e.target.value)} className={`${inputCls} mb-3 max-w-xs`} />
       )}
 
       {loading ? (
-        <p className="text-sm text-text-tertiary">Loading…</p>
+        <p className="text-sm text-text-tertiary">{tr("Loading…")}</p>
       ) : stack.length === 0 ? (
         <EmptyState>
-          No technologies yet. {canEdit ? 'Add them one by one or import a CSV.' : 'Ask an admin of your company to add them.'}
+          {tr("No technologies yet.")} {canEdit ? tr('Add them one by one or import a CSV.') : tr('Ask an admin of your company to add them.')}
         </EmptyState>
       ) : (
         <div className="overflow-x-auto border border-border-default rounded-lg">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-[10px] font-jetbrains uppercase tracking-[0.08em] text-text-tertiary bg-bg-elevated">
-                <th className="px-3 py-2 font-medium">Technology</th>
-                <th className="px-3 py-2 font-medium">Version</th>
-                <th className="px-3 py-2 font-medium">Vendor</th>
-                <th className="px-3 py-2 font-medium">Category</th>
-                {canEdit && <th className="px-3 py-2 w-20"><span className="sr-only">Actions</span></th>}
+                <th className="px-3 py-2 font-medium">{tr("Technology")}</th>
+                <th className="px-3 py-2 font-medium">{tr("Version")}</th>
+                <th className="px-3 py-2 font-medium">{tr("Vendor")}</th>
+                <th className="px-3 py-2 font-medium">{tr("Category")}</th>
+                {canEdit && <th className="px-3 py-2 w-20"><span className="sr-only">{tr("Actions")}</span></th>}
               </tr>
             </thead>
             <tbody>
@@ -165,7 +166,7 @@ export default function StackManager({ canEdit, onChanged }: { canEdit: boolean;
                         onChange={(e) => setEditing({ ...editing, [field]: e.target.value })}
                         onKeyDown={editKeys}
                         aria-label={field[0].toUpperCase() + field.slice(1)}
-                        placeholder={field === 'technology' ? 'Technology *' : ''}
+                        placeholder={field === 'technology' ? tr('Technology *') : ''}
                         className={`${inputCls} h-8 text-sm`}
                         maxLength={100}
                         autoFocus={field === 'technology'}
@@ -177,14 +178,14 @@ export default function StackManager({ canEdit, onChanged }: { canEdit: boolean;
                       onClick={() => void saveEdit()}
                       disabled={saving || !editing.technology.trim()}
                       className="p-1.5 rounded text-text-tertiary hover:text-accent hover:bg-accent/10 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                      aria-label="Save changes"
+                      aria-label={tr("Save changes")}
                     >
                       <Check size={14} />
                     </button>
                     <button
                       onClick={() => setEditing(null)}
                       className="p-1.5 rounded text-text-tertiary hover:text-text-primary hover:bg-bg-elevated cursor-pointer"
-                      aria-label="Cancel editing"
+                      aria-label={tr("Cancel editing")}
                     >
                       <X size={14} />
                     </button>
@@ -201,14 +202,14 @@ export default function StackManager({ canEdit, onChanged }: { canEdit: boolean;
                       <button
                         onClick={() => startEdit(item)}
                         className="p-1.5 rounded text-text-tertiary hover:text-accent hover:bg-accent/10 cursor-pointer"
-                        aria-label={`Edit ${item.technology}`}
+                        aria-label={tr('Edit {name}', { name: item.technology })}
                       >
                         <Pencil size={14} />
                       </button>
                       <button
                         onClick={() => void remove(item)}
                         className="p-1.5 rounded text-text-tertiary hover:text-critical hover:bg-critical/10 cursor-pointer"
-                        aria-label={`Remove ${item.technology}`}
+                        aria-label={tr('Remove {name}', { name: item.technology })}
                       >
                         <Trash2 size={14} />
                       </button>
@@ -267,7 +268,7 @@ function CsvImportDialog({ open, onOpenChange, onImported }: {
   const onFile = async (file: File | undefined) => {
     if (!file) return;
     if (file.size > 1024 * 1024) {
-      toast.error('The file is larger than 1 MB');
+      toast.error(tr("The file is larger than 1 MB"));
       return;
     }
     const text = await file.text();
@@ -281,7 +282,7 @@ function CsvImportDialog({ open, onOpenChange, onImported }: {
     setBusy(true);
     try {
       const r = await stackApi.importCsv(csv, mode, false);
-      toast.success(`Imported ${r.imported} ${r.imported === 1 ? 'technology' : 'technologies'}`);
+      toast.success(r.imported === 1 ? tr('Imported 1 technology') : tr('Imported {n} technologies', { n: r.imported ?? 0 }));
       await onImported();
       reset();
       onOpenChange(false);
@@ -296,11 +297,10 @@ function CsvImportDialog({ open, onOpenChange, onImported }: {
     <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
       <DialogContent className="bg-bg-card border-border-default text-text-primary sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="font-rajdhani text-xl">Import stack from CSV</DialogTitle>
+          <DialogTitle className="font-rajdhani text-xl">{tr("Import stack from CSV")}</DialogTitle>
           <DialogDescription className="text-text-tertiary text-xs">
-            Columns: <code className="font-jetbrains text-text-secondary">technology, version, vendor, category</code>. Only technology is
-            required. Comma or semicolon separated, English or Spanish headers, Excel exports work as-is.{' '}
-            <a href="/api/tech-stack/template.csv" className="text-accent hover:underline">Download template</a>
+            {tr("Columns:")} <code className="font-jetbrains text-text-secondary">{tr("technology, version, vendor, category")}</code>{tr(". Only technology is required. Comma or semicolon separated, English or Spanish headers, Excel exports work as-is.")}{' '}
+            <a href="/api/tech-stack/template.csv" className="text-accent hover:underline">{tr("Download template")}</a>
           </DialogDescription>
         </DialogHeader>
 
@@ -311,12 +311,12 @@ function CsvImportDialog({ open, onOpenChange, onImported }: {
             onDrop={(e) => { e.preventDefault(); void onFile(e.dataTransfer.files?.[0]); }}
           >
             <Upload size={22} className="text-accent" />
-            <span className="text-sm text-text-secondary">{fileName || 'Choose a .csv file or drop it here'}</span>
+            <span className="text-sm text-text-secondary">{fileName || tr('Choose a .csv file or drop it here')}</span>
             <input ref={fileRef} type="file" accept=".csv,text/csv" className="sr-only" onChange={(e) => void onFile(e.target.files?.[0])} />
           </label>
 
           <fieldset className="flex flex-wrap gap-4 text-sm">
-            <legend className="sr-only">Import mode</legend>
+            <legend className="sr-only">{tr("Import mode")}</legend>
             {(['append', 'replace'] as const).map((m) => (
               <label key={m} className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -326,7 +326,7 @@ function CsvImportDialog({ open, onOpenChange, onImported }: {
                   onChange={() => { setMode(m); if (csv) void runPreview(csv, m); }}
                   className="accent-[#E8533F]"
                 />
-                <span className="text-text-primary">{m === 'append' ? 'Add to current stack' : 'Replace current stack'}</span>
+                <span className="text-text-primary">{m === 'append' ? tr('Add to current stack') : tr('Replace current stack')}</span>
               </label>
             ))}
           </fieldset>
@@ -334,17 +334,17 @@ function CsvImportDialog({ open, onOpenChange, onImported }: {
           {preview && (
             <div className="space-y-3">
               <div className="flex flex-wrap gap-2">
-                <Badge tone="ok">{preview.toInsert} to add</Badge>
-                {preview.alreadyPresent > 0 && <Badge>{preview.alreadyPresent} already in stack</Badge>}
-                {preview.duplicatesInFile > 0 && <Badge>{preview.duplicatesInFile} duplicated in file</Badge>}
-                {preview.errorCount > 0 && <Badge tone="bad">{preview.errorCount} invalid rows</Badge>}
-                {preview.mode === 'replace' && preview.willRemove > 0 && <Badge tone="warn">{preview.willRemove} current entries will be removed</Badge>}
+                <Badge tone="ok">{preview.toInsert} {tr("to add")}</Badge>
+                {preview.alreadyPresent > 0 && <Badge>{preview.alreadyPresent} {tr("already in stack")}</Badge>}
+                {preview.duplicatesInFile > 0 && <Badge>{preview.duplicatesInFile} {tr("duplicated in file")}</Badge>}
+                {preview.errorCount > 0 && <Badge tone="bad">{preview.errorCount} {tr("invalid rows")}</Badge>}
+                {preview.mode === 'replace' && preview.willRemove > 0 && <Badge tone="warn">{preview.willRemove} {tr("current entries will be removed")}</Badge>}
               </div>
 
               {preview.errors.length > 0 && (
                 <ul className="text-xs text-critical space-y-0.5 max-h-24 overflow-y-auto">
                   {preview.errors.map((e, i) => (
-                    <li key={i}>{e.line > 0 ? `Line ${e.line}: ` : ''}{e.message}</li>
+                    <li key={i}>{e.line > 0 ? tr('Line {n}: ', { n: e.line }) : ''}{trMessage(e.message)}</li>
                   ))}
                 </ul>
               )}
@@ -354,8 +354,8 @@ function CsvImportDialog({ open, onOpenChange, onImported }: {
                   <table className="w-full text-xs">
                     <thead className="sticky top-0 bg-bg-elevated">
                       <tr className="text-left text-text-tertiary font-jetbrains uppercase text-[10px]">
-                        <th className="px-3 py-1.5">Technology</th><th className="px-3 py-1.5">Version</th>
-                        <th className="px-3 py-1.5">Vendor</th><th className="px-3 py-1.5">Category</th>
+                        <th className="px-3 py-1.5">{tr("Technology")}</th><th className="px-3 py-1.5">{tr("Version")}</th>
+                        <th className="px-3 py-1.5">{tr("Vendor")}</th><th className="px-3 py-1.5">{tr("Category")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -377,13 +377,13 @@ function CsvImportDialog({ open, onOpenChange, onImported }: {
 
         <DialogFooter className="gap-2">
           <Button variant="outline" className="border-border-default bg-transparent text-text-secondary" onClick={() => onOpenChange(false)}>
-            Cancel
+            {tr("Cancel")}
           </Button>
           <Button
             onClick={() => void confirm()}
             disabled={busy || !preview || preview.valid === 0 || (preview.mode === 'append' && preview.toInsert === 0)}
           >
-            {busy ? 'Working…' : mode === 'replace' ? 'Replace stack' : `Import ${preview?.toInsert ?? ''}`}
+            {busy ? tr('Working…') : mode === 'replace' ? tr('Replace stack') : tr('Import {n}', { n: preview?.toInsert ?? '' })}
           </Button>
         </DialogFooter>
       </DialogContent>
