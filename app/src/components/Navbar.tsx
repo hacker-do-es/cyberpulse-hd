@@ -1,9 +1,9 @@
-import { Newspaper, FileText, History, Server, Radio, Settings, Building2 } from 'lucide-react';
+import { Newspaper, FileText, History, Server, Radio, Settings, Building2, ScrollText } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Role } from '@/services/hdApi';
 import { tr } from '@/lib/i18n';
 
-export type TabId = 'news' | 'my-stack' | 'generate' | 'history' | 'channels' | 'settings' | 'admin';
+export type TabId = 'news' | 'my-stack' | 'generate' | 'history' | 'channels' | 'settings' | 'admin' | 'logs';
 
 interface TabConfig {
   id: TabId;
@@ -20,6 +20,7 @@ const tabs: TabConfig[] = [
   { id: 'channels', label: 'Channels', icon: <Radio size={16} />, roles: ['admin', 'superadmin'] },
   { id: 'settings', label: 'Settings', icon: <Settings size={16} /> },
   { id: 'admin', label: 'Companies', icon: <Building2 size={16} />, roles: ['superadmin'] },
+  { id: 'logs', label: 'Logs', icon: <ScrollText size={16} />, roles: ['superadmin'] },
 ];
 
 export function tabsForRole(role: Role | undefined): TabId[] {

@@ -12,6 +12,8 @@ import { userController } from '../controllers/userController';
 import { handle } from '../lib/http';
 import { CSV_MAX_BYTES } from '../services/csv';
 import { requireAuth, requireRole, requireTenant, requireTenantAdmin } from './middlewares/auth';
+import { auditTrail } from './middlewares/audit';
+import { logsController } from '../controllers/logsController';
 import { loginLimiter, requireMcpKey, sendLimiter, writeLimiter } from './middlewares/security';
 
 /* Every HTTP endpoint, with its guards. Controllers hold no routing logic and
@@ -19,6 +21,7 @@ import { loginLimiter, requireMcpKey, sendLimiter, writeLimiter } from './middle
 
 export function apiRouter(appVersion: string): express.Router {
   const api = express.Router();
+  api.use(auditTrail);
 
   /* ---------------- Public ---------------- */
   api.get('/health', handle(healthController.health));
@@ -46,6 +49,9 @@ export function apiRouter(appVersion: string): express.Router {
 
   /* Superadmin: companies */
   api.get('/admin/tenants', requireRole('superadmin'), handle(adminController.list));
+  api.get('/admin/logs', requireRole('superadmin'), handle(logsController.list));
+  api.get('/admin/logs/sources', requireRole('superadmin'), handle(logsController.sources));
+  api.get('/admin/logs/export.txt', requireRole('superadmin'), handle(logsController.exportTxt));
   api.post('/admin/tenants', requireRole('superadmin'), writeLimiter, handle(adminController.create));
   api.patch('/admin/tenants/:id', requireRole('superadmin'), writeLimiter, handle(adminController.update));
   api.delete('/admin/tenants/:id', requireRole('superadmin'), writeLimiter, handle(adminController.remove));

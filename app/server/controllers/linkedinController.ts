@@ -1,3 +1,4 @@
+import { audit } from '../services/logs/logStore';
 import type express from 'express';
 import { linkedinConfig } from '../config';
 import { decryptSecret, encryptSecret } from '../lib/crypto';
@@ -80,6 +81,7 @@ export const linkedinController = {
         scope: token.scope,
         expiresAt: toSqlUtc(new Date(Date.now() + token.expiresIn * 1000)),
       });
+      audit({ action: 'linkedin.connect', detail: `ok scopes=${token.scope}`, userId: pending.userId, ip: req.ip ?? null });
       return backToApp(res, { linkedin: 'connected', view });
     } catch (err) {
       console.warn('[LINKEDIN] connect failed:', err instanceof Error ? err.message : err);

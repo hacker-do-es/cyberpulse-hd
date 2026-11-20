@@ -318,7 +318,6 @@ export const ES: Record<string, string> = {
   'Slack and Rocket.Chat incoming webhooks, or email through your own SMTP server. Articles are never sent twice to the same channel; when nothing new matches, nothing is sent.': 'Webhooks entrantes de Slack y Rocket.Chat, o email a través de tu propio servidor SMTP. Un artículo nunca se envía dos veces al mismo canal; si no hay nada nuevo, no se envía nada.',
   'New channel': 'Nuevo canal',
   'No channels yet. Add a Slack or Rocket.Chat webhook, or an email list, to start sending digests.': 'Aún no hay canales. Añade un webhook de Slack o Rocket.Chat, o una lista de emails, para empezar a enviar resúmenes.',
-  'Paused': 'En pausa',
   'AI summary': 'Resumen IA',
   'Next:': 'Próximo:',
   'Last sent:': 'Último envío:',
@@ -382,7 +381,6 @@ export const ES: Record<string, string> = {
   'High and above': 'Alta o superior',
   'Critical only': 'Solo crítica',
   'Max articles per digest': 'Máx. de artículos por resumen',
-  'Message': 'Mensaje',
   'Header': 'Encabezado',
   'Footer': 'Pie',
   'Show footer': 'Mostrar pie',
@@ -618,6 +616,26 @@ export const ES: Record<string, string> = {
   'No articles match your stack yet.': 'Todavía no hay artículos que coincidan con tu stack.',
   'No articles match these filters.': 'Ningún artículo coincide con estos filtros.',
   'Show more': 'Ver más',
+
+  // Logs tab (superadmin)
+  'Logs': 'Logs',
+  'Server activity and audit trail of every change, kept for 14 days. Times in Madrid time. Secrets are masked before storing.': 'Actividad del servidor y auditoría de cada cambio, guardadas 14 días. Horas de Madrid. Los secretos se enmascaran antes de guardar.',
+  'Search message, user or IP…': 'Busca en mensaje, usuario o IP…',
+  'Search logs': 'Buscar en los logs',
+  'Live': 'En vivo',
+  'Paused': 'En pausa',
+  'Info': 'Info',
+  'Warning': 'Aviso',
+  'Error': 'Error',
+  'Audit only': 'Solo auditoría',
+  '1H': '1 H',
+  '{n} of {total}': '{n} de {total}',
+  'No log lines match these filters.': 'Ninguna línea coincide con estos filtros.',
+  'Time': 'Hora',
+  'Level': 'Nivel',
+  'Message': 'Mensaje',
+  'User · Company · IP': 'Usuario · Empresa · IP',
+  'Load older lines': 'Cargar líneas anteriores',
 };
 
 /* Server messages with values in them. */

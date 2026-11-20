@@ -6,6 +6,7 @@ import { startEventLoopMonitor } from './lib/eventLoop';
 import { seedSources } from './services/seeds';
 import { startJobs } from './jobs';
 import { bootstrapSuperadmin } from './useCases/bootstrapSuperadmin';
+import { installConsoleCapture, startLogStore } from './services/logs/logStore';
 
 /* Entry point: database + migrations, seed data, background jobs, HTTP. */
 
@@ -23,7 +24,10 @@ if (config.isProduction && !isEncryptionEnabled()) {
 const app = createApp();
 
 async function start() {
+  /* Keep server log lines for the superadmin "Logs" tab (stored once the DB is open). */
+  installConsoleCapture();
   getDb();
+  startLogStore();
   seedSources();
   await bootstrapSuperadmin();
   startEventLoopMonitor();

@@ -1,3 +1,4 @@
+import { audit } from '../services/logs/logStore';
 import type express from 'express';
 import QRCode from 'qrcode';
 import { badRequest, conflict, notFound } from '../lib/http';
@@ -23,9 +24,15 @@ export const authController = {
   async login(req: express.Request, res: express.Response) {
     const { username, password, totp } = req.body ?? {};
     const result = await login(username, password, totp);
+    const tried = typeof username === 'string' ? username.trim().slice(0, 60) : null;
     if (!result.ok) {
+      /* "Code required" is the normal first step of a 2FA login, not a failure. */
+      if (!(result.totpRequired && result.status === 401 && result.error === 'Two-factor code required')) {
+        audit({ action: 'auth.login', detail: `failed: ${result.error}`, level: 'warn', username: tried, ip: req.ip ?? null });
+      }
       return res.status(result.status).json({ error: result.error, totpRequired: result.totpRequired ?? false });
     }
+    audit({ action: 'auth.login', detail: 'ok', userId: result.user.id, username: result.user.username, tenantId: result.user.tenantId ?? null, ip: req.ip ?? null });
     res.cookie(SESSION_COOKIE, createSession(result.user), sessionCookieOptions(req));
     res.json({ ok: true });
   },

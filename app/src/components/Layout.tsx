@@ -11,6 +11,7 @@ import MyStackTab from './MyStackTab';
    view, so both load on demand. */
 const GeneratePostTab = lazy(() => import('./GeneratePostTab'));
 const HistoryTab = lazy(() => import('./HistoryTab'));
+const LogsTab = lazy(() => import('./hd/LogsTab'));
 import type { SourceInfo } from '@/hooks/useRSSFeeds';
 import { Menu, LogOut, UserCog, Building2, ChevronDown } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
@@ -302,6 +303,13 @@ export default function Layout() {
         return <SettingsTab key={`settings-${me?.activeTenant?.id}`} onStackChanged={refreshStackNews} />;
       case 'admin':
         return <AdminTab onEnterTenant={() => setActiveTab('settings')} />;
+      case 'logs':
+        if (role !== 'superadmin') return null;
+        return (
+          <Suspense key="logs" fallback={<TabLoading />}>
+            <LogsTab />
+          </Suspense>
+        );
       default:
         return null;
     }

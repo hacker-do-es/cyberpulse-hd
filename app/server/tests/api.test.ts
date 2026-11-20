@@ -16,6 +16,7 @@ process.env.CYBERPULSE_ALLOW_HTTP_WEBHOOKS = 'true';
 /* The tests below log in far more often than one person would. */
 process.env.CYBERPULSE_RATE_LOGIN = '1000';
 process.env.CYBERPULSE_RATE_SEND = '1000';
+process.env.CYBERPULSE_RATE_WRITE = '1000';
 
 let base = '';
 let server: http.Server;
@@ -59,6 +60,7 @@ beforeAll(async () => {
   const { getSqlite } = await import('../db/client');
   const { createUser } = await import('../services/auth/userService');
   getSqlite();
+  (await import('../services/logs/logStore')).startLogStore();
   await createUser({ username: 'root', password: PW, role: 'superadmin', tenantId: null });
 
   server = app.listen(0);
@@ -575,3 +577,54 @@ describe('login lockout', () => {
     expect(both.map((r) => r.status).sort()).toEqual([200, 401]);
   });
 });
+
+describe('application log (superadmin Logs tab)', () => {
+  it('audits sign-ins and changes, and shows them only to the superadmin', async () => {
+    const root = await new Client().login('root', PW);
+    /* A failed and a successful sign-in, with the attempted username and IP. */
+    await new Client().req('POST', '/api/auth/login', { username: 'root', password: 'wrong-password-123' });
+    const created = await root.req('POST', '/api/admin/tenants', { name: 'Logco', admin: { username: 'logadmin', password: PW } });
+    expect(created.status).toBe(201);
+    const tenantId = created.body.tenant.id;
+    const admin = await new Client().login('logadmin', PW);
+    expect((await admin.req('POST', '/api/channels', { name: 'x', type: 'slack', webhookUrl: 'https://hooks.slack.com/services/T000/B000/SECRETSECRETSECRET', schedule: { type: 'interval', intervalHours: 6 }, minSeverity: 'low' })).status).toBeLessThan(500);
+    console.log('[TESTLOG] token=abc123456789 and Bearer abcdefghijklmnop');
+
+    /* Only the superadmin. */
+    expect((await admin.req('GET', '/api/admin/logs')).status).toBe(403);
+    expect((await new Client().req('GET', '/api/admin/logs')).status).toBe(401);
+
+    const all = await root.req('GET', '/api/admin/logs?kind=audit&limit=500');
+    expect(all.status).toBe(200);
+    const msgs = all.body.entries.map((e: any) => `${e.message} ${e.username ?? ''} ${e.tenantId ?? ''}`);
+    expect(msgs.some((m: string) => m.startsWith('auth.login failed') && m.includes('root'))).toBe(true);
+    expect(msgs.some((m: string) => m.startsWith('auth.login ok') && m.includes('logadmin'))).toBe(true);
+    expect(msgs.some((m: string) => m.startsWith('company.create ok'))).toBe(true);
+    const ch = all.body.entries.find((e: any) => e.message.startsWith('channel.create'));
+    expect(ch).toMatchObject({ username: 'logadmin', tenantId, level: expect.any(String) });
+    expect(ch.ip).toBeTruthy();
+    /* Bodies are never logged. */
+    expect(JSON.stringify(all.body)).not.toContain('SECRETSECRET');
+    expect(JSON.stringify(all.body)).not.toContain(PW);
+
+    /* Filters: level, search, paging. */
+    const warn = await root.req('GET', '/api/admin/logs?level=warn&q=auth.login');
+    expect(warn.body.entries.length).toBeGreaterThan(0);
+    expect(warn.body.entries.every((e: any) => e.level === 'warn' && e.message.includes('auth.login'))).toBe(true);
+    const page1 = await root.req('GET', '/api/admin/logs?limit=2');
+    expect(page1.body.entries).toHaveLength(2);
+    expect(page1.body.hasMore).toBe(true);
+    const page2 = await root.req('GET', `/api/admin/logs?limit=2&before=${page1.body.entries[1].id}`);
+    expect(page2.body.entries[0].id).toBeLessThan(page1.body.entries[1].id);
+    const newer = await root.req('GET', `/api/admin/logs?after=${page1.body.entries[0].id}`);
+    expect(newer.body.entries.every((e: any) => e.id > page1.body.entries[0].id)).toBe(true);
+
+    /* Sources and the text export. */
+    const src = await root.req('GET', '/api/admin/logs/sources');
+    expect(src.body.sources.map((s: any) => s.source)).toContain('AUDIT');
+    const txt = await root.req('GET', '/api/admin/logs/export.txt?kind=audit');
+    expect(typeof txt.body).toBe('string');
+    expect(txt.body).toMatch(/INFO +\[AUDIT\] company\.create ok/);
+  });
+});
+

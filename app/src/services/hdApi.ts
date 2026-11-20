@@ -269,3 +269,50 @@ export const linkedinApi = {
   disconnect: () => call<{ success: true }>('DELETE', '/api/linkedin'),
   publish: (text: string) => call<{ urn: string; url: string }>('POST', '/api/linkedin/posts', { text }),
 };
+
+/* ------------------------------------------------------------------ */
+/*  Application log (superadmin)                                       */
+/* ------------------------------------------------------------------ */
+
+export type LogLevel = 'info' | 'warn' | 'error';
+
+export interface LogEntry {
+  id: number;
+  ts: string;
+  level: LogLevel;
+  source: string;
+  kind: 'app' | 'audit';
+  message: string;
+  userId: number | null;
+  username: string | null;
+  tenantId: number | null;
+  ip: string | null;
+}
+
+export interface LogFilter {
+  level?: LogLevel[];
+  source?: string[];
+  kind?: 'app' | 'audit' | '';
+  q?: string;
+  from?: string;
+  to?: string;
+}
+
+export function logQuery(f: LogFilter, extra: Record<string, string | number | undefined> = {}): string {
+  const p = new URLSearchParams();
+  if (f.level?.length) p.set('level', f.level.join(','));
+  if (f.source?.length) p.set('source', f.source.join(','));
+  if (f.kind) p.set('kind', f.kind);
+  if (f.q?.trim()) p.set('q', f.q.trim());
+  if (f.from) p.set('from', f.from);
+  if (f.to) p.set('to', f.to);
+  for (const [k, v] of Object.entries(extra)) if (v !== undefined) p.set(k, String(v));
+  return p.toString();
+}
+
+export const logsApi = {
+  list: (f: LogFilter, page: { before?: number; after?: number; limit?: number } = {}) =>
+    call<{ entries: LogEntry[]; hasMore: boolean; total: number }>('GET', `/api/admin/logs?${logQuery(f, page)}`),
+  sources: () => call<{ sources: Array<{ source: string; n: number }> }>('GET', '/api/admin/logs/sources').then((r) => r.sources),
+  exportUrl: (f: LogFilter) => `/api/admin/logs/export.txt?${logQuery(f)}`,
+};

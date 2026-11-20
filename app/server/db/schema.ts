@@ -242,3 +242,26 @@ export const linkedinPosts = sqliteTable('linkedin_posts', {
   chars: integer('chars').notNull(),
   createdAt: text('created_at').default(now),
 }, (t) => [index('idx_linkedin_posts_user').on(t.userId, t.createdAt)]);
+
+/* ------------------------------------------------------------------ */
+/*  Application log (superadmin "Logs" tab)                            */
+/* ------------------------------------------------------------------ */
+
+/* Server log lines plus audit events, kept 14 days / 50k rows
+   (services/logs/logStore.ts). Messages are redacted before insert. */
+export const appLogs = sqliteTable('app_logs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  /* ISO 8601 UTC with milliseconds, e.g. 2026-11-20T14:05:01.123Z */
+  ts: text('ts').notNull(),
+  level: text('level', { enum: ['info', 'warn', 'error'] }).notNull(),
+  /* Leading [TAG] of the line (SCRAPER, DIGEST, ...), AUDIT, or APP. */
+  source: text('source').notNull(),
+  kind: text('kind', { enum: ['app', 'audit'] }).notNull(),
+  message: text('message').notNull(),
+  userId: integer('user_id'),
+  username: text('username'),
+  tenantId: integer('tenant_id'),
+  ip: text('ip'),
+}, (t) => [index('idx_app_logs_ts').on(t.ts), index('idx_app_logs_source').on(t.source, t.ts)]);
+
+export type AppLogRow = typeof appLogs.$inferSelect;
