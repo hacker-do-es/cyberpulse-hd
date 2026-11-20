@@ -58,7 +58,7 @@ const allowedOrigins = config.corsOrigins.length ? config.corsOrigins : DEFAULT_
 
 export const corsPolicy = cors((req, callback) => {
   const origin = req.headers.origin;
-  if (origin && !isSameOrigin(origin, req.headers.host) && !allowedOrigins.includes(origin)) {
+  if (origin && !isSameOrigin(origin, req.headers.host, (req as express.Request).protocol) && !allowedOrigins.includes(origin)) {
     return callback(new HttpError(403, `Origin not allowed by CORS: ${origin}`), {});
   }
   callback(null, {
@@ -68,6 +68,19 @@ export const corsPolicy = cors((req, callback) => {
     allowedHeaders: ['Content-Type', 'X-API-Key', 'X-Requested-With'],
   });
 });
+
+/* Request bodies are never compressed by the app or its API clients, and the
+   decompressors are attack surface (CVE-2026-111497 "Node2Shell" was an
+   out-of-bounds write in Node's Brotli decoder reached through
+   Content-Encoding: br). Anything but identity is refused before any parser
+   runs; the parsers also have inflate disabled as a second layer. */
+export function rejectCompressedBodies(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const enc = req.headers['content-encoding'];
+  if (enc && String(enc).trim().toLowerCase() !== 'identity') {
+    return res.status(415).json({ error: 'Compressed request bodies are not accepted' });
+  }
+  next();
+}
 
 /* ------------------------------------------------------------------ */
 /*  Machine access to the MCP endpoint                                 */

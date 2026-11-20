@@ -45,6 +45,12 @@ describe('isSameOrigin', () => {
     expect(isSameOrigin('http://evil.example:3001', 'localhost:3001')).toBe(false);
   });
 
+  it('rejects plain http when the request arrived over https (FIND-005)', () => {
+    expect(isSameOrigin('http://pulse.example.com', 'pulse.example.com', 'https')).toBe(false);
+    expect(isSameOrigin('https://pulse.example.com', 'pulse.example.com', 'https')).toBe(true);
+    expect(isSameOrigin('http://localhost:3099', 'localhost:3099', 'http')).toBe(true);
+  });
+
   it('rejects a different port on the same host', () => {
     expect(isSameOrigin('http://localhost:4000', 'localhost:3001')).toBe(false);
   });

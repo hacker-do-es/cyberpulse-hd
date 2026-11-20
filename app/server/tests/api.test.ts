@@ -128,6 +128,24 @@ describe('multitenant API', () => {
     expect((await root.req('DELETE', `/api/admin/tenants/${plain.body.tenant.id}`, { confirmName: 'Initech' })).status).toBe(200);
   });
 
+  it('refuses compressed request bodies (Node2Shell hardening)', async () => {
+    for (const enc of ['br', 'gzip', 'deflate', 'BR, gzip']) {
+      const r = await fetch(base + '/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'content-encoding': enc, 'x-requested-with': 'cyberpulse' },
+        body: Buffer.from([0x1b, 0x03, 0x00, 0xf8]),
+      });
+      expect(r.status).toBe(415);
+    }
+    /* identity is fine */
+    const ok = await fetch(base + '/api/auth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-encoding': 'identity', 'x-requested-with': 'cyberpulse' },
+      body: JSON.stringify({ username: 'nobody', password: 'nope-nope-nope' }),
+    });
+    expect(ok.status).toBe(401);
+  });
+
   it('requires the CSRF header on writes', async () => {
     const r = await root.req('POST', '/api/admin/tenants', { name: 'NoCsrf' }, { csrf: false });
     expect(r.status).toBe(403);

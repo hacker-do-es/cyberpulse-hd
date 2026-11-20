@@ -14,11 +14,16 @@ export function escapeHtml(value: string): string {
    a Docker port mapping or a reverse proxy changes it. Comparing the Origin
    against the request's own Host is what actually identifies a same-origin
    request, and `<script type="module">` is fetched with CORS, so getting this
-   wrong 403s the app's own JavaScript. */
-export function isSameOrigin(origin: string, host: string | undefined): boolean {
+   wrong 403s the app's own JavaScript.
+   The scheme must match too: behind the TLS proxy the request is https, so
+   an Origin of http://same-host (a network attacker's page on plain HTTP)
+   is not the same origin and must not get credentialed CORS. */
+export function isSameOrigin(origin: string, host: string | undefined, protocol?: string): boolean {
   if (!host) return false;
   try {
-    return new URL(origin).host === host;
+    const o = new URL(origin);
+    if (o.host !== host) return false;
+    return protocol ? o.protocol === `${protocol.replace(/:$/, '')}:` : true;
   } catch {
     return false;
   }

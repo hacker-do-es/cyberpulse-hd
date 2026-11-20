@@ -4,7 +4,7 @@
 # =============================================================================
 
 # ─── Stage 1: dependencies (needs a C++ toolchain for better-sqlite3) ───────
-FROM node:20-slim AS deps
+FROM node:24.22.3-slim AS deps
 
 WORKDIR /app
 
@@ -33,7 +33,7 @@ COPY . .
 RUN npm run build
 
 # ─── Stage 3: production ────────────────────────────────────────────────────
-FROM node:20-slim AS production
+FROM node:24.22.3-slim AS production
 
 WORKDIR /app
 

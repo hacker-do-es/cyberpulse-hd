@@ -64,7 +64,7 @@ export function apiRouter(appVersion: string): express.Router {
   api.get('/tech-stack/template.csv', handle(stackController.template));
   api.post('/tech-stack', ...requireTenantAdmin, writeLimiter, handle(stackController.create));
   api.post('/tech-stack/import', ...requireTenantAdmin, writeLimiter,
-    express.text({ type: 'text/csv', limit: CSV_MAX_BYTES + 1024 }), handle(stackController.import));
+    express.text({ type: 'text/csv', limit: CSV_MAX_BYTES + 1024, inflate: false }), handle(stackController.import));
   api.put('/tech-stack/:id', ...requireTenantAdmin, writeLimiter, handle(stackController.update));
   api.delete('/tech-stack/:id', ...requireTenantAdmin, writeLimiter, handle(stackController.remove));
 

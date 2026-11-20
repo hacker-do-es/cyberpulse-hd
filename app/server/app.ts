@@ -3,7 +3,7 @@ import path from 'path';
 import compression from 'compression';
 import express from 'express';
 import { config } from './config';
-import { corsPolicy, errorHandler, readLimiter, securityHeaders } from './api/middlewares/security';
+import { corsPolicy, errorHandler, readLimiter, rejectCompressedBodies, securityHeaders } from './api/middlewares/security';
 import { apiRouter } from './api/routes';
 
 /* Read the version from package.json rather than restating it here. */
@@ -23,7 +23,8 @@ export function createApp(): express.Express {
   app.use(compression());
   app.use('/api', readLimiter);
   app.use(corsPolicy);
-  app.use(express.json({ limit: '2mb' }));
+  app.use(rejectCompressedBodies);
+  app.use(express.json({ limit: '2mb', inflate: false }));
 
   /* ---------------- Frontend ---------------- */
   const distPath = path.resolve(process.cwd(), 'dist');
