@@ -197,12 +197,23 @@ export async function generateAiPost(params: GenerateAiPostParams): Promise<stri
 /*  Tech Stack                                                         */
 /* ------------------------------------------------------------------ */
 
+export type AssetCriticality = 'low' | 'medium' | 'high';
+
+/* The short form of an asset shown next to stack rows and news. */
+export interface AssetRef {
+  id: number;
+  name: string;
+  criticality: AssetCriticality;
+  environment: string | null;
+}
+
 export interface TechStackItem {
   id: number;
   technology: string;
   version?: string;
   vendor?: string;
   category?: string;
+  assets?: AssetRef[];
   createdAt?: string;
 }
 
@@ -213,6 +224,8 @@ export interface TechStackResponse {
 export interface TechStackNewsArticle extends NewsArticle {
   matchScore: number;
   matchedTechnologies: string[];
+  matchedStackIds?: number[];
+  affectedAssets?: AssetRef[];
 }
 
 export interface TechStackNewsResponse {
@@ -237,6 +250,8 @@ export interface CreateTechStackParams {
   version?: string;
   vendor?: string;
   category?: string;
+  /* When present, replaces the row's assets. */
+  assetIds?: number[];
 }
 
 export async function createTechStackItem(item: CreateTechStackParams): Promise<TechStackItem> {

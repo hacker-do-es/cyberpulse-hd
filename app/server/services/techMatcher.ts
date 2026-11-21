@@ -243,6 +243,8 @@ export interface StackMatch<A extends Article = Article> {
   article: A;
   score: number;
   matchedTech: string[];
+  /* Ids of the stack rows that matched (to look up their assets). */
+  matchedIds: number[];
 }
 
 /* A stack with every matcher built once, reused for every article. */
@@ -259,14 +261,16 @@ export function matchArticle<A extends Article>(article: A, stack: CompiledStack
   const content = cleanContent(`${article.title} ${article.summary}`).toLowerCase();
   let totalScore = 0;
   const matchedTech: string[] = [];
+  const matchedIds: number[] = [];
   for (const { tech, matcher } of stack.items) {
     const score = calculateMatchScore(article, content, tech, matcher);
     if (score > 0) {
       totalScore += score;
       matchedTech.push(tech.technology);
+      matchedIds.push(tech.id);
     }
   }
-  return totalScore > 0 ? { article, score: totalScore, matchedTech: Array.from(new Set(matchedTech)) } : null;
+  return totalScore > 0 ? { article, score: totalScore, matchedTech: Array.from(new Set(matchedTech)), matchedIds } : null;
 }
 
 export function sortMatches<A extends Article>(matches: StackMatch<A>[]): StackMatch<A>[] {

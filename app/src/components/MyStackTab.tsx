@@ -1,7 +1,9 @@
 import { useState, useMemo, useEffect, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Clock, RefreshCw, ExternalLink, Thermometer, ChevronLeft, ChevronRight, Server, TrendingUp, AlertTriangle } from 'lucide-react';
-import type { TechStackNewsArticle } from '@/services/apiService';
+import type { AssetRef, TechStackNewsArticle } from '@/services/apiService';
+import { AssetChips } from './hd/AssetManager';
+import { criticalityLabel } from './hd/assetLabels';
 import { timeAgo } from '@/lib/dateUtils';
 import { locale, tr, trMessage, useI18n } from '@/lib/i18n';
 
@@ -60,6 +62,7 @@ export default function MyStackTab({
   const [sortBy, setSortBy] = useState<SortOption>('score');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedTech, setSelectedTech] = useState<string[]>([]);
+  const [selectedAssets, setSelectedAssets] = useState<number[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
 
@@ -78,8 +81,26 @@ export default function MyStackTab({
     [articles]
   );
 
+  /* Assets affected by at least one article, most critical first, with counts. */
+  const affectedAssets = useMemo(() => {
+    const byId = new Map<number, { asset: AssetRef; count: number }>();
+    for (const a of articles) {
+      for (const asset of a.affectedAssets ?? []) {
+        const e = byId.get(asset.id);
+        if (e) e.count++;
+        else byId.set(asset.id, { asset, count: 1 });
+      }
+    }
+    const rank = { high: 2, medium: 1, low: 0 } as const;
+    return Array.from(byId.values()).sort((x, y) => rank[y.asset.criticality] - rank[x.asset.criticality] || y.count - x.count);
+  }, [articles]);
+
   const filteredAndSorted = useMemo(() => {
     let filtered = [...articles];
+
+    if (selectedAssets.length > 0) {
+      filtered = filtered.filter((a) => (a.affectedAssets ?? []).some((as) => selectedAssets.includes(as.id)));
+    }
 
     if (selectedCategories.length > 0) {
       filtered = filtered.filter((a) => selectedCategories.includes(a.category));
@@ -97,7 +118,8 @@ export default function MyStackTab({
         (a) =>
           a.title.toLowerCase().includes(q) ||
           a.summary.toLowerCase().includes(q) ||
-          a.matchedTechnologies.some((tech) => tech.toLowerCase().includes(q))
+          a.matchedTechnologies.some((tech) => tech.toLowerCase().includes(q)) ||
+          (a.affectedAssets ?? []).some((as) => as.name.toLowerCase().includes(q))
       );
     }
 
@@ -116,7 +138,7 @@ export default function MyStackTab({
     }
 
     return sorted;
-  }, [articles, selectedCategories, selectedTech, debouncedSearch, sortBy]);
+  }, [articles, selectedCategories, selectedTech, selectedAssets, debouncedSearch, sortBy]);
 
   const totalPages = Math.max(1, Math.ceil(filteredAndSorted.length / pageSize));
   const startIndex = (page - 1) * pageSize;
@@ -124,7 +146,7 @@ export default function MyStackTab({
 
   useEffect(() => {
     setPage(1);
-  }, [selectedCategories, selectedTech, debouncedSearch, sortBy, pageSize]);
+  }, [selectedCategories, selectedTech, selectedAssets, debouncedSearch, sortBy, pageSize]);
 
   if (techStackCount === 0) {
     return (
@@ -320,6 +342,35 @@ export default function MyStackTab({
                 `}
               >
                 {tech} <span className="text-text-tertiary ml-1">({count})</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Affected asset filters */}
+      {affectedAssets.length > 0 && (
+        <div className="mb-3 flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B] mr-1">
+            {tr("Assets")}
+          </span>
+          <button
+            onClick={() => setSelectedAssets([])}
+            className={`px-2.5 py-1 text-[11px] font-medium font-inter rounded-md transition-all duration-200 cursor-pointer ${selectedAssets.length === 0 ? 'text-accent bg-accent-dim' : 'text-text-tertiary hover:text-text-secondary hover:bg-bg-elevated'}`}
+          >
+            {tr("All")}
+          </button>
+          {affectedAssets.slice(0, 12).map(({ asset, count }) => {
+            const active = selectedAssets.includes(asset.id);
+            return (
+              <button
+                key={asset.id}
+                title={criticalityLabel(asset.criticality)}
+                onClick={() => setSelectedAssets((prev) => (active ? prev.filter((id) => id !== asset.id) : [...prev, asset.id]))}
+                className={`px-2.5 py-1 text-[11px] font-medium font-jetbrains rounded-md transition-all duration-200 cursor-pointer ${active ? 'text-accent bg-accent-dim' : 'text-text-tertiary hover:text-text-secondary hover:bg-bg-elevated'}`}
+              >
+                <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 align-middle ${asset.criticality === 'high' ? 'bg-critical' : asset.criticality === 'medium' ? 'bg-medium' : 'bg-text-tertiary'}`} />
+                {asset.name} <span className="text-text-tertiary ml-1">({count})</span>
               </button>
             );
           })}
@@ -546,6 +597,14 @@ const StackNewsCard = memo(function StackNewsCard({ article, isSelected, onClick
           </span>
         )}
       </div>
+
+      {/* Row 3b: Affected assets */}
+      {(article.affectedAssets?.length ?? 0) > 0 && (
+        <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+          <span className="text-[10px] font-jetbrains uppercase tracking-wide text-text-tertiary">{tr("Affects")}</span>
+          <AssetChips assets={article.affectedAssets} max={5} />
+        </div>
+      )}
 
       {/* Row 4: Summary */}
       <p className="text-sm text-text-secondary font-inter leading-relaxed line-clamp-2 mb-3">

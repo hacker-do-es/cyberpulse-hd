@@ -1,5 +1,5 @@
 import type express from 'express';
-import type { ChannelRow, ChannelType } from '../db/schema';
+import { ASSET_CRITICALITIES, type ChannelRow, type ChannelType } from '../db/schema';
 import { decryptSecret, encryptSecret } from '../lib/crypto';
 import { HttpError, badRequest, conflict, idParam, notFound, str, tenantOf } from '../lib/http';
 import { channelRepository, deliveryRepository, type ChannelValues } from '../repositories/channelRepository';
@@ -84,6 +84,8 @@ function channelOut(row: ChannelRow) {
     minSeverity: row.minSeverity,
     maxItems: row.maxItems,
     useAi: row.useAi,
+    includeAssets: row.type === 'linkedin' ? false : row.includeAssets,
+    minAssetCriticality: row.type === 'linkedin' ? null : row.minAssetCriticality,
     header: row.headerText,
     footer: row.footerText,
     headerHtml: row.headerHtml,
@@ -149,6 +151,16 @@ function parseEmailTarget(body: any, existing?: ChannelRow): string | undefined 
 
 /* Full validation of a create (no `existing`) or a partial update. The
    webhook URL is only returned when a new one was sent. */
+/* Asset options never apply to LinkedIn: client asset names must not end
+   up in a public post. */
+export function parseAssetOptions(type: ChannelType, body: any, existing?: Pick<ChannelRow, 'includeAssets' | 'minAssetCriticality'>) {
+  const rawMinCrit = body?.minAssetCriticality === undefined ? existing?.minAssetCriticality ?? null : body.minAssetCriticality || null;
+  if (rawMinCrit !== null && !(ASSET_CRITICALITIES as readonly string[]).includes(rawMinCrit)) throw badRequest('Unknown criticality');
+  if (type === 'linkedin') return { includeAssets: false, minAssetCriticality: null };
+  const includeAssets = body?.includeAssets === undefined ? (existing?.includeAssets ?? false) : body.includeAssets === true;
+  return { includeAssets, minAssetCriticality: rawMinCrit as string | null };
+}
+
 function parseChannelInput(body: any, existing?: ChannelRow, userId?: number): Omit<ChannelValues, 'webhookUrl'> & { webhookUrl?: string } {
   const name = str(body?.name, 80) ?? existing?.name;
   if (!name) throw badRequest('Name is required (max 80 characters)');
@@ -199,10 +211,14 @@ function parseChannelInput(body: any, existing?: ChannelRow, userId?: number): O
   const maxItems = Number(body?.maxItems ?? existing?.maxItems ?? 15);
   if (!Number.isInteger(maxItems) || maxItems < 1 || maxItems > 50) throw badRequest('maxItems must be 1-50');
 
+  const { includeAssets, minAssetCriticality } = parseAssetOptions(type, body, existing);
+
   return {
     name,
     type,
     webhookUrl,
+    includeAssets,
+    minAssetCriticality,
     scheduleType: schedule.type,
     intervalHours: schedule.intervalHours,
     timeOfDay: schedule.timeOfDay,

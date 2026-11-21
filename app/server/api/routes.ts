@@ -7,6 +7,7 @@ import {
   generateController, healthController, mcpController, newsController, scrapeController, sourceController,
 } from '../controllers/newsController';
 import { stackController } from '../controllers/stackController';
+import { assetController } from '../controllers/assetController';
 import { tenantSettingsController } from '../controllers/tenantSettingsController';
 import { userController } from '../controllers/userController';
 import { handle } from '../lib/http';
@@ -67,6 +68,12 @@ export function apiRouter(appVersion: string): express.Router {
     express.text({ type: 'text/csv', limit: CSV_MAX_BYTES + 1024, inflate: false }), handle(stackController.import));
   api.put('/tech-stack/:id', ...requireTenantAdmin, writeLimiter, handle(stackController.update));
   api.delete('/tech-stack/:id', ...requireTenantAdmin, writeLimiter, handle(stackController.remove));
+
+  /* Company: assets (what runs the stack) */
+  api.get('/assets', requireTenant, handle(assetController.list));
+  api.post('/assets', ...requireTenantAdmin, writeLimiter, handle(assetController.create));
+  api.put('/assets/:id', ...requireTenantAdmin, writeLimiter, handle(assetController.update));
+  api.delete('/assets/:id', ...requireTenantAdmin, writeLimiter, handle(assetController.remove));
 
   /* Company: settings and AI provider */
   api.get('/tenant/settings', ...requireTenantAdmin, handle(tenantSettingsController.get));

@@ -5,24 +5,28 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { fetchTechStack, createTechStackItem, deleteTechStackItem, updateTechStackItem, type TechStackItem } from '@/services/apiService';
-import { stackApi, type ImportSummary } from '@/services/hdApi';
+import { assetApi, stackApi, type Asset, type ImportSummary } from '@/services/hdApi';
+import { AssetChips, MultiPicker } from './AssetManager';
 import { Panel, EmptyState, Badge } from './ui';
 import { inputCls, notifyError } from './helpers';
 import { tr, trMessage } from '@/lib/i18n';
 
-export default function StackManager({ canEdit, onChanged }: { canEdit: boolean; onChanged?: () => void }) {
+export default function StackManager({ canEdit, refreshKey, onChanged }: { canEdit: boolean; refreshKey?: number; onChanged?: () => void }) {
   const [stack, setStack] = useState<TechStackItem[]>([]);
+  const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
   const [form, setForm] = useState({ technology: '', version: '', vendor: '', category: '' });
   const [adding, setAdding] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [editing, setEditing] = useState<{ id: number; technology: string; version: string; vendor: string; category: string } | null>(null);
+  const [editing, setEditing] = useState<{ id: number; technology: string; version: string; vendor: string; category: string; assetIds: number[] } | null>(null);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setStack(await fetchTechStack());
+      const [s, a] = await Promise.all([fetchTechStack(), assetApi.list().catch(() => [] as Asset[])]);
+      setStack(s);
+      setAssets(a);
     } catch (err) {
       notifyError(err, tr("Could not load the stack"));
     } finally {
@@ -32,7 +36,7 @@ export default function StackManager({ canEdit, onChanged }: { canEdit: boolean;
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   const add = async () => {
     if (!form.technology.trim()) return;
@@ -60,6 +64,7 @@ export default function StackManager({ canEdit, onChanged }: { canEdit: boolean;
     version: item.version ?? '',
     vendor: item.vendor ?? '',
     category: item.category ?? '',
+    assetIds: (item.assets ?? []).map((a) => a.id),
   });
 
   const saveEdit = async () => {
@@ -71,6 +76,7 @@ export default function StackManager({ canEdit, onChanged }: { canEdit: boolean;
         version: editing.version.trim(),
         vendor: editing.vendor.trim(),
         category: editing.category.trim(),
+        assetIds: editing.assetIds,
       });
       setStack((s) => s.map((x) => (x.id === item.id ? item : x)));
       setEditing(null);
@@ -98,7 +104,7 @@ export default function StackManager({ canEdit, onChanged }: { canEdit: boolean;
   };
 
   const visible = stack.filter((s) =>
-    !filter || `${s.technology} ${s.version ?? ''} ${s.vendor ?? ''} ${s.category ?? ''}`.toLowerCase().includes(filter.toLowerCase())
+    !filter || `${s.technology} ${s.version ?? ''} ${s.vendor ?? ''} ${s.category ?? ''} ${(s.assets ?? []).map((a) => a.name).join(' ')}`.toLowerCase().includes(filter.toLowerCase())
   );
 
   return (
@@ -153,6 +159,7 @@ export default function StackManager({ canEdit, onChanged }: { canEdit: boolean;
                 <th className="px-3 py-2 font-medium">{tr("Version")}</th>
                 <th className="px-3 py-2 font-medium">{tr("Vendor")}</th>
                 <th className="px-3 py-2 font-medium">{tr("Category")}</th>
+                <th className="px-3 py-2 font-medium">{tr("Assets")}</th>
                 {canEdit && <th className="px-3 py-2 w-20"><span className="sr-only">{tr("Actions")}</span></th>}
               </tr>
             </thead>
@@ -173,6 +180,16 @@ export default function StackManager({ canEdit, onChanged }: { canEdit: boolean;
                       />
                     </td>
                   ))}
+                  <td className="px-2 py-1.5 min-w-40">
+                    <MultiPicker
+                      items={assets}
+                      selected={editing.assetIds}
+                      onChange={(ids) => setEditing({ ...editing, assetIds: ids })}
+                      label={tr('Assets…')}
+                      render={(a) => a.name}
+                      empty={tr('No assets yet: add them in the Assets panel below.')}
+                    />
+                  </td>
                   <td className="px-2 py-1.5 text-right whitespace-nowrap">
                     <button
                       onClick={() => void saveEdit()}
@@ -197,6 +214,7 @@ export default function StackManager({ canEdit, onChanged }: { canEdit: boolean;
                   <td className="px-3 py-2 text-text-secondary font-jetbrains text-xs">{item.version ?? '—'}</td>
                   <td className="px-3 py-2 text-text-secondary">{item.vendor ?? '—'}</td>
                   <td className="px-3 py-2 text-text-secondary">{item.category ?? '—'}</td>
+                  <td className="px-3 py-2"><AssetChips assets={item.assets} /></td>
                   {canEdit && (
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       <button
@@ -299,7 +317,7 @@ function CsvImportDialog({ open, onOpenChange, onImported }: {
         <DialogHeader>
           <DialogTitle className="font-rajdhani text-xl">{tr("Import stack from CSV")}</DialogTitle>
           <DialogDescription className="text-text-tertiary text-xs">
-            {tr("Columns:")} <code className="font-jetbrains text-text-secondary">{tr("technology, version, vendor, category")}</code>{tr(". Only technology is required. Comma or semicolon separated, English or Spanish headers, Excel exports work as-is.")}{' '}
+            {tr("Columns:")} <code className="font-jetbrains text-text-secondary">{tr("technology, version, vendor, category, assets")}</code>{tr(". Only technology is required. Comma or semicolon separated, English or Spanish headers, Excel exports work as-is.")}{' '}{tr('In "assets", separate several asset names with |; new names are created as assets.')}{' '}
             <a href="/api/tech-stack/template.csv" className="text-accent hover:underline">{tr("Download template")}</a>
           </DialogDescription>
         </DialogHeader>
@@ -338,6 +356,8 @@ function CsvImportDialog({ open, onOpenChange, onImported }: {
                 {preview.alreadyPresent > 0 && <Badge>{preview.alreadyPresent} {tr("already in stack")}</Badge>}
                 {preview.duplicatesInFile > 0 && <Badge>{preview.duplicatesInFile} {tr("duplicated in file")}</Badge>}
                 {preview.errorCount > 0 && <Badge tone="bad">{preview.errorCount} {tr("invalid rows")}</Badge>}
+                {(preview.assetsToCreateCount ?? 0) > 0 && <Badge tone="accent">{preview.assetsToCreateCount} {tr("new assets")}</Badge>}
+                {(preview.assetLinksToExisting ?? 0) > 0 && <Badge>{preview.assetLinksToExisting} {tr("existing rows get assets")}</Badge>}
                 {preview.mode === 'replace' && preview.willRemove > 0 && <Badge tone="warn">{preview.willRemove} {tr("current entries will be removed")}</Badge>}
               </div>
 
@@ -355,7 +375,7 @@ function CsvImportDialog({ open, onOpenChange, onImported }: {
                     <thead className="sticky top-0 bg-bg-elevated">
                       <tr className="text-left text-text-tertiary font-jetbrains uppercase text-[10px]">
                         <th className="px-3 py-1.5">{tr("Technology")}</th><th className="px-3 py-1.5">{tr("Version")}</th>
-                        <th className="px-3 py-1.5">{tr("Vendor")}</th><th className="px-3 py-1.5">{tr("Category")}</th>
+                        <th className="px-3 py-1.5">{tr("Vendor")}</th><th className="px-3 py-1.5">{tr("Category")}</th><th className="px-3 py-1.5">{tr("Assets")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -365,6 +385,7 @@ function CsvImportDialog({ open, onOpenChange, onImported }: {
                           <td className="px-3 py-1.5 text-text-secondary">{r.version ?? ''}</td>
                           <td className="px-3 py-1.5 text-text-secondary">{r.vendor ?? ''}</td>
                           <td className="px-3 py-1.5 text-text-secondary">{r.category ?? ''}</td>
+                          <td className="px-3 py-1.5 text-text-secondary font-jetbrains">{(r.assets ?? []).join(', ')}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -381,7 +402,7 @@ function CsvImportDialog({ open, onOpenChange, onImported }: {
           </Button>
           <Button
             onClick={() => void confirm()}
-            disabled={busy || !preview || preview.valid === 0 || (preview.mode === 'append' && preview.toInsert === 0)}
+            disabled={busy || !preview || preview.valid === 0 || (preview.mode === 'append' && preview.toInsert === 0 && !preview.assetLinksToExisting)}
           >
             {busy ? tr('Working…') : mode === 'replace' ? tr('Replace stack') : tr('Import {n}', { n: preview?.toInsert ?? '' })}
           </Button>

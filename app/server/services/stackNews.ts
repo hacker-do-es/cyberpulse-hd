@@ -1,6 +1,7 @@
 import { forEachChunked } from '../lib/eventLoop';
 import type { StackRow } from '../db/schema';
 import { articleRepository } from '../repositories/articleRepository';
+import { assetRepository, type AssetRef } from '../repositories/assetRepository';
 import { stackRepository } from '../repositories/stackRepository';
 import {
   compileStack, matchArticle, sortMatches, statisticsFromMatches,
@@ -55,7 +56,7 @@ export interface StackNewsArticle extends Article {
 }
 
 export interface StackNewsResult {
-  news: Array<StackNewsArticle & { matchScore: number; matchedTechnologies: string[] }>;
+  news: Array<StackNewsArticle & { matchScore: number; matchedTechnologies: string[]; matchedStackIds: number[] }>;
   statistics: StackStatistics;
 }
 
@@ -92,7 +93,7 @@ async function compute(stack: TechStackItem[], limit: number): Promise<StackNews
   }));
   const matches = await matchChunked(articles, stack);
   return {
-    news: matches.map(({ article, score, matchedTech }) => ({ ...article, matchScore: score, matchedTechnologies: matchedTech })),
+    news: matches.map(({ article, score, matchedTech, matchedIds }) => ({ ...article, matchScore: score, matchedTechnologies: matchedTech, matchedStackIds: matchedIds })),
     statistics: statisticsFromMatches(articles.length, matches),
   };
 }
@@ -115,4 +116,34 @@ export function getStackNews(tenantId: number, limit: number): Promise<StackNews
 
 export function clearStackNewsCache(): void {
   cache.clear();
+}
+
+/* ------------------------------------------------------------------ */
+/*  Affected assets                                                    */
+/* ------------------------------------------------------------------ */
+
+const CRITICALITY_RANK: Record<string, number> = { low: 0, medium: 1, high: 2 };
+
+export function criticalityRank(c: string | null | undefined): number {
+  return CRITICALITY_RANK[c ?? ''] ?? -1;
+}
+
+/* The distinct assets behind the matched stack rows, most critical first. */
+export function assetsForStackIds(stackIds: number[], links: Map<number, AssetRef[]>): AssetRef[] {
+  const byId = new Map<number, AssetRef>();
+  for (const id of stackIds) for (const a of links.get(id) ?? []) byId.set(a.id, a);
+  return Array.from(byId.values())
+    .sort((a, b) => criticalityRank(b.criticality) - criticalityRank(a.criticality) || a.name.localeCompare(b.name));
+}
+
+/* My Stack with each article's affected assets. Assets are attached per
+   request (cheap map lookups), so editing assets never invalidates the
+   cached match results. */
+export async function getStackNewsWithAssets(tenantId: number, limit: number) {
+  const result = await getStackNews(tenantId, limit);
+  const links = assetRepository.linksByStackItem(tenantId);
+  return {
+    ...result,
+    news: result.news.map((n) => ({ ...n, affectedAssets: assetsForStackIds(n.matchedStackIds, links) })),
+  };
 }

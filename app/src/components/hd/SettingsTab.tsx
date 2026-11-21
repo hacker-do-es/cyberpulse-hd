@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { settingsApi, usersApi, type TenantSettings, type TenantUser } from '@/services/hdApi';
 import { useAuth } from '@/lib/auth';
 import StackManager from './StackManager';
+import AssetManager from './AssetManager';
 import { Panel, PageHeader, Field, Badge, EmptyState } from './ui';
 import { inputCls, selectCls, notifyError, formatDateTime, TIMEZONES } from './helpers';
 import { tr } from '@/lib/i18n';
@@ -14,15 +15,19 @@ import { tr } from '@/lib/i18n';
 export default function SettingsTab({ onStackChanged }: { onStackChanged?: () => void }) {
   const { me } = useAuth();
   const isAdmin = me?.user.role === 'admin' || me?.user.role === 'superadmin';
+  /* Stack and assets link to each other: a change in one reloads the other. */
+  const [stackVersion, setStackVersion] = useState(0);
+  const [assetVersion, setAssetVersion] = useState(0);
 
   return (
     <div className="max-w-5xl mx-auto pb-12">
       <PageHeader
         title={`${me?.activeTenant?.name ?? tr('Company')} · ${tr('Settings')}`}
-        subtitle={isAdmin ? tr('Stack, AI provider and users of this company.') : tr('The technology stack your company monitors.')}
+        subtitle={isAdmin ? tr('Stack, assets, AI provider and users of this company.') : tr('The technology stack your company monitors.')}
       />
       <div className="space-y-6">
-        <StackManager canEdit={isAdmin} onChanged={onStackChanged} />
+        <StackManager canEdit={isAdmin} refreshKey={assetVersion} onChanged={() => { setStackVersion((v) => v + 1); onStackChanged?.(); }} />
+        <AssetManager canEdit={isAdmin} refreshKey={stackVersion} onChanged={() => { setAssetVersion((v) => v + 1); onStackChanged?.(); }} />
         {isAdmin && <CompanyAndAi />}
         {isAdmin && <UsersPanel />}
       </div>

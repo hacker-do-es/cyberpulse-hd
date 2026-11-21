@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { History, Linkedin, Mail, Pencil, Plus, Radio, Send, Trash2, Zap } from 'lucide-react';
+import { HardDrive, History, Linkedin, Mail, Pencil, Plus, Radio, Send, Trash2, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { LinkedInQueuePanel } from './LinkedInQueue';
 import { authorOptions, useLinkedInStatus } from './linkedinHelpers';
 import { useAuth } from '@/lib/auth';
 import { Panel, PageHeader, Field, Badge, EmptyState } from './ui';
+import { criticalityLabel } from './assetLabels';
 import { inputCls, selectCls, notifyError, formatDateTime, WEEKDAYS } from './helpers';
 import { getLang, tr, trMessage } from '@/lib/i18n';
 
@@ -104,6 +105,8 @@ export default function ChannelsTab() {
                       {c.type === 'linkedin' && c.linkedin?.requireApproval && <Badge>{tr('Needs approval')}</Badge>}
                       {!c.active && <Badge>{tr("Paused")}</Badge>}
                       {c.useAi && <Badge><Zap size={10} /> {tr("AI summary")}</Badge>}
+                      {c.includeAssets && <Badge tone="warn"><HardDrive size={10} /> {tr("Lists assets")}</Badge>}
+                      {c.minAssetCriticality && <Badge>{tr('Assets ≥ {level}', { level: criticalityLabel(c.minAssetCriticality) })}</Badge>}
                     </div>
                     <div className="mt-1 text-xs text-text-tertiary font-jetbrains truncate">{trMessage(c.webhookHint)}</div>
                     <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-1 text-xs">
@@ -149,7 +152,8 @@ export default function ChannelsTab() {
 function toInput(c: Channel, patch: Partial<ChannelInput> = {}): ChannelInput {
   return {
     name: c.name, type: c.type, active: c.active, schedule: c.schedule,
-    minSeverity: c.minSeverity, maxItems: c.maxItems, useAi: c.useAi, ...patch,
+    minSeverity: c.minSeverity, maxItems: c.maxItems, useAi: c.useAi,
+    includeAssets: c.includeAssets, minAssetCriticality: c.minAssetCriticality, ...patch,
   };
 }
 
@@ -171,6 +175,7 @@ const EMPTY: ChannelInput = {
   name: '', type: 'slack', webhookUrl: '', active: true,
   schedule: { type: 'weekly', intervalHours: 6, timeOfDay: '08:30', weekdays: [1, 2, 3, 4, 5] },
   minSeverity: 'medium', maxItems: 15, useAi: true, header: null, footer: null, headerHtml: null, footerHtml: null,
+  includeAssets: false, minAssetCriticality: null,
 };
 
 const splitRecipients = (t: string) => t.split(/[\s,;]+/).map((r) => r.trim()).filter(Boolean);
@@ -445,6 +450,38 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
             )}
             <p className="text-xs text-text-tertiary">{tr("Use Test after saving to preview the header and footer in the channel.")}</p>
           </fieldset>
+          )}
+
+          {f.type !== 'linkedin' && (
+            <fieldset className="space-y-3 border border-border-default rounded-lg p-4">
+              <legend className="px-1 text-xs font-medium text-text-secondary">{tr("Affected assets")}</legend>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <Switch checked={!!f.includeAssets} onCheckedChange={(v) => setF({ ...f, includeAssets: v })} className="mt-0.5" />
+                <span className="text-sm">
+                  <span className="text-text-primary">{tr("List the affected assets under each news item")}</span>
+                  <span className="block text-xs text-text-tertiary">
+                    {tr("Asset names map your attack surface: turn this on only if everyone who reads this channel may see them. They are never sent to the AI provider.")}
+                  </span>
+                </span>
+              </label>
+              <Field
+                label={tr("Only news that affects assets of criticality")}
+                htmlFor="ch-asset-crit"
+                hint={tr("News about technologies with no linked asset is left out when a level is chosen.")}
+              >
+                <select
+                  id="ch-asset-crit"
+                  className={selectCls}
+                  value={f.minAssetCriticality ?? ''}
+                  onChange={(e) => setF({ ...f, minAssetCriticality: (e.target.value || null) as ChannelInput['minAssetCriticality'] })}
+                >
+                  <option value="">{tr("Any (all news matching the stack)")}</option>
+                  <option value="high">{tr("High")}</option>
+                  <option value="medium">{tr("Medium or higher")}</option>
+                  <option value="low">{tr("Any linked asset")}</option>
+                </select>
+              </Field>
+            </fieldset>
           )}
 
           <label className="flex items-start gap-3 cursor-pointer">

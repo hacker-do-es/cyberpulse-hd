@@ -1032,3 +1032,150 @@ describe('application log (superadmin Logs tab)', () => {
   });
 });
 
+
+describe('assets (what runs the stack)', () => {
+  const root = new Client();
+  const admin = new Client();
+  const other = new Client();
+  const member = new Client();
+  let assetWeb = 0;
+
+  it('creates, validates and isolates assets per company', async () => {
+    await root.login('root', PW);
+    expect((await root.req('POST', '/api/admin/tenants', { name: 'Assetco', language: 'es', admin: { username: 'asa', password: PW } })).status).toBe(201);
+    expect((await root.req('POST', '/api/admin/tenants', { name: 'Othercorp', language: 'en', admin: { username: 'oto', password: PW } })).status).toBe(201);
+    await admin.login('asa', PW);
+    await other.login('oto', PW);
+
+    const web = await admin.req('POST', '/api/assets', {
+      name: 'WEB01', type: 'server', criticality: 'high', environment: 'prod',
+      hostname: 'web01.assetco.local', ip: '10.0.0.10, 2001:db8::10', brand: 'Dell', model: 'PowerEdge R650',
+    });
+    expect(web.status).toBe(201);
+    expect(web.body.item).toMatchObject({ name: 'WEB01', criticality: 'high', ip: '10.0.0.10, 2001:db8::10', brand: 'Dell', model: 'PowerEdge R650' });
+    assetWeb = web.body.item.id;
+
+    expect((await admin.req('POST', '/api/assets', { name: 'web01' })).status).toBe(409);
+    expect((await admin.req('POST', '/api/assets', { name: 'X', ip: '10.0.0.300' })).status).toBe(400);
+    expect((await admin.req('POST', '/api/assets', { name: 'X', hostname: 'bad host!' })).status).toBe(400);
+    expect((await admin.req('POST', '/api/assets', { name: 'X', criticality: 'extreme' })).status).toBe(400);
+    expect((await admin.req('POST', '/api/assets', { name: 'X', type: 'spaceship' })).status).toBe(400);
+    expect((await admin.req('POST', '/api/assets', { name: '' })).status).toBe(400);
+
+    /* Another company can neither see, edit, delete nor link it. */
+    expect((await other.req('GET', '/api/assets')).body.assets).toHaveLength(0);
+    expect((await other.req('PUT', `/api/assets/${assetWeb}`, { name: 'Hijack' })).status).toBe(404);
+    expect((await other.req('DELETE', `/api/assets/${assetWeb}`)).status).toBe(404);
+    expect((await other.req('POST', '/api/tech-stack', { technology: 'Zimbra', assetIds: [assetWeb] })).status).toBe(400);
+
+    /* Members read, never write. */
+    expect((await admin.req('POST', '/api/users', { username: 'asm', password: PW, role: 'member' })).status).toBe(201);
+    await member.login('asm', PW);
+    expect((await member.req('GET', '/api/assets')).body.assets).toHaveLength(1);
+    expect((await member.req('POST', '/api/assets', { name: 'M' })).status).toBe(403);
+    expect((await member.req('PUT', `/api/assets/${assetWeb}`, { name: 'M' })).status).toBe(403);
+  });
+
+  it('links assets to stack rows from the stack, the asset and the CSV', async () => {
+    const zimbra = await admin.req('POST', '/api/tech-stack', { technology: 'Zimbra', version: '9.0', assetIds: [assetWeb] });
+    expect(zimbra.status).toBe(201);
+    expect(zimbra.body.item.assets.map((a: any) => a.name)).toEqual(['WEB01']);
+
+    /* CSV: new assets are created, existing rows get the listed assets. */
+    const csv = 'technology,version,vendor,category,assets\nZimbra,9.0,Synacor,Email,MAIL01|web01\nNginx,1.24,,Web Server,WEB01; LB01\n';
+    const preview = await admin.req('POST', '/api/tech-stack/import?dryRun=true&mode=append', undefined, { raw: csv });
+    expect(preview.body.toInsert).toBe(1);
+    expect(preview.body.assetLinksToExisting).toBe(1);
+    expect(preview.body.assetsToCreate.sort()).toEqual(['LB01', 'MAIL01']);
+    const done = await admin.req('POST', '/api/tech-stack/import?mode=append', undefined, { raw: csv });
+    expect(done.body.imported).toBe(1);
+    expect(done.body.assetsCreated).toBe(2);
+
+    const stack = (await admin.req('GET', '/api/tech-stack')).body.stack;
+    const byTech = Object.fromEntries(stack.map((s: any) => [s.technology, s.assets.map((a: any) => a.name)]));
+    expect(byTech).toEqual({ Nginx: ['LB01', 'WEB01'], Zimbra: ['MAIL01', 'WEB01'] });
+
+    /* Export round-trips the assets column. */
+    const exported = await admin.req('GET', '/api/tech-stack/export.csv');
+    expect(String(exported.body)).toContain('assets');
+    expect(String(exported.body)).toMatch(/Zimbra,9\.0,,,MAIL01\|WEB01/);
+
+    /* Editing a row's assets replaces them; omitting assetIds keeps them. */
+    const nginx = stack.find((s: any) => s.technology === 'Nginx');
+    const kept = await admin.req('PUT', `/api/tech-stack/${nginx.id}`, { technology: 'Nginx', version: '1.24' });
+    expect(kept.body.item.assets).toHaveLength(2);
+    const replaced = await admin.req('PUT', `/api/tech-stack/${nginx.id}`, { technology: 'Nginx', version: '1.24', assetIds: [] });
+    expect(replaced.body.item.assets).toHaveLength(0);
+
+    /* From the asset side. */
+    const assets = (await admin.req('GET', '/api/assets')).body.assets;
+    const lb = assets.find((a: any) => a.name === 'LB01');
+    const upd = await admin.req('PUT', `/api/assets/${lb.id}`, { name: 'LB01', criticality: 'low', stackItemIds: [nginx.id] });
+    expect(upd.body.item.stackItemIds).toEqual([nginx.id]);
+
+    /* Deleting an asset unlinks it; deleting a stack row unlinks its assets. */
+    const mail = assets.find((a: any) => a.name === 'MAIL01');
+    expect((await admin.req('DELETE', `/api/assets/${mail.id}`)).status).toBe(200);
+    const z = (await admin.req('GET', '/api/tech-stack')).body.stack.find((s: any) => s.technology === 'Zimbra');
+    expect(z.assets.map((a: any) => a.name)).toEqual(['WEB01']);
+  });
+
+  it('shows affected assets on My Stack, in opted-in digests only, filtered by criticality', async () => {
+    const { getSqlite } = await import('../db/client');
+    getSqlite().prepare(`INSERT INTO articles (title, summary, source, severity, category, published_at, url) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run('Zimbra Collaboration zero-day exploited', 'Synacor Zimbra flaw', 'TestFeed', 'critical', 'VULNERABILITY', new Date().toISOString(), 'https://news.example/zimbra');
+    getSqlite().prepare(`INSERT INTO articles (title, summary, source, severity, category, published_at, url) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run('Nginx resolver bug patched', 'nginx 1.24 fix', 'TestFeed', 'high', 'VULNERABILITY', new Date().toISOString(), 'https://news.example/nginx');
+
+    const news = (await admin.req('GET', '/api/tech-stack/news')).body.news;
+    const zimbraNews = news.find((n: any) => n.url === 'https://news.example/zimbra');
+    expect(zimbraNews.affectedAssets.map((a: any) => a.name)).toEqual(['WEB01']);
+
+    /* Default: no assets in the message. */
+    const plain = await admin.req('POST', '/api/channels', { name: 'plain', type: 'rocketchat', webhookUrl: hookUrl, minSeverity: 'low', schedule: { type: 'interval', intervalHours: 6 } });
+    expect(plain.body.channel.includeAssets).toBe(false);
+    received.length = 0;
+    expect((await admin.req('POST', `/api/channels/${plain.body.channel.id}/run`)).body.status).toBe('sent');
+    expect(received[0].body.text).toContain('Zimbra');
+    expect(received[0].body.text).not.toContain('WEB01');
+
+    /* Opted in: assets with their criticality. */
+    const withAssets = await admin.req('POST', '/api/channels', { name: 'soc', type: 'rocketchat', webhookUrl: hookUrl, minSeverity: 'low', includeAssets: true, schedule: { type: 'interval', intervalHours: 6 } });
+    expect(withAssets.body.channel.includeAssets).toBe(true);
+    received.length = 0;
+    await admin.req('POST', `/api/channels/${withAssets.body.channel.id}/run`);
+    expect(received[0].body.text).toMatch(/activos: WEB01 \\?\(alta\\?\)/);
+
+    /* Only news affecting a high-criticality asset: Nginx (LB01, low) is dropped. */
+    const critical = await admin.req('POST', '/api/channels', { name: 'crit', type: 'rocketchat', webhookUrl: hookUrl, minSeverity: 'low', minAssetCriticality: 'high', schedule: { type: 'interval', intervalHours: 6 } });
+    received.length = 0;
+    const run = await admin.req('POST', `/api/channels/${critical.body.channel.id}/run`);
+    expect(run.body.articleCount).toBe(1);
+    expect(received[0].body.text).toContain('Zimbra');
+    expect(received[0].body.text).not.toContain('Nginx');
+    expect(received[0].body.text).not.toContain('WEB01');
+    expect((await admin.req('POST', '/api/channels', { name: 'bad', type: 'rocketchat', webhookUrl: hookUrl, minAssetCriticality: 'extreme', schedule: { type: 'interval', intervalHours: 6 } })).status).toBe(400);
+  });
+
+  it('never includes assets in the AI summary prompt or LinkedIn', async () => {
+    const { selectCandidates, withAssets, aiSummary } = await import('../services/digest');
+    const { assetRepository } = await import('../repositories/assetRepository');
+    const { tenantStack } = await import('../services/stackNews');
+    const { tenantRepository } = await import('../repositories/tenantRepository');
+    const tenant = tenantRepository.listBasic().find((t: any) => t.name === 'Assetco')!;
+    const links = assetRepository.linksByStackItem(tenant.id);
+    const channel = { id: 999999, minSeverity: 'low', maxItems: 10, lastSentAt: null, minAssetCriticality: null } as any;
+    const items = await selectCandidates(channel, tenantStack(tenant.id), new Date(), links);
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((i) => i.assets === undefined)).toBe(true);
+    expect(withAssets(items, links).some((i) => i.assets?.some((a) => a.name === 'WEB01'))).toBe(true);
+    /* No AI key configured: no call; the prompt builder is never given assets anyway. */
+    expect(await aiSummary(tenant.id, 'es', items)).toBeNull();
+
+    /* Asset options are forced off for LinkedIn, whatever the request says. */
+    const { parseAssetOptions } = await import('../controllers/channelController');
+    expect(parseAssetOptions('linkedin', { includeAssets: true, minAssetCriticality: 'high' })).toEqual({ includeAssets: false, minAssetCriticality: null });
+    expect(parseAssetOptions('linkedin', {}, { includeAssets: true, minAssetCriticality: 'high' })).toEqual({ includeAssets: false, minAssetCriticality: null });
+    expect(parseAssetOptions('slack', { includeAssets: true })).toEqual({ includeAssets: true, minAssetCriticality: null });
+  });
+});

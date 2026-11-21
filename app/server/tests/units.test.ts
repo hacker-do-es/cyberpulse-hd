@@ -185,3 +185,21 @@ describe('webhooks', () => {
     expect(text).toContain('[evil\\]\\(https://phish.example\\) \\[x](https://ok.example/a)');
   });
 });
+
+describe('stack CSV assets column', () => {
+  it('splits asset names and merges duplicated rows', async () => {
+    const { parseStackCsv, splitAssetNames, toStackCsv } = await import('../services/csv');
+    expect(splitAssetNames(' WEB01 | web01; DB01 ,, ')).toEqual(['WEB01', 'DB01']);
+    const r = parseStackCsv('Tecnología;Versión;Activos\nPHP;8.2;"WEB01|WEB02"\nphp;8.2;DB01\nRedis;7;\n');
+    expect(r.rows).toEqual([
+      { technology: 'PHP', version: '8.2', assets: ['WEB01', 'WEB02', 'DB01'] },
+      { technology: 'Redis', version: '7' },
+    ]);
+    expect(r.duplicates).toBe(1);
+    /* Without a header the fifth column is assets. */
+    expect(parseStackCsv('Nginx,1.24,F5,Web,LB01|LB02\n').rows[0].assets).toEqual(['LB01', 'LB02']);
+    expect(parseStackCsv(`X,1,,,${'A'.repeat(101)}\n`).errors[0].message).toMatch(/asset name/);
+    expect(toStackCsv([{ technology: 'PHP', version: '8.2', assets: ['WEB01', '=cmd'] }]))
+      .toBe('technology,version,vendor,category,assets\nPHP,8.2,,,WEB01|=cmd\n');
+  });
+});

@@ -48,7 +48,9 @@ export async function runLinkedInChannel(channel: ChannelRow, tenant: TenantRow,
   const remaining = maxPerDay - used;
   if (remaining <= 0) return { status: 'skipped', articleCount: 0, detail: `Daily limit reached (${used}/${maxPerDay} in the last 24 h)` };
 
-  const items = await selectCandidates(channel, stack, now);
+  /* No asset links are passed, and any `assets` field is dropped anyway:
+     client asset names must never reach a LinkedIn post or the AI writing it. */
+  const items = (await selectCandidates(channel, stack, now)).map((c) => ({ ...c, assets: undefined }));
   if (items.length === 0) return { status: 'skipped', articleCount: 0, detail: 'No new news matching the stack' };
 
   const perRun = Math.min(channel.postsPerRun ?? LINKEDIN_DEFAULTS.postsPerRun, remaining);

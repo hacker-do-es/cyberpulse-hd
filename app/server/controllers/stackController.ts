@@ -2,20 +2,33 @@ import type express from 'express';
 import { config } from '../config';
 import type { StackRow } from '../db/schema';
 import { badRequest, conflict, idParam, notFound, optStr, str, tenantOf } from '../lib/http';
+import { assetRepository, type AssetRef } from '../repositories/assetRepository';
 import { stackRepository, type StackValues } from '../repositories/stackRepository';
 import { CSV_TEMPLATE, stackKey, toStackCsv } from '../services/csv';
-import { getStackNews } from '../services/stackNews';
+import { getStackNewsWithAssets } from '../services/stackNews';
 import { importStack } from '../useCases/importStack';
 
-function stackItem(row: StackRow) {
+function stackItem(row: StackRow, assets: AssetRef[] = []) {
   return {
     id: row.id,
     technology: row.technology,
     version: row.version || undefined,
     vendor: row.vendor || undefined,
     category: row.category || undefined,
+    assets,
     createdAt: row.createdAt,
   };
+}
+
+/* Optional `assetIds`: when present, replaces the row's assets. Ids from
+   another company are rejected. */
+function assetIdsOf(body: any, tenantId: number): number[] | undefined {
+  if (body?.assetIds === undefined) return undefined;
+  if (!Array.isArray(body.assetIds) || body.assetIds.length > 500) throw badRequest('assetIds must be a list of ids');
+  const ids = Array.from(new Set<number>(body.assetIds.map(Number).filter((n: number) => Number.isInteger(n) && n > 0)));
+  const valid = assetRepository.idsInTenant(tenantId, ids);
+  if (valid.length !== ids.length) throw badRequest('Unknown asset');
+  return valid;
 }
 
 /* Shared by create and edit. `exceptId` excludes the row being edited from
@@ -40,13 +53,18 @@ function csvDownload(res: express.Response, filename: string, body: string) {
 
 export const stackController = {
   list(req: express.Request, res: express.Response) {
-    res.json({ stack: stackRepository.listByTenant(tenantOf(req)).map(stackItem) });
+    const tid = tenantOf(req);
+    const links = assetRepository.linksByStackItem(tid);
+    res.json({ stack: stackRepository.listByTenant(tid).map((r) => stackItem(r, links.get(r.id) ?? [])) });
   },
 
   create(req: express.Request, res: express.Response) {
     const tid = tenantOf(req);
-    const row = stackRepository.create(tid, parseStackValues(req.body, tid));
-    res.status(201).json({ item: stackItem(row) });
+    const values = parseStackValues(req.body, tid);
+    const assetIds = assetIdsOf(req.body, tid);
+    const row = stackRepository.create(tid, values);
+    if (assetIds) assetRepository.setLinks(row.id, assetIds);
+    res.status(201).json({ item: stackItem(row, assetRepository.linksByStackItem(tid).get(row.id) ?? []) });
   },
 
   /* Edits one row in place; empty optional fields are cleared. */
@@ -56,8 +74,11 @@ export const stackController = {
     const technology = str(req.body?.technology, 100);
     if (!technology) throw badRequest('technology is required (max 100 characters)');
     if (!stackRepository.findInTenant(id, tid)) throw notFound('Tech stack item not found');
-    const row = stackRepository.update(id, tid, parseStackValues(req.body, tid, id));
-    res.json({ item: stackItem(row!) });
+    const values = parseStackValues(req.body, tid, id);
+    const assetIds = assetIdsOf(req.body, tid);
+    const row = stackRepository.update(id, tid, values);
+    if (assetIds) assetRepository.setLinks(id, assetIds);
+    res.json({ item: stackItem(row!, assetRepository.linksByStackItem(tid).get(id) ?? []) });
   },
 
   remove(req: express.Request, res: express.Response) {
@@ -74,7 +95,11 @@ export const stackController = {
   },
 
   exportCsv(req: express.Request, res: express.Response) {
-    csvDownload(res, 'tech-stack.csv', toStackCsv(stackRepository.listByTenant(tenantOf(req))));
+    const tid = tenantOf(req);
+    const links = assetRepository.linksByStackItem(tid);
+    csvDownload(res, 'tech-stack.csv', toStackCsv(stackRepository.listByTenant(tid).map((r) => ({
+      ...r, assets: (links.get(r.id) ?? []).map((a) => a.name),
+    }))));
   },
 
   template(_req: express.Request, res: express.Response) {
@@ -84,6 +109,6 @@ export const stackController = {
   /* My Stack: the corpus matched against the company's stack. */
   async news(req: express.Request, res: express.Response) {
     const limit = Math.min(Number(req.query.limit) || 1000, config.maxNews);
-    res.json(await getStackNews(tenantOf(req), limit));
+    res.json(await getStackNewsWithAssets(tenantOf(req), limit));
   },
 };

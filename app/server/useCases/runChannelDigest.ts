@@ -3,7 +3,8 @@ import { decryptSecret } from '../lib/crypto';
 import { channelRepository, deliveryRepository } from '../repositories/channelRepository';
 import { tenantRepository } from '../repositories/tenantRepository';
 import { AiError } from '../services/ai';
-import { aiSummary, digestEmail, digestText, selectCandidates, testEmail, testText } from '../services/digest';
+import { aiSummary, digestEmail, digestText, selectCandidates, testEmail, testText, withAssets } from '../services/digest';
+import { assetRepository } from '../repositories/assetRepository';
 import { MailError, sendEmail, summarizeReport } from '../services/mail/send';
 import { parseStoredTarget } from '../services/mail/target';
 import { toSqlUtc } from '../services/schedule';
@@ -50,16 +51,22 @@ async function buildAndSend(channel: ChannelRow, tenant: TenantRow, now: Date): 
     return { status: 'skipped', articleCount: 0, detail: 'The company has no technology stack configured' };
   }
 
-  const items = await selectCandidates(channel, stack, now);
-  if (items.length === 0) {
+  /* Assets are looked up only for channels that use them (LinkedIn returned
+     above and never sees them). */
+  const assetLinks = channel.includeAssets || channel.minAssetCriticality ? assetRepository.linksByStackItem(tenant.id) : undefined;
+  const selected = await selectCandidates(channel, stack, now, assetLinks);
+  if (selected.length === 0) {
     return { status: 'skipped', articleCount: 0, detail: 'No new news matching the stack' };
   }
+  /* The AI summary below is given `selected`, which never carries assets:
+     client asset names are not sent to the AI provider. */
+  const items = channel.includeAssets && assetLinks ? withAssets(selected, assetLinks) : selected;
 
   let summary: string | null = null;
   let aiNote = '';
   if (channel.useAi) {
     try {
-      summary = await aiSummary(tenant.id, tenant.language, items);
+      summary = await aiSummary(tenant.id, tenant.language, selected);
     } catch (err) {
       /* A broken AI key must not stop the alerts themselves. */
       aiNote = ` (AI summary skipped: ${err instanceof AiError ? err.message : 'error'})`;

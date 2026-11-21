@@ -10,6 +10,7 @@ export interface EmailItem {
   source: string;
   severity: string;
   matchedTech: string[];
+  assets?: string[];
 }
 
 export interface EmailDigest {
@@ -25,7 +26,7 @@ export interface EmailDigest {
   items: EmailItem[];
   /* Free text shown instead of the item list (test message). */
   body?: string;
-  labels: { severity: Record<string, string>; affects: string; summary: string };
+  labels: { severity: Record<string, string>; affects: string; assets?: string; summary: string };
 }
 
 const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low'];
@@ -84,9 +85,12 @@ export function renderEmailHtml(d: EmailDigest): string {
       const tech = it.matchedTech.length
         ? ` · ${escapeHtml(d.labels.affects)}: <span style="color:#111827;">${escapeHtml(it.matchedTech.join(', '))}</span>`
         : '';
+      const assets = it.assets?.length
+        ? `<div style="font-size:12px;line-height:1.5;color:#6b7280;">${escapeHtml(d.labels.assets ?? 'assets')}: <span style="color:#111827;">${escapeHtml(it.assets.join(', '))}</span></div>`
+        : '';
       return `<tr><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-family:${FONT};">` +
         `<div style="font-size:15px;line-height:1.4;">${link}</div>` +
-        `<div style="font-size:12px;line-height:1.5;color:#6b7280;margin-top:2px;">${escapeHtml(it.source)}${tech}</div></td></tr>`;
+        `<div style="font-size:12px;line-height:1.5;color:#6b7280;margin-top:2px;">${escapeHtml(it.source)}${tech}</div>${assets}</td></tr>`;
     }).join('');
     parts.push(row(
       `<div style="margin-top:10px;"><span style="display:inline-block;background:${color};color:#ffffff;font-size:11px;font-weight:700;letter-spacing:.06em;border-radius:3px;padding:3px 8px;">${label}</span>` +
@@ -120,6 +124,7 @@ export function renderEmailText(d: EmailDigest): string {
     for (const it of list) {
       const tech = it.matchedTech.length ? ` — ${d.labels.affects}: ${it.matchedTech.join(', ')}` : '';
       lines.push(`- ${it.title} · ${it.source}${tech}`);
+      if (it.assets?.length) lines.push(`  ${d.labels.assets ?? 'assets'}: ${it.assets.join(', ')}`);
       const url = safeUrl(it.url);
       if (url) lines.push(`  ${url}`);
     }

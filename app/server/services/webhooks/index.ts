@@ -53,6 +53,8 @@ export interface DigestItem {
   source: string;
   severity: string;
   matchedTech: string[];
+  /* Affected assets, already formatted; only on channels that include them. */
+  assets?: string[];
 }
 
 export interface DigestMessage {
@@ -60,7 +62,7 @@ export interface DigestMessage {
   summary?: string | null;
   items: DigestItem[];
   footer: string;
-  labels: { severity: Record<string, string>; affects: string };
+  labels: { severity: Record<string, string>; affects: string; assets?: string };
 }
 
 const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low'];
@@ -179,7 +181,8 @@ export function renderMessage(type: ChannelType, msg: DigestMessage): { text: st
       const title = st.esc(it.title);
       const link = url ? st.link(title, url) : title;
       const tech = it.matchedTech.length ? ` — ${st.italic(`${st.esc(msg.labels.affects)}: ${st.esc(it.matchedTech.join(', '))}`)}` : '';
-      lines.push(`• ${link} · ${st.esc(it.source)}${tech}`);
+      const assets = it.assets?.length ? ` — ${st.italic(`${st.esc(msg.labels.assets ?? 'assets')}: ${st.esc(it.assets.join(', '))}`)}` : '';
+      lines.push(`• ${link} · ${st.esc(it.source)}${tech}${assets}`);
     }
   }
   lines.push(...footerLines(type, msg.footer));

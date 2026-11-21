@@ -5,13 +5,15 @@
    - optional UTF-8 BOM, CRLF or LF line endings, RFC 4180 quoting
    - header row optional; when present, columns are matched by name in
      English or Spanish and may come in any order
-   - without a header: technology, version, vendor, category                */
+   - without a header: technology, version, vendor, category, assets
+   - assets: asset names separated by | ; or , (created if missing)         */
 
 export interface StackCsvRow {
   technology: string;
   version?: string;
   vendor?: string;
   category?: string;
+  assets?: string[];
 }
 
 export interface StackCsvError {
@@ -28,23 +30,40 @@ export interface StackCsvResult {
 export const CSV_MAX_BYTES = 1024 * 1024;
 export const CSV_MAX_ROWS = 2000;
 const FIELD_MAX = 100;
+const MAX_ASSETS_PER_ROW = 50;
 
 export const CSV_TEMPLATE =
-  'technology,version,vendor,category\n' +
-  'WordPress,6.4,Automattic,CMS\n' +
-  'Apache HTTP Server,2.4,Apache,Web Server\n' +
-  'PHP,8.2,,Runtime\n' +
-  'FortiOS,7.2,Fortinet,Firewall\n' +
-  'Microsoft Exchange Server,2019,Microsoft,Email\n';
+  'technology,version,vendor,category,assets\n' +
+  'WordPress,6.4,Automattic,CMS,WEB01\n' +
+  'Apache HTTP Server,2.4,Apache,Web Server,WEB01|WEB02\n' +
+  'PHP,8.2,,Runtime,WEB01|WEB02\n' +
+  'FortiOS,7.2,Fortinet,Firewall,FW-PERIMETRO\n' +
+  'Microsoft Exchange Server,2019,Microsoft,Email,\n';
 
-type Field = keyof StackCsvRow;
+type TextField = 'technology' | 'version' | 'vendor' | 'category';
+type Field = TextField | 'assets';
 
 const HEADER_ALIASES: Record<Field, string[]> = {
   technology: ['technology', 'tech', 'name', 'product', 'software', 'tecnologia', 'tecnología', 'producto', 'nombre'],
   version: ['version', 'versión', 'ver'],
   vendor: ['vendor', 'manufacturer', 'fabricante', 'proveedor', 'marca'],
   category: ['category', 'type', 'categoria', 'categoría', 'tipo'],
+  assets: ['assets', 'asset', 'activos', 'activo', 'hosts', 'equipos'],
 };
+
+/* Asset names in one cell: | ; or , separated, trimmed, de-duplicated
+   (case-insensitive, first spelling wins). */
+export function splitAssetNames(cell: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of cell.split(/[|;,]/)) {
+    const name = raw.trim();
+    if (!name || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    out.push(name);
+  }
+  return out;
+}
 
 function normaliseHeader(h: string): string {
   return h.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -122,7 +141,7 @@ export function parseStackCsv(input: string): StackCsvResult {
 
   /* Header detection: the first record is a header when any of its cells is
      a known column name. */
-  let columnMap: Partial<Record<Field, number>> = { technology: 0, version: 1, vendor: 2, category: 3 };
+  let columnMap: Partial<Record<Field, number>> = { technology: 0, version: 1, vendor: 2, category: 3, assets: 4 };
   const headerCells = records[0].cells.map(normaliseHeader);
   const looksLikeHeader = headerCells.some((h) =>
     Object.values(HEADER_ALIASES).some((aliases) => aliases.map(normaliseHeader).includes(h))
@@ -155,7 +174,7 @@ export function parseStackCsv(input: string): StackCsvResult {
   }
 
   const rows: StackCsvRow[] = [];
-  const seen = new Set<string>();
+  const seen = new Map<string, StackCsvRow>();
   let duplicates = 0;
 
   for (const rec of dataRecords) {
@@ -170,22 +189,35 @@ export function parseStackCsv(input: string): StackCsvResult {
     if (version) row.version = version;
     if (vendor) row.vendor = vendor;
     if (category) row.category = category;
+    const assetNames = splitAssetNames(get('assets'));
 
     if (!row.technology) {
       errors.push({ line: rec.line, message: 'Missing technology' });
       continue;
     }
-    const tooLong = (Object.keys(row) as Field[]).find((k) => (row[k] ?? '').length > FIELD_MAX);
+    const tooLong = (['technology', 'version', 'vendor', 'category'] as TextField[]).find((k) => (row[k] ?? '').length > FIELD_MAX);
     if (tooLong) {
       errors.push({ line: rec.line, message: `"${tooLong}" is longer than ${FIELD_MAX} characters` });
       continue;
     }
+    if (assetNames.some((n) => n.length > FIELD_MAX)) {
+      errors.push({ line: rec.line, message: `An asset name is longer than ${FIELD_MAX} characters` });
+      continue;
+    }
+    if (assetNames.length > MAX_ASSETS_PER_ROW) {
+      errors.push({ line: rec.line, message: `More than ${MAX_ASSETS_PER_ROW} assets in one row` });
+      continue;
+    }
     const key = stackKey(row);
-    if (seen.has(key)) {
+    const first = seen.get(key);
+    if (first) {
+      /* Same technology and version again: its assets join the first row. */
+      if (assetNames.length) first.assets = splitAssetNames([...(first.assets ?? []), ...assetNames].join('|'));
       duplicates++;
       continue;
     }
-    seen.add(key);
+    if (assetNames.length) row.assets = assetNames;
+    seen.set(key, row);
     rows.push(row);
   }
 
@@ -205,10 +237,10 @@ function csvCell(value: string | null | undefined): string {
   return v;
 }
 
-export function toStackCsv(rows: Array<{ technology: string; version?: string | null; vendor?: string | null; category?: string | null }>): string {
-  const lines = ['technology,version,vendor,category'];
+export function toStackCsv(rows: Array<{ technology: string; version?: string | null; vendor?: string | null; category?: string | null; assets?: string[] }>): string {
+  const lines = ['technology,version,vendor,category,assets'];
   for (const r of rows) {
-    lines.push([r.technology, r.version, r.vendor, r.category].map(csvCell).join(','));
+    lines.push([r.technology, r.version, r.vendor, r.category, (r.assets ?? []).join('|')].map(csvCell).join(','));
   }
   return lines.join('\n') + '\n';
 }

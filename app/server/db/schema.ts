@@ -132,6 +132,46 @@ export const techStack = sqliteTable('user_tech_stack', {
   createdAt: text('created_at').default(now),
 }, (t) => [index('idx_tech_stack_tenant').on(t.tenantId)]);
 
+/* Client assets (servers, firewalls, SaaS, apps…) per company. Stack rows
+   link to the assets that run them, so a news match can say which of the
+   client's assets it affects. Asset names are sensitive (they map the
+   client's attack surface): they are never sent to the AI provider nor to
+   LinkedIn, and digests only include them on channels that opt in. */
+export const ASSET_TYPES = ['server', 'workstation', 'laptop', 'network', 'firewall', 'cloud', 'saas', 'application', 'database', 'mobile', 'iot', 'other'] as const;
+export type AssetType = (typeof ASSET_TYPES)[number];
+export const ASSET_CRITICALITIES = ['low', 'medium', 'high'] as const;
+export type AssetCriticality = (typeof ASSET_CRITICALITIES)[number];
+
+export const assets = sqliteTable('assets', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  type: text('type', { enum: ASSET_TYPES }).notNull().default('other'),
+  criticality: text('criticality', { enum: ASSET_CRITICALITIES }).notNull().default('medium'),
+  environment: text('environment'),
+  hostname: text('hostname'),
+  ip: text('ip'),
+  brand: text('brand'),
+  model: text('model'),
+  owner: text('owner'),
+  notes: text('notes'),
+  createdAt: text('created_at').default(now),
+  updatedAt: text('updated_at').default(now),
+}, (t) => [
+  uniqueIndex('idx_assets_tenant_name').on(t.tenantId, sql`${t.name} COLLATE NOCASE`),
+  check('assets_type_check', sql`${t.type} IN ('server', 'workstation', 'laptop', 'network', 'firewall', 'cloud', 'saas', 'application', 'database', 'mobile', 'iot', 'other')`),
+  check('assets_criticality_check', sql`${t.criticality} IN ('low', 'medium', 'high')`),
+]);
+
+/* Which assets run each stack row (many to many, same company). */
+export const stackItemAssets = sqliteTable('stack_item_assets', {
+  stackItemId: integer('stack_item_id').notNull().references(() => techStack.id, { onDelete: 'cascade' }),
+  assetId: integer('asset_id').notNull().references(() => assets.id, { onDelete: 'cascade' }),
+}, (t) => [
+  primaryKey({ columns: [t.stackItemId, t.assetId] }),
+  index('idx_stack_item_assets_asset').on(t.assetId),
+]);
+
 export const CHANNEL_TYPES = ['slack', 'rocketchat', 'email', 'telegram', 'discord', 'linkedin'] as const;
 export type ChannelType = (typeof CHANNEL_TYPES)[number];
 export const SCHEDULE_TYPES = ['interval', 'weekly'] as const;
@@ -177,6 +217,11 @@ export const channels = sqliteTable('channels', {
   postsPerRun: integer('posts_per_run'),
   maxPostsPerDay: integer('max_posts_per_day'),
   requireApproval: integer('require_approval', { mode: 'boolean' }),
+  /* Digest channels only (never LinkedIn): list the affected assets under
+     each news item, and optionally only send news that affects an asset at
+     or above this criticality (NULL = any news matching the stack). */
+  includeAssets: integer('include_assets', { mode: 'boolean' }).notNull().default(false),
+  minAssetCriticality: text('min_asset_criticality'),
 }, (t) => [
   index('idx_channels_tenant').on(t.tenantId),
   index('idx_channels_next_run').on(t.nextRunAt),
@@ -223,6 +268,7 @@ export type UserRow = typeof users.$inferSelect;
 export type SessionRow = typeof sessions.$inferSelect;
 export type StackRow = typeof techStack.$inferSelect;
 export type ChannelRow = typeof channels.$inferSelect;
+export type AssetRow = typeof assets.$inferSelect;
 export type NewChannel = typeof channels.$inferInsert;
 export type DeliveryRow = typeof deliveries.$inferSelect;
 

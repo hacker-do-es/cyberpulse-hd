@@ -69,6 +69,10 @@ export const authApi = {
 
 export interface ImportSummary {
   dryRun: boolean;
+  assetLinksToExisting?: number;
+  assetsToCreate?: string[];
+  assetsToCreateCount?: number;
+  assetsCreated?: number;
   mode: 'append' | 'replace';
   valid: number;
   toInsert: number;
@@ -77,9 +81,41 @@ export interface ImportSummary {
   errors: Array<{ line: number; message: string }>;
   errorCount: number;
   willRemove: number;
-  preview?: Array<{ technology: string; version?: string; vendor?: string; category?: string }>;
+  preview?: Array<{ technology: string; version?: string; vendor?: string; category?: string; assets?: string[] }>;
   imported?: number;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Assets                                                             */
+/* ------------------------------------------------------------------ */
+
+export const ASSET_TYPES = ['server', 'workstation', 'laptop', 'network', 'firewall', 'cloud', 'saas', 'application', 'database', 'mobile', 'iot', 'other'] as const;
+export type AssetType = (typeof ASSET_TYPES)[number];
+export const ASSET_CRITICALITIES = ['high', 'medium', 'low'] as const;
+
+export interface Asset {
+  id: number;
+  name: string;
+  type: AssetType;
+  criticality: 'low' | 'medium' | 'high';
+  environment?: string;
+  hostname?: string;
+  ip?: string;
+  brand?: string;
+  model?: string;
+  owner?: string;
+  notes?: string;
+  stackItemIds: number[];
+}
+
+export type AssetInput = Omit<Asset, 'id' | 'stackItemIds'> & { stackItemIds?: number[] };
+
+export const assetApi = {
+  list: () => call<{ assets: Asset[] }>('GET', '/api/assets').then((r) => r.assets),
+  create: (a: AssetInput) => call<{ item: Asset }>('POST', '/api/assets', a).then((r) => r.item),
+  update: (id: number, a: AssetInput) => call<{ item: Asset }>('PUT', `/api/assets/${id}`, a).then((r) => r.item),
+  remove: (id: number) => call<{ success: true }>('DELETE', `/api/assets/${id}`),
+};
 
 export const stackApi = {
   importCsv: (csv: string, mode: 'append' | 'replace', dryRun: boolean) =>
@@ -164,6 +200,9 @@ export interface Channel {
   minSeverity: Severity;
   maxItems: number;
   useAi: boolean;
+  /** Digest channels only (always false/null for LinkedIn). */
+  includeAssets: boolean;
+  minAssetCriticality: 'low' | 'medium' | 'high' | null;
   /** Custom digest header; null = default. */
   header: string | null;
   /** Custom digest footer; null = default, '' = no footer. */
@@ -195,6 +234,8 @@ export interface ChannelInput {
   minSeverity: Severity;
   maxItems: number;
   useAi: boolean;
+  includeAssets?: boolean;
+  minAssetCriticality?: 'low' | 'medium' | 'high' | null;
   header?: string | null;
   footer?: string | null;
 }
