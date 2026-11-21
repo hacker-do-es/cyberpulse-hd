@@ -187,7 +187,7 @@ export default function StackManager({ canEdit, refreshKey, onChanged }: { canEd
                       onChange={(ids) => setEditing({ ...editing, assetIds: ids })}
                       label={tr('Assets…')}
                       render={(a) => a.name}
-                      empty={tr('No assets yet: add them in the Assets panel below.')}
+                      empty={tr('No assets yet: add them in the Assets tab.')}
                     />
                   </td>
                   <td className="px-2 py-1.5 text-right whitespace-nowrap">

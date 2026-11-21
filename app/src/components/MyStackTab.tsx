@@ -156,10 +156,10 @@ export default function MyStackTab({
           {tr("Configure Your Tech Stack")}
         </h3>
         <p className="text-sm text-text-secondary font-inter max-w-md">
-          {tr("Add your technologies (PHP, Apache, WordPress, etc.) in Settings to receive personalized security news relevant to your infrastructure.")}
+          {tr("Add your technologies (PHP, Apache, WordPress, etc.) in the Technologies tab to receive personalized security news relevant to your infrastructure.")}
         </p>
         <p className="text-xs text-text-tertiary font-jetbrains">
-          {tr("Settings → My Technology Stack")}
+          {tr("Technologies → Import CSV or Add")}
         </p>
       </div>
     );

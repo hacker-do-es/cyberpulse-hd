@@ -1,9 +1,9 @@
-import { Newspaper, FileText, History, Server, Radio, Settings, Building2, ScrollText } from 'lucide-react';
+import { Newspaper, FileText, History, Server, Radio, Settings, Building2, ScrollText, Layers, HardDrive } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Role } from '@/services/hdApi';
 import { tr } from '@/lib/i18n';
 
-export type TabId = 'news' | 'my-stack' | 'generate' | 'history' | 'channels' | 'settings' | 'admin' | 'logs';
+export type TabId = 'news' | 'my-stack' | 'technologies' | 'assets' | 'generate' | 'history' | 'channels' | 'settings' | 'admin' | 'logs';
 
 interface TabConfig {
   id: TabId;
@@ -15,10 +15,13 @@ interface TabConfig {
 const tabs: TabConfig[] = [
   { id: 'news', label: 'News Feed', icon: <Newspaper size={16} /> },
   { id: 'my-stack', label: 'My Stack', icon: <Server size={16} /> },
+  { id: 'technologies', label: 'Technologies', icon: <Layers size={16} /> },
+  { id: 'assets', label: 'Assets', icon: <HardDrive size={16} /> },
   { id: 'generate', label: 'Generate Post', icon: <FileText size={16} /> },
   { id: 'history', label: 'History', icon: <History size={16} /> },
   { id: 'channels', label: 'Channels', icon: <Radio size={16} />, roles: ['admin', 'superadmin'] },
-  { id: 'settings', label: 'Settings', icon: <Settings size={16} /> },
+  /* Company, AI and users only: members have nothing to see there. */
+  { id: 'settings', label: 'Settings', icon: <Settings size={16} />, roles: ['admin', 'superadmin'] },
   { id: 'admin', label: 'Companies', icon: <Building2 size={16} />, roles: ['superadmin'] },
   { id: 'logs', label: 'Logs', icon: <ScrollText size={16} />, roles: ['superadmin'] },
 ];
@@ -47,13 +50,15 @@ export default function Navbar({ activeTab, onTabChange, role }: NavbarProps) {
               aria-current={isActive ? 'page' : undefined}
               title={tr(tab.label)}
               className={`
-                relative flex items-center gap-2 px-2.5 xl:px-3.5 py-2 text-[15px] font-semibold font-rajdhani tracking-wide whitespace-nowrap
+                relative flex items-center gap-2 px-2.5 xl:px-3 py-2 text-[15px] font-semibold font-rajdhani tracking-wide whitespace-nowrap
                 transition-colors duration-200 ease-out cursor-pointer
                 ${isActive ? 'text-accent' : 'text-text-tertiary hover:text-text-secondary'}
               `}
             >
               {tab.icon}
-              <span className="hidden xl:inline">{tr(tab.label)}</span>
+              {/* Ten tabs don't fit with labels on a laptop screen: below ~1760 px
+                  only the active tab shows its label (the rest: icon + tooltip). */}
+              <span className={isActive ? 'hidden xl:inline' : 'hidden min-[1760px]:inline'}>{tr(tab.label)}</span>
               {isActive && (
                 <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent rounded-full" />
               )}

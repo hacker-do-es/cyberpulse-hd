@@ -18,6 +18,7 @@ import { useAuth } from '@/lib/auth';
 import { tabsForRole } from './Navbar';
 import ChannelsTab from './hd/ChannelsTab';
 import SettingsTab from './hd/SettingsTab';
+import { AssetsTab, TechnologiesTab } from './hd/InventoryTabs';
 import AdminTab from './hd/AdminTab';
 import AccountDialog from './hd/AccountDialog';
 import {
@@ -298,11 +299,17 @@ export default function Layout() {
       case 'channels':
         if (!hasTenant) return <NeedsCompany onPick={() => setActiveTab('admin')} />;
         return <ChannelsTab key={`channels-${me?.activeTenant?.id}`} />;
+      case 'technologies':
+        if (!hasTenant) return <NeedsCompany onPick={() => setActiveTab('admin')} />;
+        return <TechnologiesTab key={`tech-${me?.activeTenant?.id}`} onChanged={refreshStackNews} />;
+      case 'assets':
+        if (!hasTenant) return <NeedsCompany onPick={() => setActiveTab('admin')} />;
+        return <AssetsTab key={`assets-${me?.activeTenant?.id}`} onChanged={refreshStackNews} />;
       case 'settings':
         if (!hasTenant) return <NeedsCompany onPick={() => setActiveTab('admin')} />;
-        return <SettingsTab key={`settings-${me?.activeTenant?.id}`} onStackChanged={refreshStackNews} />;
+        return <SettingsTab key={`settings-${me?.activeTenant?.id}`} />;
       case 'admin':
-        return <AdminTab onEnterTenant={() => setActiveTab('settings')} />;
+        return <AdminTab onEnterTenant={() => setActiveTab('technologies')} />;
       case 'logs':
         if (role !== 'superadmin') return null;
         return (

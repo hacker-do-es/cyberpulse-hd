@@ -845,6 +845,14 @@ export const ES: Record<string, string> = {
   'Assets imported: {c} new, {u} updated, {d} removed': 'Activos importados: {c} nuevos, {u} actualizados, {d} eliminados',
   'The first row must be a header with a "name" column': 'La primera fila tiene que ser una cabecera con una columna "name" (o "nombre")',
   'Missing name': 'Falta el nombre',
+
+  // Technologies / Assets tabs
+  'Language, time zone, AI provider and users of this company.': 'Idioma, zona horaria, proveedor de IA y usuarios de esta empresa.',
+  'The software and services the company runs. News is matched against this list on My Stack and in the channel digests.': 'El software y los servicios que usa la empresa. Las noticias se comparan con esta lista en Mi stack y en los resúmenes de los canales.',
+  'Servers, devices, apps and services, with the technologies each one runs, so news can say which assets it affects.': 'Servidores, dispositivos, aplicaciones y servicios, con las tecnologías que corre cada uno, para que las noticias digan a qué activos afectan.',
+  'Add your technologies (PHP, Apache, WordPress, etc.) in the Technologies tab to receive personalized security news relevant to your infrastructure.': 'Agrega tus tecnologías (PHP, Apache, WordPress, etc.) en la solapa Tecnologías para recibir noticias de seguridad que afecten a tu infraestructura.',
+  'Technologies → Import CSV or Add': 'Tecnologías → Importar CSV o Añadir',
+  'No assets yet: add them in the Assets tab.': 'Todavía no hay activos: agrégalos en la solapa Activos.',
 };
 
 /* Server messages with values in them. */
