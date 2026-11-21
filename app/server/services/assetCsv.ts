@@ -9,7 +9,7 @@
    present but empty cell clears it. */
 
 import { HttpError } from '../lib/http';
-import { csvCell, detectDelimiter, normaliseHeader, parseCsv, splitAssetNames, CSV_MAX_BYTES } from './csv';
+import { csvCell, detectDelimiter, normaliseHeader, parseCsv, repairExcelResave, splitAssetNames, CSV_MAX_BYTES } from './csv';
 import { parseAssetType, parseCriticality, parseHostname, parseIps } from './assetValidation';
 import type { AssetCriticality, AssetType } from '../db/schema';
 
@@ -65,7 +65,7 @@ function fail(line: number, message: string): AssetCsvResult {
 
 export function parseAssetCsv(input: string): AssetCsvResult {
   if (Buffer.byteLength(input, 'utf8') > CSV_MAX_BYTES) return fail(0, 'File is larger than 1 MB');
-  const text = input.replace(/^\uFEFF/, '');
+  const text = repairExcelResave(input.replace(/^\uFEFF/, '')).text;
   const firstLine = text.split(/\r?\n/, 1)[0] ?? '';
   const records = parseCsv(text, detectDelimiter(firstLine)).filter((r) => r.cells.some((c) => c.trim() !== ''));
   if (records.length === 0) return fail(0, 'The file is empty');

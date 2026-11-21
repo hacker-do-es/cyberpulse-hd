@@ -124,13 +124,32 @@ export function parseCsv(text: string, delimiter: string): Array<{ line: number;
   return records;
 }
 
+/* A comma CSV opened and saved again by Excel in a locale that uses ";"
+   (Spanish, French…) comes back mangled: Excel split each row at the ";"
+   inside cells, wrapped the pieces in quotes and padded the row with ";".
+   Re-reading such a file with ";" and joining the pieces back with ";"
+   restores the original comma CSV. Only applied when the header row has
+   commas and ends with the ";" padding, which a real CSV never does. */
+export function repairExcelResave(text: string): { text: string; repaired: boolean } {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '');
+  const header = lines[0] ?? '';
+  const padded = lines.filter((l) => /;\s*$/.test(l)).length;
+  if (!header.includes(',') || !/;\s*$/.test(header) || padded < Math.ceil(lines.length / 2)) {
+    return { text, repaired: false };
+  }
+  const rebuilt = parseCsv(text, ';')
+    .map((r) => r.cells.join(';').replace(/;+\s*$/, ''))
+    .filter((l) => l.trim() !== '');
+  return { text: rebuilt.join('\n') + '\n', repaired: true };
+}
+
 export function parseStackCsv(input: string): StackCsvResult {
   const errors: StackCsvError[] = [];
   if (Buffer.byteLength(input, 'utf8') > CSV_MAX_BYTES) {
     return { rows: [], errors: [{ line: 0, message: 'File is larger than 1 MB' }], duplicates: 0 };
   }
 
-  const text = input.replace(/^﻿/, '');
+  const text = repairExcelResave(input.replace(/^\uFEFF/, '')).text;
   const firstLine = text.split(/\r?\n/, 1)[0] ?? '';
   const records = parseCsv(text, detectDelimiter(firstLine))
     .filter((r) => r.cells.some((c) => c.trim() !== ''));

@@ -35,6 +35,14 @@ const TYPE_ALIASES: Record<string, AssetType> = {
   servidor: 'server', 'estacion de trabajo': 'workstation', 'puesto de trabajo': 'workstation', pc: 'workstation', desktop: 'workstation',
   portatil: 'laptop', notebook: 'laptop', red: 'network', 'equipo de red': 'network', 'network device': 'network', switch: 'network', router: 'network',
   'base de datos': 'database', db: 'database', aplicacion: 'application', app: 'application', nube: 'cloud', movil: 'mobile', otro: 'other',
+  /* Names other inventories and scanners use. */
+  'web application': 'application', webapp: 'application', 'web app': 'application', website: 'application', web: 'application',
+  'sitio web': 'application', 'aplicacion web': 'application', api: 'application', 'rest api': 'application', service: 'application', servicio: 'application',
+  cdn: 'cloud', 'cloud service': 'cloud', paas: 'cloud', iaas: 'cloud', 'saas app': 'saas', 'saas application': 'saas',
+  vm: 'server', 'virtual machine': 'server', 'maquina virtual': 'server', host: 'server', nas: 'server', storage: 'server',
+  'load balancer': 'network', lb: 'network', ap: 'network', 'access point': 'network', 'punto de acceso': 'network', vpn: 'firewall', utm: 'firewall',
+  dns: 'other', 'dns record': 'other', domain: 'other', dominio: 'other', printer: 'other', impresora: 'other',
+  phone: 'mobile', smartphone: 'mobile', tablet: 'mobile', telefono: 'mobile', camera: 'iot', camara: 'iot', sensor: 'iot',
 };
 
 export function parseAssetType(v: string): AssetType | null {

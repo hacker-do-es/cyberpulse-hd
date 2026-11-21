@@ -203,3 +203,35 @@ describe('stack CSV assets column', () => {
       .toBe('technology,version,vendor,category,assets\nPHP,8.2,,,WEB01|=cmd\n');
   });
 });
+
+describe('CSV re-saved by a ";" locale Excel', () => {
+  /* What Spanish Excel writes after opening a comma CSV whose cells contain ";". */
+  const mangled =
+    'name,type,criticality,environment,hostname,ip,brand,model,owner,notes,technologies;;;;;;;\r\n' +
+    '"Web site,web_application,high,production,example.com,203.0.113.5,,,ACME,""Behind CDN"; TLS A+;" HSTS."",""Cloudflare";" React""";;;;\r\n' +
+    'API,api,critical,production,api.example.com,203.0.113.6,,,ACME,,Node.js;;;;;;;\r\n';
+
+  it('restores the rows and imports them as assets', async () => {
+    const { repairExcelResave } = await import('../services/csv');
+    const { parseAssetCsv } = await import('../services/assetCsv');
+    expect(repairExcelResave(mangled).repaired).toBe(true);
+    const r = parseAssetCsv(mangled);
+    expect(r.errors).toEqual([]);
+    expect(r.rows).toHaveLength(2);
+    expect(r.rows[0]).toMatchObject({
+      name: 'Web site',
+      values: { type: 'application', criticality: 'high', environment: 'production', hostname: 'example.com', notes: 'Behind CDN; TLS A+; HSTS.' },
+      technologies: ['Cloudflare', 'React'],
+    });
+    expect(r.rows[1]).toMatchObject({ name: 'API', values: { type: 'application', criticality: 'high' }, technologies: ['Node.js'] });
+  });
+
+  it('leaves normal comma and semicolon files alone', async () => {
+    const { repairExcelResave, parseStackCsv } = await import('../services/csv');
+    expect(repairExcelResave('name,type\nA,server\n').repaired).toBe(false);
+    expect(repairExcelResave('Tecnología;Versión;\nPHP;8.2;\n').repaired).toBe(false);
+    /* The stack importer gets the same repair. */
+    const stack = parseStackCsv('technology,version,vendor,category,assets;;;;\r\n"PHP,8.2,,Runtime,WEB01";" WEB02";;;\r\n');
+    expect(stack.rows).toEqual([{ technology: 'PHP', version: '8.2', category: 'Runtime', assets: ['WEB01', 'WEB02'] }]);
+  });
+});
