@@ -829,6 +829,22 @@ export const ES: Record<string, string> = {
   'Unknown criticality': 'Criticidad desconocida',
   'Invalid hostname': 'Hostname no válido',
   'Unknown asset': 'Activo desconocido',
+
+  // Assets CSV
+  'Import assets from CSV': 'Importar activos desde CSV',
+  '. Only name is required; English or Spanish headers and values (e.g. "servidor", "alta"). Several IPs or technologies in one cell: separate them with |. Technologies are matched to the stack by name ("PHP") or name and version ("PHP 8.2"). A column left out keeps the current value.': '. Solo name es obligatoria; cabeceras y valores en inglés o español (p. ej. "servidor", "alta"). Varias IPs o tecnologías en una celda: sepáralas con |. Las tecnologías se buscan en el stack por nombre ("PHP") o nombre y versión ("PHP 8.2"). Una columna que no esté en el archivo conserva el valor actual.',
+  'Add new and update existing': 'Agregar nuevos y actualizar existentes',
+  'Replace all assets': 'Reemplazar todos los activos',
+  'new': 'nuevos',
+  'to update': 'a actualizar',
+  'will be removed': 'se eliminarán',
+  'update': 'actualiza',
+  'Not in the file, will be removed:': 'No están en el archivo, se eliminarán:',
+  'Not in the stack, will not be linked:': 'No están en el stack, no se vincularán:',
+  'Replace assets': 'Reemplazar activos',
+  'Assets imported: {c} new, {u} updated, {d} removed': 'Activos importados: {c} nuevos, {u} actualizados, {d} eliminados',
+  'The first row must be a header with a "name" column': 'La primera fila tiene que ser una cabecera con una columna "name" (o "nombre")',
+  'Missing name': 'Falta el nombre',
 };
 
 /* Server messages with values in them. */
@@ -866,4 +882,6 @@ export const ES_PATTERNS: Array<[RegExp, string]> = [
   [/^At most (\d+) IP addresses per asset$/, 'Como máximo $1 direcciones IP por activo'],
   [/^An asset name is longer than (\d+) characters$/, 'Un nombre de activo tiene más de $1 caracteres'],
   [/^More than (\d+) assets in one row$/, 'Más de $1 activos en una fila'],
+  [/^Unknown asset type: (.*)$/, 'Tipo de activo desconocido: $1'],
+  [/^Unknown criticality: (.*)$/, 'Criticidad desconocida: $1'],
 ];

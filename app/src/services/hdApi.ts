@@ -115,7 +115,31 @@ export const assetApi = {
   create: (a: AssetInput) => call<{ item: Asset }>('POST', '/api/assets', a).then((r) => r.item),
   update: (id: number, a: AssetInput) => call<{ item: Asset }>('PUT', `/api/assets/${id}`, a).then((r) => r.item),
   remove: (id: number) => call<{ success: true }>('DELETE', `/api/assets/${id}`),
+  importCsv: (csv: string, mode: 'merge' | 'replace', dryRun: boolean) =>
+    call<AssetImportSummary>('POST', `/api/assets/import?mode=${mode}&dryRun=${dryRun}`, undefined, { raw: csv, contentType: 'text/csv' }),
 };
+
+export interface AssetImportSummary {
+  dryRun: boolean;
+  mode: 'merge' | 'replace';
+  valid: number;
+  toCreate: number;
+  toUpdate: number;
+  toDelete: number;
+  deleteNames: string[];
+  duplicatesInFile: number;
+  columns: string[];
+  unknownTechnologies: string[];
+  errors: Array<{ line: number; message: string }>;
+  errorCount: number;
+  preview?: Array<{
+    name: string; action: 'create' | 'update'; type?: AssetType; criticality?: 'low' | 'medium' | 'high';
+    hostname?: string | null; ip?: string | null; brand?: string | null; model?: string | null; technologies?: string[];
+  }>;
+  created?: number;
+  updated?: number;
+  deleted?: number;
+}
 
 export const stackApi = {
   importCsv: (csv: string, mode: 'append' | 'replace', dryRun: boolean) =>

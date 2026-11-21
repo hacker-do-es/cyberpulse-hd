@@ -71,6 +71,10 @@ export function apiRouter(appVersion: string): express.Router {
 
   /* Company: assets (what runs the stack) */
   api.get('/assets', requireTenant, handle(assetController.list));
+  api.get('/assets/export.csv', requireTenant, handle(assetController.exportCsv));
+  api.get('/assets/template.csv', handle(assetController.template));
+  api.post('/assets/import', ...requireTenantAdmin, writeLimiter,
+    express.text({ type: 'text/csv', limit: CSV_MAX_BYTES + 1024, inflate: false }), handle(assetController.import));
   api.post('/assets', ...requireTenantAdmin, writeLimiter, handle(assetController.create));
   api.put('/assets/:id', ...requireTenantAdmin, writeLimiter, handle(assetController.update));
   api.delete('/assets/:id', ...requireTenantAdmin, writeLimiter, handle(assetController.remove));

@@ -21,6 +21,7 @@ const ACTIONS: Record<string, string> = {
   'PUT /tech-stack/:id': 'stack.update',
   'DELETE /tech-stack/:id': 'stack.delete',
   'POST /assets': 'asset.create',
+  'POST /assets/import': 'asset.import',
   'PUT /assets/:id': 'asset.update',
   'DELETE /assets/:id': 'asset.delete',
   'PUT /tenant/settings': 'settings.update',

@@ -1,10 +1,18 @@
 import type express from 'express';
-import { isIP } from 'net';
 import { ASSET_CRITICALITIES, ASSET_TYPES, type AssetCriticality, type AssetRow, type AssetType } from '../db/schema';
 import { badRequest, conflict, idParam, isUniqueViolation, notFound, optStr, str, tenantOf } from '../lib/http';
 import { assetRepository, type AssetValues } from '../repositories/assetRepository';
+import { parseHostname, parseIps } from '../services/assetValidation';
+import { ASSET_CSV_TEMPLATE, toAssetCsv } from '../services/assetCsv';
+import { importAssets } from '../useCases/importAssets';
+import { stackRepository } from '../repositories/stackRepository';
 
-const MAX_IPS = 10;
+function csvDownload(res: express.Response, filename: string, body: string) {
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  /* BOM so Excel opens UTF-8 correctly. */
+  res.send('\uFEFF' + body);
+}
 
 function assetItem(row: AssetRow, stackItemIds: number[] = []) {
   return {
@@ -23,26 +31,6 @@ function assetItem(row: AssetRow, stackItemIds: number[] = []) {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
-}
-
-/* One or more IPv4/IPv6 addresses, comma or space separated. */
-export function parseIps(v: unknown): string | null {
-  const raw = optStr(v, 500);
-  if (!raw) return null;
-  const ips = Array.from(new Set(raw.split(/[\s,;]+/).filter(Boolean)));
-  if (ips.length > MAX_IPS) throw badRequest(`At most ${MAX_IPS} IP addresses per asset`);
-  const bad = ips.find((ip) => isIP(ip) === 0);
-  if (bad) throw badRequest(`Invalid IP address: ${bad.slice(0, 50)}`);
-  return ips.join(', ');
-}
-
-const HOSTNAME_RE = /^[A-Za-z0-9_](?:[A-Za-z0-9_.-]{0,252}[A-Za-z0-9_])?$/;
-
-export function parseHostname(v: unknown): string | null {
-  const h = optStr(v, 300);
-  if (!h) return null;
-  if (h.length > 253 || !HOSTNAME_RE.test(h) || h.includes('..')) throw badRequest('Invalid hostname');
-  return h;
 }
 
 export function parseAssetValues(body: any): AssetValues {
@@ -110,6 +98,27 @@ export const assetController = {
     const row = save(() => assetRepository.update(id, tid, values))!;
     if (ids) assetRepository.setStackItems(id, tid, ids);
     res.json({ item: assetItem(row, assetRepository.stackItemsByAsset(tid).get(id) ?? []) });
+  },
+
+  import(req: express.Request, res: express.Response) {
+    const csv = typeof req.body === 'string' ? req.body : req.body?.csv;
+    if (typeof csv !== 'string') throw badRequest('Send the CSV as text/csv or as {"csv": "..."}');
+    const mode = (req.query.mode ?? req.body?.mode) === 'replace' ? 'replace' : 'merge';
+    const dryRun = String(req.query.dryRun ?? req.body?.dryRun) === 'true';
+    res.json(importAssets(tenantOf(req), csv, mode, dryRun));
+  },
+
+  exportCsv(req: express.Request, res: express.Response) {
+    const tid = tenantOf(req);
+    const links = assetRepository.stackItemsByAsset(tid);
+    const tech = new Map(stackRepository.listByTenant(tid).map((t) => [t.id, t.version ? `${t.technology} ${t.version}` : t.technology]));
+    csvDownload(res, 'assets.csv', toAssetCsv(assetRepository.listByTenant(tid).map((a) => ({
+      ...a, technologies: (links.get(a.id) ?? []).map((id) => tech.get(id)).filter((x): x is string => !!x),
+    }))));
+  },
+
+  template(_req: express.Request, res: express.Response) {
+    csvDownload(res, 'assets-template.csv', ASSET_CSV_TEMPLATE);
   },
 
   remove(req: express.Request, res: express.Response) {

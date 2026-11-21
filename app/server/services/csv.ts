@@ -65,11 +65,11 @@ export function splitAssetNames(cell: string): string[] {
   return out;
 }
 
-function normaliseHeader(h: string): string {
+export function normaliseHeader(h: string): string {
   return h.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
-function detectDelimiter(firstLine: string): string {
+export function detectDelimiter(firstLine: string): string {
   const counts = [',', ';', '\t'].map((d) => ({ d, n: firstLine.split(d).length - 1 }));
   counts.sort((a, b) => b.n - a.n);
   return counts[0].n > 0 ? counts[0].d : ',';
@@ -230,7 +230,7 @@ export function stackKey(row: { technology: string; version?: string | null }): 
 
 /* Spreadsheet apps execute cells starting with = + - @ (and tab/CR) as
    formulas. Prefix them so an exported stack cannot carry a payload. */
-function csvCell(value: string | null | undefined): string {
+export function csvCell(value: string | null | undefined): string {
   let v = value ?? '';
   if (/^[=+\-@\t\r]/.test(v)) v = `'${v}`;
   if (/[",\n\r]/.test(v)) v = `"${v.replace(/"/g, '""')}"`;

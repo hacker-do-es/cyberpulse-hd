@@ -1179,3 +1179,60 @@ describe('assets (what runs the stack)', () => {
     expect(parseAssetOptions('slack', { includeAssets: true })).toEqual({ includeAssets: true, minAssetCriticality: null });
   });
 });
+
+describe('assets CSV import/export', () => {
+  const admin = new Client();
+  const member = new Client();
+
+  it('previews, creates, updates and links assets from a CSV', async () => {
+    await admin.login('asa', PW);
+    /* Spanish headers and values, semicolons, IPs and technologies in one cell. */
+    const csv = '﻿Nombre;Tipo;Criticidad;Entorno;Hostname;IP;Marca;Modelo;Tecnologías\n' +
+      'WEB01;servidor;media;prod;web01.assetco.es;10.0.0.10;HPE;DL380;Zimbra 9.0|Nginx\n' +
+      'NEW-FW;firewall;Alta;prod;fw.assetco.local;"10.0.0.1, 203.0.113.9";Fortinet;FortiGate 60F;FortiOS\n' +
+      'BAD1;spaceship;alta;;;;;;\n' +
+      'BAD2;server;alta;;;10.0.0.999;;;\n' +
+      'web01;server;baja;;;;;;\n';
+    const preview = await admin.req('POST', '/api/assets/import?dryRun=true&mode=merge', undefined, { raw: csv });
+    expect(preview.status).toBe(200);
+    expect(preview.body).toMatchObject({ toCreate: 1, toUpdate: 1, toDelete: 0, duplicatesInFile: 1, errorCount: 2 });
+    expect(preview.body.unknownTechnologies).toEqual(['FortiOS']);
+    expect((await admin.req('GET', '/api/assets')).body.assets.find((a: any) => a.name === 'NEW-FW')).toBeUndefined();
+
+    const done = await admin.req('POST', '/api/assets/import?mode=merge', undefined, { raw: csv });
+    expect(done.body).toMatchObject({ created: 1, updated: 1, deleted: 0 });
+    const list = (await admin.req('GET', '/api/assets')).body.assets;
+    const web = list.find((a: any) => a.name === 'WEB01');
+    expect(web).toMatchObject({ criticality: 'medium', brand: 'HPE', model: 'DL380', hostname: 'web01.assetco.es' });
+    const stack = (await admin.req('GET', '/api/tech-stack')).body.stack;
+    const idOf = (t: string) => stack.find((s: any) => s.technology === t).id;
+    expect(web.stackItemIds.sort()).toEqual([idOf('Zimbra'), idOf('Nginx')].sort());
+    expect(list.find((a: any) => a.name === 'NEW-FW')).toMatchObject({ type: 'firewall', criticality: 'high', ip: '10.0.0.1, 203.0.113.9' });
+
+    /* A column left out keeps the stored value. */
+    await admin.req('POST', '/api/assets/import?mode=merge', undefined, { raw: 'name,owner\nWEB01,Infra\n' });
+    const web2 = (await admin.req('GET', '/api/assets')).body.assets.find((a: any) => a.name === 'WEB01');
+    expect(web2).toMatchObject({ owner: 'Infra', brand: 'HPE', criticality: 'medium' });
+    expect(web2.stackItemIds).toHaveLength(2);
+  });
+
+  it('exports, replaces and stays admin-only', async () => {
+    const exported = String((await admin.req('GET', '/api/assets/export.csv')).body);
+    expect(exported.split('\n')[0]).toContain('name,type,criticality');
+    expect(exported).toMatch(/WEB01,server,medium,prod,web01\.assetco\.es,10\.0\.0\.10,HPE,DL380,Infra,,(Nginx 1\.24\|Zimbra 9\.0|Zimbra 9\.0\|Nginx 1\.24)/);
+    expect(exported).toContain('"10.0.0.1;203.0.113.9"'.replace(/"/g, ''));
+
+    const before = (await admin.req('GET', '/api/assets')).body.assets.length;
+    const prev = await admin.req('POST', '/api/assets/import?dryRun=true&mode=replace', undefined, { raw: 'name\nWEB01\nNEW-FW\n' });
+    expect(prev.body.toDelete).toBe(before - 2);
+    const rep = await admin.req('POST', '/api/assets/import?mode=replace', undefined, { raw: 'name\nWEB01\nNEW-FW\n' });
+    expect(rep.body.deleted).toBe(before - 2);
+    expect((await admin.req('GET', '/api/assets')).body.assets.map((a: any) => a.name).sort()).toEqual(['NEW-FW', 'WEB01']);
+
+    expect((await admin.req('POST', '/api/assets/import', undefined, { raw: 'tipo\nserver\n' })).body.errors[0].message).toMatch(/header/);
+    await member.login('asm', PW);
+    expect((await member.req('POST', '/api/assets/import?mode=merge', undefined, { raw: 'name\nX\n' })).status).toBe(403);
+    expect((await member.req('GET', '/api/assets/export.csv')).status).toBe(200);
+    expect(String((await member.req('GET', '/api/assets/template.csv')).body)).toContain('FW-PERIMETRO');
+  });
+});

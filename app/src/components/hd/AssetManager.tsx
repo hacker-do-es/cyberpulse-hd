@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, HardDrive, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, Download, FileUp, HardDrive, Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,10 +7,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { fetchTechStack, type AssetCriticality, type AssetRef, type TechStackItem } from '@/services/apiService';
-import { ASSET_CRITICALITIES, ASSET_TYPES, assetApi, type Asset, type AssetInput, type AssetType } from '@/services/hdApi';
-import { Panel, EmptyState, Field } from './ui';
+import { ASSET_CRITICALITIES, ASSET_TYPES, assetApi, type Asset, type AssetImportSummary, type AssetInput, type AssetType } from '@/services/hdApi';
+import { Panel, EmptyState, Field, Badge } from './ui';
 import { inputCls, selectCls, notifyError } from './helpers';
-import { tr } from '@/lib/i18n';
+import { tr, trMessage } from '@/lib/i18n';
 import { assetTypeLabel, criticalityLabel } from './assetLabels';
 
 /* ------------------------------------------------------------------ */
@@ -117,6 +117,7 @@ export default function AssetManager({ canEdit, refreshKey, onChanged }: { canEd
   const [editing, setEditing] = useState<{ id: number | null; values: AssetInput } | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Asset | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -176,11 +177,23 @@ export default function AssetManager({ canEdit, refreshKey, onChanged }: { canEd
       title={tr('Assets')}
       icon={<HardDrive size={18} />}
       description={tr("The company's servers, devices, apps and services. Link each one to the technologies it runs and news will say which assets it affects.")}
-      actions={canEdit && (
-        <Button size="sm" onClick={() => setEditing({ id: null, values: { ...EMPTY } })}>
-          <Plus size={14} /> {tr('Add asset')}
-        </Button>
-      )}
+      actions={
+        <>
+          <Button asChild variant="outline" size="sm" className="border-border-default bg-transparent text-text-secondary">
+            <a href="/api/assets/export.csv"><Download size={14} /> {tr('Export CSV')}</a>
+          </Button>
+          {canEdit && (
+            <Button variant="outline" size="sm" className="border-border-default bg-transparent text-text-secondary" onClick={() => setImportOpen(true)}>
+              <FileUp size={14} /> {tr('Import CSV')}
+            </Button>
+          )}
+          {canEdit && (
+            <Button size="sm" onClick={() => setEditing({ id: null, values: { ...EMPTY } })}>
+              <Plus size={14} /> {tr('Add asset')}
+            </Button>
+          )}
+        </>
+      }
     >
       {assets.length > 8 && (
         <Input placeholder={tr('Filter {n} assets…', { n: assets.length })} value={filter} onChange={(e) => setFilter(e.target.value)} className={`${inputCls} mb-3 max-w-xs`} />
@@ -321,6 +334,14 @@ export default function AssetManager({ canEdit, refreshKey, onChanged }: { canEd
         </DialogContent>
       </Dialog>
 
+      {canEdit && (
+        <AssetCsvImportDialog
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          onImported={async () => { await load(); onChanged?.(); }}
+        />
+      )}
+
       <Dialog open={confirmDelete !== null} onOpenChange={(o) => { if (!o) setConfirmDelete(null); }}>
         <DialogContent className="bg-bg-card border-border-default text-text-primary sm:max-w-md">
           <DialogHeader>
@@ -336,5 +357,175 @@ export default function AssetManager({ canEdit, refreshKey, onChanged }: { canEd
         </DialogContent>
       </Dialog>
     </Panel>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  CSV import                                                         */
+/* ------------------------------------------------------------------ */
+
+function AssetCsvImportDialog({ open, onOpenChange, onImported }: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onImported: () => Promise<void>;
+}) {
+  const [csv, setCsv] = useState<string | null>(null);
+  const [fileName, setFileName] = useState('');
+  const [mode, setMode] = useState<'merge' | 'replace'>('merge');
+  const [preview, setPreview] = useState<AssetImportSummary | null>(null);
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const reset = () => {
+    setCsv(null);
+    setFileName('');
+    setPreview(null);
+    setMode('merge');
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const runPreview = async (text: string, m: 'merge' | 'replace') => {
+    setBusy(true);
+    try {
+      setPreview(await assetApi.importCsv(text, m, true));
+    } catch (err) {
+      notifyError(err);
+      setPreview(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onFile = async (file: File | undefined) => {
+    if (!file) return;
+    if (file.size > 1024 * 1024) {
+      toast.error(tr('The file is larger than 1 MB'));
+      return;
+    }
+    const text = await file.text();
+    setCsv(text);
+    setFileName(file.name);
+    await runPreview(text, mode);
+  };
+
+  const confirm = async () => {
+    if (!csv) return;
+    setBusy(true);
+    try {
+      const r = await assetApi.importCsv(csv, mode, false);
+      toast.success(tr('Assets imported: {c} new, {u} updated, {d} removed', { c: r.created ?? 0, u: r.updated ?? 0, d: r.deleted ?? 0 }));
+      await onImported();
+      reset();
+      onOpenChange(false);
+    } catch (err) {
+      notifyError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
+      <DialogContent className="bg-bg-card border-border-default text-text-primary sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="font-rajdhani text-xl">{tr('Import assets from CSV')}</DialogTitle>
+          <DialogDescription className="text-text-tertiary text-xs">
+            {tr('Columns:')} <code className="font-jetbrains text-text-secondary">name, type, criticality, environment, hostname, ip, brand, model, owner, notes, technologies</code>
+            {tr('. Only name is required; English or Spanish headers and values (e.g. "servidor", "alta"). Several IPs or technologies in one cell: separate them with |. Technologies are matched to the stack by name ("PHP") or name and version ("PHP 8.2"). A column left out keeps the current value.')}{' '}
+            <a href="/api/assets/template.csv" className="text-accent hover:underline">{tr('Download template')}</a>
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <label
+            className="flex flex-col items-center justify-center gap-2 border border-dashed border-border-default rounded-lg py-8 cursor-pointer hover:border-accent/60 hover:bg-accent/5 transition-colors"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { e.preventDefault(); void onFile(e.dataTransfer.files?.[0]); }}
+          >
+            <Upload size={22} className="text-accent" />
+            <span className="text-sm text-text-secondary">{fileName || tr('Choose a .csv file or drop it here')}</span>
+            <input ref={fileRef} type="file" accept=".csv,text/csv" className="sr-only" onChange={(e) => void onFile(e.target.files?.[0])} />
+          </label>
+
+          <fieldset className="flex flex-wrap gap-4 text-sm">
+            <legend className="sr-only">{tr('Import mode')}</legend>
+            {(['merge', 'replace'] as const).map((m) => (
+              <label key={m} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="asset-mode"
+                  checked={mode === m}
+                  onChange={() => { setMode(m); if (csv) void runPreview(csv, m); }}
+                  className="accent-[#E8533F]"
+                />
+                <span className="text-text-primary">{m === 'merge' ? tr('Add new and update existing') : tr('Replace all assets')}</span>
+              </label>
+            ))}
+          </fieldset>
+
+          {preview && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <Badge tone="ok">{preview.toCreate} {tr('new')}</Badge>
+                {preview.toUpdate > 0 && <Badge>{preview.toUpdate} {tr('to update')}</Badge>}
+                {preview.toDelete > 0 && <Badge tone="warn">{preview.toDelete} {tr('will be removed')}</Badge>}
+                {preview.duplicatesInFile > 0 && <Badge>{preview.duplicatesInFile} {tr('duplicated in file')}</Badge>}
+                {preview.errorCount > 0 && <Badge tone="bad">{preview.errorCount} {tr('invalid rows')}</Badge>}
+              </div>
+
+              {preview.toDelete > 0 && (
+                <p className="text-xs text-high">{tr('Not in the file, will be removed:')} {preview.deleteNames.join(', ')}{preview.toDelete > preview.deleteNames.length ? '…' : ''}</p>
+              )}
+              {preview.unknownTechnologies.length > 0 && (
+                <p className="text-xs text-medium">{tr('Not in the stack, will not be linked:')} {preview.unknownTechnologies.join(', ')}</p>
+              )}
+              {preview.errors.length > 0 && (
+                <ul className="text-xs text-critical space-y-0.5 max-h-24 overflow-y-auto">
+                  {preview.errors.map((e, i) => (
+                    <li key={i}>{e.line > 0 ? tr('Line {n}: ', { n: e.line }) : ''}{trMessage(e.message)}</li>
+                  ))}
+                </ul>
+              )}
+
+              {(preview.preview?.length ?? 0) > 0 && (
+                <div className="border border-border-default rounded-lg max-h-64 overflow-auto">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-bg-elevated">
+                      <tr className="text-left text-text-tertiary font-jetbrains uppercase text-[10px]">
+                        <th className="px-3 py-1.5">{tr('Asset')}</th><th className="px-3 py-1.5">{tr('Type')}</th>
+                        <th className="px-3 py-1.5">{tr('Criticality')}</th><th className="px-3 py-1.5">{tr('Hostname / IP')}</th>
+                        <th className="px-3 py-1.5">{tr('Technologies')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {preview.preview!.map((r, i) => (
+                        <tr key={i} className="border-t border-border-default">
+                          <td className="px-3 py-1.5 text-text-primary whitespace-nowrap">
+                            {r.name} {r.action === 'update' && <span className="text-[10px] text-text-tertiary">({tr('update')})</span>}
+                          </td>
+                          <td className="px-3 py-1.5 text-text-secondary">{r.type ? assetTypeLabel(r.type) : ''}</td>
+                          <td className="px-3 py-1.5">{r.criticality ? <CriticalityBadge value={r.criticality} /> : ''}</td>
+                          <td className="px-3 py-1.5 text-text-secondary font-jetbrains">{[r.hostname, r.ip].filter(Boolean).join(' · ')}</td>
+                          <td className="px-3 py-1.5 text-text-secondary">{(r.technologies ?? []).join(', ')}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" className="border-border-default bg-transparent text-text-secondary" onClick={() => onOpenChange(false)}>
+            {tr('Cancel')}
+          </Button>
+          <Button onClick={() => void confirm()} disabled={busy || !preview || preview.valid === 0}>
+            {busy ? tr('Working…') : mode === 'replace' ? tr('Replace assets') : tr('Import {n}', { n: preview?.valid ?? '' })}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
