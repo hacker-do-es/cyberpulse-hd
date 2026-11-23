@@ -1144,7 +1144,7 @@ describe('assets (what runs the stack)', () => {
     expect(withAssets.body.channel.includeAssets).toBe(true);
     received.length = 0;
     await admin.req('POST', `/api/channels/${withAssets.body.channel.id}/run`);
-    expect(received[0].body.text).toMatch(/activos: WEB01 \\?\(alta\\?\)/);
+    expect(received[0].body.text).toMatch(/activos: WEB01 · web01\.assetco\.local · 10\.0\.0\.10, 2001:db8::10 \\?\(alta\\?\)/);
 
     /* Only news affecting a high-criticality asset: Nginx (LB01, low) is dropped. */
     const critical = await admin.req('POST', '/api/channels', { name: 'crit', type: 'rocketchat', webhookUrl: hookUrl, minSeverity: 'low', minAssetCriticality: 'high', schedule: { type: 'interval', intervalHours: 6 } });

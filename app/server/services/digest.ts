@@ -139,7 +139,12 @@ export function withAssets(items: Candidate[], assetLinks: Map<number, AssetRef[
 
 function assetLabels(item: Candidate, labels: Labels): string[] | undefined {
   if (!item.assets?.length) return undefined;
-  return item.assets.map((a) => `${a.name} (${labels.criticality[a.criticality] ?? a.criticality})`);
+  return item.assets.map((a) => {
+    const crit = labels.criticality[a.criticality] ?? a.criticality;
+    // name · hostname · IP (criticality) — hostname/IP omitted when absent.
+    const parts = [a.name, a.hostname, a.ip].filter((p): p is string => Boolean(p));
+    return `${parts.join(' · ')} (${crit})`;
+  });
 }
 
 /* ------------------------------------------------------------------ */

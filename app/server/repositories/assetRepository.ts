@@ -21,10 +21,12 @@ export interface AssetRef {
   name: string;
   criticality: AssetCriticality;
   environment: string | null;
+  hostname: string | null;
+  ip: string | null;
 }
 
 function ref(a: AssetRow): AssetRef {
-  return { id: a.id, name: a.name, criticality: a.criticality, environment: a.environment };
+  return { id: a.id, name: a.name, criticality: a.criticality, environment: a.environment, hostname: a.hostname, ip: a.ip };
 }
 
 export const assetRepository = {
