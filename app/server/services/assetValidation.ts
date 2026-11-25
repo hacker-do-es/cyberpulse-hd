@@ -38,11 +38,24 @@ const TYPE_ALIASES: Record<string, AssetType> = {
   /* Names other inventories and scanners use. */
   'web application': 'application', webapp: 'application', 'web app': 'application', website: 'application', web: 'application',
   'sitio web': 'application', 'aplicacion web': 'application', api: 'application', 'rest api': 'application', service: 'application', servicio: 'application',
-  cdn: 'cloud', 'cloud service': 'cloud', paas: 'cloud', iaas: 'cloud', 'saas app': 'saas', 'saas application': 'saas',
+  cdn: 'proxy', 'cloud service': 'cloud', paas: 'cloud', iaas: 'cloud', 'saas app': 'saas', 'saas application': 'saas',
   vm: 'server', 'virtual machine': 'server', 'maquina virtual': 'server', host: 'server', nas: 'server', storage: 'server',
-  'load balancer': 'network', lb: 'network', ap: 'network', 'access point': 'network', 'punto de acceso': 'network', vpn: 'firewall', utm: 'firewall',
-  dns: 'other', 'dns record': 'other', domain: 'other', dominio: 'other', printer: 'other', impresora: 'other',
+  'load balancer': 'network', lb: 'network', ap: 'network', 'access point': 'network', 'punto de acceso': 'network', vpn: 'vpn', utm: 'firewall',
+  'dns record': 'dns', domain: 'dns', dominio: 'dns', printer: 'other', impresora: 'other',
   phone: 'mobile', smartphone: 'mobile', tablet: 'mobile', telefono: 'mobile', camera: 'iot', camara: 'iot', sensor: 'iot',
+  /* Functional classes from scanners / ASM exports (map to the typed enum). */
+  'identity provider': 'identity', idp: 'identity', sso: 'identity', 'proveedor de identidad': 'identity',
+  'monitoring/observability': 'monitoring', monitoring: 'monitoring', observability: 'monitoring', apm: 'monitoring', 'monitorizacion': 'monitoring',
+  'ci/cd gitops': 'cicd', 'ci/cd': 'cicd', 'ci cd': 'cicd', gitops: 'cicd', 'iac automation': 'cicd', iac: 'cicd',
+  'workflow engine': 'automation', 'workflow automation': 'automation', workflow: 'automation', automation: 'automation', 'automatizacion': 'automation', 'integration endpoint': 'automation', integration: 'automation', webhook: 'automation',
+  'siem/xdr': 'siem', siem: 'siem', xdr: 'siem', edr: 'siem', soar: 'siem',
+  'vpn/network': 'vpn',
+  'domain/dns zone': 'dns', 'dns zone': 'dns', 'zona dns': 'dns',
+  'cdn/waf/reverse proxy': 'proxy', 'reverse proxy': 'proxy', 'proxy inverso': 'proxy', waf: 'proxy', 'access proxy': 'proxy', 'identity aware proxy': 'proxy', iap: 'proxy', bastion: 'proxy', gateway: 'proxy',
+  'vulnerability management': 'security', 'vulnerability scanner': 'security', 'gestion de vulnerabilidades': 'security', 'phishing simulation': 'security', 'simulacion de phishing': 'security', 'security tooling': 'security',
+  'file transfer': 'application', sftp: 'application', ftp: 'application', 'transferencia de archivos': 'application',
+  erp: 'application', crm: 'application', 'lab/test application': 'application', lab: 'application', 'test application': 'application', test: 'application',
+  undetermined: 'other', unknown: 'other', 'n/a': 'other', 'sin determinar': 'other',
 };
 
 export function parseAssetType(v: string): AssetType | null {

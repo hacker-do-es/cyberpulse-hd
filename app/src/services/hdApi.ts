@@ -89,7 +89,7 @@ export interface ImportSummary {
 /*  Assets                                                             */
 /* ------------------------------------------------------------------ */
 
-export const ASSET_TYPES = ['server', 'workstation', 'laptop', 'network', 'firewall', 'cloud', 'saas', 'application', 'database', 'mobile', 'iot', 'other'] as const;
+export const ASSET_TYPES = ['server', 'workstation', 'laptop', 'network', 'firewall', 'cloud', 'saas', 'application', 'database', 'mobile', 'iot', 'identity', 'monitoring', 'cicd', 'automation', 'siem', 'vpn', 'dns', 'proxy', 'security', 'other'] as const;
 export type AssetType = (typeof ASSET_TYPES)[number];
 export const ASSET_CRITICALITIES = ['high', 'medium', 'low'] as const;
 

@@ -137,7 +137,7 @@ export const techStack = sqliteTable('user_tech_stack', {
    client's assets it affects. Asset names are sensitive (they map the
    client's attack surface): they are never sent to the AI provider nor to
    LinkedIn, and digests only include them on channels that opt in. */
-export const ASSET_TYPES = ['server', 'workstation', 'laptop', 'network', 'firewall', 'cloud', 'saas', 'application', 'database', 'mobile', 'iot', 'other'] as const;
+export const ASSET_TYPES = ['server', 'workstation', 'laptop', 'network', 'firewall', 'cloud', 'saas', 'application', 'database', 'mobile', 'iot', 'identity', 'monitoring', 'cicd', 'automation', 'siem', 'vpn', 'dns', 'proxy', 'security', 'other'] as const;
 export type AssetType = (typeof ASSET_TYPES)[number];
 export const ASSET_CRITICALITIES = ['low', 'medium', 'high'] as const;
 export type AssetCriticality = (typeof ASSET_CRITICALITIES)[number];
@@ -159,7 +159,7 @@ export const assets = sqliteTable('assets', {
   updatedAt: text('updated_at').default(now),
 }, (t) => [
   uniqueIndex('idx_assets_tenant_name').on(t.tenantId, sql`${t.name} COLLATE NOCASE`),
-  check('assets_type_check', sql`${t.type} IN ('server', 'workstation', 'laptop', 'network', 'firewall', 'cloud', 'saas', 'application', 'database', 'mobile', 'iot', 'other')`),
+  check('assets_type_check', sql`${t.type} IN ('server', 'workstation', 'laptop', 'network', 'firewall', 'cloud', 'saas', 'application', 'database', 'mobile', 'iot', 'identity', 'monitoring', 'cicd', 'automation', 'siem', 'vpn', 'dns', 'proxy', 'security', 'other')`),
   check('assets_criticality_check', sql`${t.criticality} IN ('low', 'medium', 'high')`),
 ]);
 

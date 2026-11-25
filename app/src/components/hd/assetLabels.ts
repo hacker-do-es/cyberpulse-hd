@@ -7,7 +7,9 @@ import { tr } from '@/lib/i18n';
 
 const TYPE_LABELS: Record<AssetType, string> = {
   server: 'Server', workstation: 'Workstation', laptop: 'Laptop', network: 'Network device', firewall: 'Firewall',
-  cloud: 'Cloud', saas: 'SaaS', application: 'Application', database: 'Database', mobile: 'Mobile', iot: 'IoT', other: 'Other',
+  cloud: 'Cloud', saas: 'SaaS', application: 'Application', database: 'Database', mobile: 'Mobile', iot: 'IoT',
+  identity: 'Identity provider', monitoring: 'Monitoring', cicd: 'CI/CD', automation: 'Automation', siem: 'SIEM / XDR',
+  vpn: 'VPN', dns: 'DNS / domain', proxy: 'Proxy / CDN / WAF', security: 'Security tooling', other: 'Other',
 };
 
 export function assetTypeLabel(t: AssetType): string {
