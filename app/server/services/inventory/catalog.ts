@@ -33,7 +33,9 @@ export const CATALOG: CatalogEntry[] = [
   { tech: 'Redis', vendor: 'Redis Ltd.', category: 'Database', pkg: /^redis(-server)?$/, image: /^(library\/)?redis$/ },
   { tech: 'MongoDB', vendor: 'MongoDB Inc.', category: 'Database', pkg: /^mongodb-(org-)?server$/, image: /^(library\/)?mongo$/ },
   { tech: 'Elasticsearch', vendor: 'Elastic', category: 'Database', pkg: /^elasticsearch$/, image: /^(library\/)?elasticsearch$|^elastic\/elasticsearch$/ },
-  { tech: 'Docker Engine', vendor: 'Docker Inc.', category: 'Containers', pkg: /^(docker-ce|docker\.io|moby-engine|docker-engine|docker)$/, win: /^Docker Desktop$/ },
+  { tech: 'Docker Engine', vendor: 'Docker Inc.', category: 'Containers', pkg: /^(docker-ce|docker\.io|moby-engine|docker-engine|docker)$/ },
+  /* Its own product and version line (4.x), not the engine's (29.x). */
+  { tech: 'Docker Desktop', vendor: 'Docker Inc.', category: 'Containers', pkg: /^docker-desktop$/, win: /^Docker Desktop$/ },
   { tech: 'containerd', vendor: 'CNCF', category: 'Containers', pkg: /^containerd(\.io)?$/ },
   { tech: 'runc', vendor: 'Open Container Initiative', category: 'Containers', pkg: /^runc$/ },
   { tech: 'sudo', vendor: 'Todd C. Miller', category: 'System', pkg: /^sudo$/ },

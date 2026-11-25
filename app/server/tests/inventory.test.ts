@@ -34,10 +34,11 @@ describe('inventory report mapping', () => {
       'app\tGoogle Chrome\t142.0.7444.60\tGoogle LLC',
       'app\tMozilla Firefox (x64 es-ES)\t145.0\tMozilla',
       'app\tSome Random Tool\t1.0\tAcme',
+      'app\tDocker Desktop\t4.64.0\tDocker Inc.',
       'kernel\tignored-on-windows',
     ].join('\n')));
     const by = Object.fromEntries(m.map((x) => [x.entry.tech, x.version]));
-    expect(by).toEqual({ 'Windows 11': '10.0.26200.7171', 'Google Chrome': '142.0.7444.60', 'Mozilla Firefox': '145.0' });
+    expect(by).toEqual({ 'Windows 11': '10.0.26200.7171', 'Google Chrome': '142.0.7444.60', 'Mozilla Firefox': '145.0', 'Docker Desktop': '4.64.0' });
   });
 
   it('keeps the newest of several packages for one technology, and marks non-OSV distros', () => {

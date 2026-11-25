@@ -26,7 +26,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$AgentVersion = '1.0.2'
+$AgentVersion = '1.0.3'
 $InstallDir = Join-Path $env:ProgramFiles 'CyberPulse'
 $DataDir = Join-Path $env:ProgramData 'CyberPulse'
 $ConfFile = Join-Path $DataDir 'agent.json'
@@ -98,7 +98,7 @@ function Get-Report([string]$type) {
 
   try {
     Get-NetIPAddress -ErrorAction Stop |
-      Where-Object { $_.IPAddress -notmatch '^(127\.|169\.254\.|::1$|fe80:)' } |
+      Where-Object { $_.IPAddress -notmatch '^(127\.|169\.254\.|::1$|fe80:)' -and $_.InterfaceAlias -notmatch 'vEthernet|VirtualBox|VMware|Loopback|WSL|Hyper-V' } |
       Select-Object -First 16 |
       ForEach-Object { $out.Add((Line @('ip', $_.IPAddress))) }
   } catch { }
