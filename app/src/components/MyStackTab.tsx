@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Clock, RefreshCw, ExternalLink, Thermometer, ChevronLeft, ChevronRight, Server, TrendingUp, AlertTriangle } from 'lucide-react';
-import type { AssetRef, TechStackNewsArticle } from '@/services/apiService';
+import { Search, Clock, RefreshCw, ExternalLink, Thermometer, ChevronLeft, ChevronRight, Server, TrendingUp, ShieldAlert, ShieldCheck, ShieldQuestion, Hourglass } from 'lucide-react';
+import type { AssetRef, TechStackNewsArticle, VulnStatus } from '@/services/apiService';
 import { AssetChips } from './hd/AssetManager';
 import { criticalityLabel } from './hd/assetLabels';
 import { timeAgo } from '@/lib/dateUtils';
@@ -25,6 +25,22 @@ interface MyStackTabProps {
 }
 
 type SortOption = 'score' | 'date' | 'severity';
+
+/* Version verification filter: 'unverified' groups pending + unverified. */
+type VulnFilter = 'all' | 'affected' | 'not_affected' | 'unverified' | 'no_cve';
+
+function vulnGroup(status: VulnStatus | undefined): Exclude<VulnFilter, 'all'> {
+  if (status === 'affected' || status === 'not_affected' || status === 'no_cve') return status;
+  return 'unverified';
+}
+
+const VULN_FILTERS: { key: VulnFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'affected', label: 'Affects you (verified)' },
+  { key: 'not_affected', label: 'Not affected' },
+  { key: 'unverified', label: 'Unverified' },
+  { key: 'no_cve', label: 'No CVE' },
+];
 
 const severityRank: Record<string, number> = {
   critical: 4,
@@ -63,6 +79,20 @@ export default function MyStackTab({
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedTech, setSelectedTech] = useState<string[]>([]);
   const [selectedAssets, setSelectedAssets] = useState<number[]>([]);
+  const [vulnFilter, setVulnFilter] = useState<VulnFilter>(() => {
+    const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('cyberpulse.mystack.vuln') : null;
+    return (VULN_FILTERS.some((f) => f.key === saved) ? saved : 'all') as VulnFilter;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('cyberpulse.mystack.vuln', vulnFilter);
+  }, [vulnFilter]);
+
+  const vulnCounts = useMemo(() => {
+    const c: Record<Exclude<VulnFilter, 'all'>, number> = { affected: 0, not_affected: 0, unverified: 0, no_cve: 0 };
+    for (const a of articles) c[vulnGroup(a.vuln?.status)]++;
+    return c;
+  }, [articles]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
 
@@ -97,6 +127,10 @@ export default function MyStackTab({
 
   const filteredAndSorted = useMemo(() => {
     let filtered = [...articles];
+
+    if (vulnFilter !== 'all') {
+      filtered = filtered.filter((a) => vulnGroup(a.vuln?.status) === vulnFilter);
+    }
 
     if (selectedAssets.length > 0) {
       filtered = filtered.filter((a) => (a.affectedAssets ?? []).some((as) => selectedAssets.includes(as.id)));
@@ -138,7 +172,7 @@ export default function MyStackTab({
     }
 
     return sorted;
-  }, [articles, selectedCategories, selectedTech, selectedAssets, debouncedSearch, sortBy]);
+  }, [articles, selectedCategories, selectedTech, selectedAssets, debouncedSearch, sortBy, vulnFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredAndSorted.length / pageSize));
   const startIndex = (page - 1) * pageSize;
@@ -146,7 +180,7 @@ export default function MyStackTab({
 
   useEffect(() => {
     setPage(1);
-  }, [selectedCategories, selectedTech, selectedAssets, debouncedSearch, sortBy, pageSize]);
+  }, [selectedCategories, selectedTech, selectedAssets, debouncedSearch, sortBy, pageSize, vulnFilter]);
 
   if (techStackCount === 0) {
     return (
@@ -218,20 +252,25 @@ export default function MyStackTab({
           </p>
         </div>
 
-        <div className="px-4 py-3 rounded-card bg-bg-card border border-border-default">
+        <button
+          type="button"
+          onClick={() => setVulnFilter(vulnFilter === 'affected' ? 'all' : 'affected')}
+          className={`text-left px-4 py-3 rounded-card bg-bg-card border cursor-pointer transition-colors ${vulnFilter === 'affected' ? 'border-critical' : 'border-border-default hover:border-[#30384A]'}`}
+          title={tr('CVEs whose affected versions include a version installed on your assets')}
+        >
           <div className="flex items-center gap-2 mb-1">
-            <AlertTriangle size={16} className="text-accent" />
+            <ShieldAlert size={16} className="text-critical" />
             <span className="text-xs font-jetbrains uppercase tracking-wide text-text-tertiary">
-              {tr("Top Category")}
+              {tr("Confirmed vulnerabilities")}
             </span>
           </div>
-          <p className="text-lg font-bold font-inter text-text-primary truncate">
-            {Object.entries(statistics.bySeverity).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A'}
+          <p className="text-2xl font-bold font-inter text-text-primary">
+            {vulnCounts.affected}
           </p>
           <p className="text-xs text-text-tertiary font-jetbrains mt-1">
-            {Object.entries(statistics.bySeverity).sort((a, b) => b[1] - a[1])[0]?.[1] || 0} {tr("articles")}
+            {tr('{n} not affected · {u} unverified', { n: vulnCounts.not_affected, u: vulnCounts.unverified })}
           </p>
-        </div>
+        </button>
       </div>
 
       {/* Controls Row */}
@@ -300,6 +339,23 @@ export default function MyStackTab({
             />
           </div>
         </div>
+      </div>
+
+      {/* Version verification filter */}
+      <div className="mb-3 flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B] mr-1">
+          {tr("Verification")}
+        </span>
+        {VULN_FILTERS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setVulnFilter(key)}
+            className={`px-2.5 py-1 text-[11px] font-medium font-inter rounded-md transition-all duration-200 cursor-pointer ${vulnFilter === key ? 'text-accent bg-accent-dim' : 'text-text-tertiary hover:text-text-secondary hover:bg-bg-elevated'}`}
+          >
+            {tr(label)}
+            {key !== 'all' && <span className="text-text-tertiary ml-1">({vulnCounts[key]})</span>}
+          </button>
+        ))}
       </div>
 
       {/* Technology filters */}
@@ -606,6 +662,8 @@ const StackNewsCard = memo(function StackNewsCard({ article, isSelected, onClick
         </div>
       )}
 
+      <VulnBlock article={article} />
+
       {/* Row 4: Summary */}
       <p className="text-sm text-text-secondary font-inter leading-relaxed line-clamp-2 mb-3">
         {article.summary}
@@ -639,3 +697,69 @@ const StackNewsCard = memo(function StackNewsCard({ article, isSelected, onClick
     </motion.article>
   );
 });
+
+/* ─── Version verdict ─── */
+
+const VULN_STYLE: Record<VulnStatus, { cls: string; label: string; icon: typeof ShieldAlert }> = {
+  affected: { cls: 'bg-critical/15 text-critical border-critical/40', label: 'Affects you', icon: ShieldAlert },
+  not_affected: { cls: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', label: 'Not affected', icon: ShieldCheck },
+  pending: { cls: 'bg-bg-elevated text-text-tertiary border-border-default', label: 'Checking CVE…', icon: Hourglass },
+  unverified: { cls: 'bg-medium/10 text-medium border-medium/30', label: 'Unverified', icon: ShieldQuestion },
+  no_cve: { cls: 'bg-bg-elevated text-text-tertiary border-border-default', label: 'No CVE', icon: ShieldQuestion },
+};
+
+function VulnBlock({ article }: { article: TechStackNewsArticle }) {
+  const v = article.vuln;
+  if (!v) return null;
+  const style = VULN_STYLE[v.status];
+  const Icon = style.icon;
+  const assetName = new Map((article.affectedAssets ?? []).map((a) => [a.id, a.name]));
+  const affected = v.units.filter((u) => u.status === 'affected');
+  const noVersion = v.units.filter((u) => u.status === 'no_version');
+  const why = v.status === 'not_affected'
+    ? v.units
+      .filter((u) => u.status === 'not_affected')
+      .slice(0, 3)
+      .map((u) => `${u.technology} ${u.version ?? ''}${u.assetId !== null && assetName.has(u.assetId) ? ` (${assetName.get(u.assetId)})` : ''}`.trim())
+      .join(', ')
+    : '';
+  const title = v.status === 'not_affected'
+    ? (why ? tr('Installed versions are outside the affected ranges: {list}', { list: why }) : tr('The CVE is about other products'))
+    : v.status === 'unverified'
+      ? (noVersion.length ? tr('Add the installed version of {tech} to verify it', { tech: Array.from(new Set(noVersion.map((u) => u.technology))).join(', ') }) : tr('The CVE data does not allow a decision for these versions'))
+      : '';
+
+  return (
+    <div className="mb-2 flex items-start gap-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
+      <span title={title || undefined} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-pill border text-[10px] font-semibold font-jetbrains uppercase tracking-wide ${style.cls}`}>
+        <Icon size={11} />
+        {tr(style.label)}
+      </span>
+      {v.cves.slice(0, 3).map((c) => (
+        <a
+          key={c}
+          href={`https://www.cve.org/CVERecord?id=${c}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[10px] font-jetbrains text-text-tertiary hover:text-accent underline-offset-2 hover:underline"
+        >
+          {c}
+        </a>
+      ))}
+      {v.cves.length > 3 && <span className="text-[10px] font-jetbrains text-text-tertiary">+{v.cves.length - 3}</span>}
+      {affected.length > 0 && (
+        <div className="basis-full flex flex-col gap-0.5 mt-1">
+          {affected.slice(0, 4).map((u, i) => (
+            <span key={i} className="text-[11px] font-jetbrains text-text-secondary">
+              <span className="text-critical">●</span> {u.technology} {u.version}
+              {u.assetId !== null && assetName.has(u.assetId) && <> · {assetName.get(u.assetId)}</>}
+              {u.fixedIn && <span className="text-text-tertiary"> → {tr('fixed in {v}', { v: u.fixedIn })}</span>}
+            </span>
+          ))}
+          {affected.length > 4 && <span className="text-[10px] font-jetbrains text-text-tertiary">+{affected.length - 4}</span>}
+        </div>
+      )}
+      {v.status !== 'affected' && title && <span className="basis-full text-[11px] text-text-tertiary">{title}</span>}
+    </div>
+  );
+}

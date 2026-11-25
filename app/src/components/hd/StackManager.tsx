@@ -19,7 +19,7 @@ export default function StackManager({ canEdit, refreshKey, onChanged }: { canEd
   const [form, setForm] = useState({ technology: '', version: '', vendor: '', category: '' });
   const [adding, setAdding] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
-  const [editing, setEditing] = useState<{ id: number; technology: string; version: string; vendor: string; category: string; assetIds: number[] } | null>(null);
+  const [editing, setEditing] = useState<{ id: number; technology: string; version: string; vendor: string; category: string; cpe: string; assetIds: number[] } | null>(null);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -64,6 +64,7 @@ export default function StackManager({ canEdit, refreshKey, onChanged }: { canEd
     version: item.version ?? '',
     vendor: item.vendor ?? '',
     category: item.category ?? '',
+    cpe: item.cpe ?? '',
     assetIds: (item.assets ?? []).map((a) => a.id),
   });
 
@@ -76,6 +77,7 @@ export default function StackManager({ canEdit, refreshKey, onChanged }: { canEd
         version: editing.version.trim(),
         vendor: editing.vendor.trim(),
         category: editing.category.trim(),
+        cpe: editing.cpe.trim(),
         assetIds: editing.assetIds,
       });
       setStack((s) => s.map((x) => (x.id === item.id ? item : x)));
@@ -178,6 +180,18 @@ export default function StackManager({ canEdit, refreshKey, onChanged }: { canEd
                         maxLength={100}
                         autoFocus={field === 'technology'}
                       />
+                      {field === 'technology' && (
+                        <Input
+                          value={editing.cpe}
+                          onChange={(e) => setEditing({ ...editing, cpe: e.target.value })}
+                          onKeyDown={editKeys}
+                          aria-label="CPE"
+                          title={tr('Optional: vendor:product as CVE records name it (e.g. f5:nginx_open_source), when the name alone does not identify the product.')}
+                          placeholder={tr('CPE vendor:product (optional)')}
+                          className={`${inputCls} h-7 text-xs font-jetbrains mt-1`}
+                          maxLength={200}
+                        />
+                      )}
                     </td>
                   ))}
                   <td className="px-2 py-1.5 min-w-40">
@@ -210,11 +224,16 @@ export default function StackManager({ canEdit, refreshKey, onChanged }: { canEd
                 </tr>
               ) : (
                 <tr key={item.id} className="border-t border-border-default hover:bg-bg-elevated/50">
-                  <td className="px-3 py-2 text-text-primary font-medium">{item.technology}</td>
+                  <td className="px-3 py-2 text-text-primary font-medium">
+                    {item.technology}
+                    {item.cpe && <div className="text-[10px] font-jetbrains text-text-tertiary" title="CPE">{item.cpe}</div>}
+                  </td>
                   <td className="px-3 py-2 text-text-secondary font-jetbrains text-xs">{item.version ?? '—'}</td>
                   <td className="px-3 py-2 text-text-secondary">{item.vendor ?? '—'}</td>
                   <td className="px-3 py-2 text-text-secondary">{item.category ?? '—'}</td>
-                  <td className="px-3 py-2"><AssetChips assets={item.assets} /></td>
+                  <td className="px-3 py-2">
+                    <AssetChips assets={item.assets?.map((a) => (a.version ? { ...a, name: `${a.name} · ${a.version}` } : a))} />
+                  </td>
                   {canEdit && (
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       <button

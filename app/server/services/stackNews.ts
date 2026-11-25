@@ -3,6 +3,9 @@ import type { StackRow } from '../db/schema';
 import { articleRepository } from '../repositories/articleRepository';
 import { assetRepository, type AssetRef } from '../repositories/assetRepository';
 import { stackRepository } from '../repositories/stackRepository';
+import { verdictContext } from './vuln/context';
+import { requestCves } from './vuln/cveSync';
+import { articleCves, evaluateArticle } from './vuln/verdict';
 import {
   compileStack, matchArticle, sortMatches, statisticsFromMatches,
   type Article, type StackMatch, type StackStatistics, type TechStackItem,
@@ -142,8 +145,19 @@ export function assetsForStackIds(stackIds: number[], links: Map<number, AssetRe
 export async function getStackNewsWithAssets(tenantId: number, limit: number) {
   const result = await getStackNews(tenantId, limit);
   const links = assetRepository.linksByStackItem(tenantId);
+  /* Version verdicts are computed per request too (versions and CVE data
+     change independently of the cached matches). */
+  const cvesById = new Map(result.news.map((n) => [n.id, articleCves(n)]));
+  const allCves = Array.from(new Set(Array.from(cvesById.values()).flat()));
+  const ctx = verdictContext(tenantId, allCves);
+  const missing = allCves.filter((id) => !ctx.records.has(id));
+  if (missing.length) requestCves(missing);
   return {
     ...result,
-    news: result.news.map((n) => ({ ...n, affectedAssets: assetsForStackIds(n.matchedStackIds, links) })),
+    news: result.news.map((n) => ({
+      ...n,
+      affectedAssets: assetsForStackIds(n.matchedStackIds, links),
+      vuln: evaluateArticle(cvesById.get(n.id) ?? [], n.matchedStackIds, ctx),
+    })),
   };
 }

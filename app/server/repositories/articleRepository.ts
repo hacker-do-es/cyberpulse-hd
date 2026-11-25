@@ -32,6 +32,15 @@ export const articleRepository = {
     return `${row?.n ?? 0}:${row?.last ?? 0}`;
   },
 
+  /* Title + summary of articles fetched since `since` (CVE extraction). */
+  textsSince(since: string, limit = 20000): Array<{ title: string; summary: string | null }> {
+    return getDb().select({ title: articles.title, summary: articles.summary }).from(articles)
+      .where(gte(articles.fetchedAt, since))
+      .orderBy(desc(articles.fetchedAt))
+      .limit(limit)
+      .all();
+  },
+
   count(): number {
     return getDb().select({ n: count() }).from(articles).get()?.n ?? 0;
   },

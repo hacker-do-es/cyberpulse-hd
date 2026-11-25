@@ -17,6 +17,7 @@ process.env.CYBERPULSE_ALLOW_HTTP_WEBHOOKS = 'true';
 process.env.CYBERPULSE_RATE_LOGIN = '1000';
 process.env.CYBERPULSE_RATE_SEND = '1000';
 process.env.CYBERPULSE_RATE_WRITE = '1000';
+process.env.CYBERPULSE_RATE_READ = '5000';
 
 let base = '';
 let server: http.Server;
@@ -240,7 +241,7 @@ describe('multitenant API', () => {
     expect(bad.status).toBe(400);
 
     const ch = await adminA.req('POST', '/api/channels', {
-      name: 'SOC', type: 'rocketchat', webhookUrl: hookUrl, minSeverity: 'low',
+      name: 'SOC', type: 'rocketchat', webhookUrl: hookUrl, minSeverity: 'low', verifiedOnly: false,
       schedule: { type: 'weekly', timeOfDay: '09:00', weekdays: [1, 2, 3, 4, 5] },
     });
     expect(ch.status).toBe(201);
@@ -337,11 +338,11 @@ describe('multitenant API', () => {
       expect((await adminA.req('POST', '/api/channels', { name: 't', type: 'telegram', telegram: { botToken: '123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', chatId: 'not a chat' }, schedule: sched })).status).toBe(400);
       expect((await adminA.req('POST', '/api/channels', { name: 'l', type: 'linkedin', webhookUrl: 'x', schedule: sched })).status).toBe(400);
 
-      const dc = await adminA.req('POST', '/api/channels', { name: 'Discord SOC', type: 'discord', webhookUrl: 'https://discord.com/api/webhooks/123456/SECRETtokenXYZ', minSeverity: 'low', schedule: sched });
+      const dc = await adminA.req('POST', '/api/channels', { name: 'Discord SOC', type: 'discord', webhookUrl: 'https://discord.com/api/webhooks/123456/SECRETtokenXYZ', minSeverity: 'low', verifiedOnly: false, schedule: sched });
       expect(dc.status).toBe(201);
       expect(JSON.stringify(dc.body)).not.toContain('SECRETtokenXYZ');
       const token = '123456789:AAFakeTokenFakeTokenFakeTokenFake12';
-      const tg = await adminA.req('POST', '/api/channels', { name: 'Telegram SOC', type: 'telegram', telegram: { botToken: token, chatId: '-1001234567890' }, minSeverity: 'low', schedule: sched });
+      const tg = await adminA.req('POST', '/api/channels', { name: 'Telegram SOC', type: 'telegram', telegram: { botToken: token, chatId: '-1001234567890' }, minSeverity: 'low', verifiedOnly: false, schedule: sched });
       expect(tg.status).toBe(201);
       expect(JSON.stringify(tg.body)).not.toContain('AAFakeToken');
       expect(tg.body.channel.telegram).toEqual({ chatId: '-1001234567890', botId: '123456789', tokenSet: true });
@@ -550,7 +551,7 @@ describe('multitenant API', () => {
     });
     try {
       const smtp = { host: 'smtp.gmail.com', port: 587, user: 'bot@acme.example', password: 'abcd efgh ijkl mnop', fromAddress: 'alerts@acme.example', fromName: 'Acme SOC' };
-      const base = { name: 'Zeta mail', type: 'email', schedule: { type: 'interval', intervalHours: 6 }, minSeverity: 'low' };
+      const base = { name: 'Zeta mail', type: 'email', schedule: { type: 'interval', intervalHours: 6 }, minSeverity: 'low', verifiedOnly: false };
 
       expect((await adminA.req('POST', '/api/channels', { ...base, recipients: ['not-an-email'], smtp })).status).toBe(400);
       expect((await adminA.req('POST', '/api/channels', { ...base, recipients: ['a@acme.example'], smtp: { ...smtp, port: 22 } })).status).toBe(400);
@@ -1132,7 +1133,7 @@ describe('assets (what runs the stack)', () => {
     expect(zimbraNews.affectedAssets.map((a: any) => a.name)).toEqual(['WEB01']);
 
     /* Default: no assets in the message. */
-    const plain = await admin.req('POST', '/api/channels', { name: 'plain', type: 'rocketchat', webhookUrl: hookUrl, minSeverity: 'low', schedule: { type: 'interval', intervalHours: 6 } });
+    const plain = await admin.req('POST', '/api/channels', { name: 'plain', type: 'rocketchat', webhookUrl: hookUrl, minSeverity: 'low', verifiedOnly: false, schedule: { type: 'interval', intervalHours: 6 } });
     expect(plain.body.channel.includeAssets).toBe(false);
     received.length = 0;
     expect((await admin.req('POST', `/api/channels/${plain.body.channel.id}/run`)).body.status).toBe('sent');
@@ -1140,14 +1141,14 @@ describe('assets (what runs the stack)', () => {
     expect(received[0].body.text).not.toContain('WEB01');
 
     /* Opted in: assets with their criticality. */
-    const withAssets = await admin.req('POST', '/api/channels', { name: 'soc', type: 'rocketchat', webhookUrl: hookUrl, minSeverity: 'low', includeAssets: true, schedule: { type: 'interval', intervalHours: 6 } });
+    const withAssets = await admin.req('POST', '/api/channels', { name: 'soc', type: 'rocketchat', webhookUrl: hookUrl, minSeverity: 'low', verifiedOnly: false, includeAssets: true, schedule: { type: 'interval', intervalHours: 6 } });
     expect(withAssets.body.channel.includeAssets).toBe(true);
     received.length = 0;
     await admin.req('POST', `/api/channels/${withAssets.body.channel.id}/run`);
     expect(received[0].body.text).toMatch(/activos: WEB01 · web01\.assetco\.local · 10\.0\.0\.10, 2001:db8::10 \\?\(alta\\?\)/);
 
     /* Only news affecting a high-criticality asset: Nginx (LB01, low) is dropped. */
-    const critical = await admin.req('POST', '/api/channels', { name: 'crit', type: 'rocketchat', webhookUrl: hookUrl, minSeverity: 'low', minAssetCriticality: 'high', schedule: { type: 'interval', intervalHours: 6 } });
+    const critical = await admin.req('POST', '/api/channels', { name: 'crit', type: 'rocketchat', webhookUrl: hookUrl, minSeverity: 'low', verifiedOnly: false, minAssetCriticality: 'high', schedule: { type: 'interval', intervalHours: 6 } });
     received.length = 0;
     const run = await admin.req('POST', `/api/channels/${critical.body.channel.id}/run`);
     expect(run.body.articleCount).toBe(1);
@@ -1164,7 +1165,7 @@ describe('assets (what runs the stack)', () => {
     const { tenantRepository } = await import('../repositories/tenantRepository');
     const tenant = tenantRepository.listBasic().find((t: any) => t.name === 'Assetco')!;
     const links = assetRepository.linksByStackItem(tenant.id);
-    const channel = { id: 999999, minSeverity: 'low', maxItems: 10, lastSentAt: null, minAssetCriticality: null } as any;
+    const channel = { id: 999999, type: 'slack', verifiedOnly: false, minSeverity: 'low', maxItems: 10, lastSentAt: null, minAssetCriticality: null } as any;
     const items = await selectCandidates(channel, tenantStack(tenant.id), new Date(), links);
     expect(items.length).toBeGreaterThan(0);
     expect(items.every((i) => i.assets === undefined)).toBe(true);
@@ -1234,5 +1235,88 @@ describe('assets CSV import/export', () => {
     expect((await member.req('POST', '/api/assets/import?mode=merge', undefined, { raw: 'name\nX\n' })).status).toBe(403);
     expect((await member.req('GET', '/api/assets/export.csv')).status).toBe(200);
     expect(String((await member.req('GET', '/api/assets/template.csv')).body)).toContain('FW-PERIMETRO');
+  });
+});
+
+describe('version-verified vulnerabilities', () => {
+  const root = new Client();
+  const admin = new Client();
+
+  it('sends only CVEs confirmed against the installed version of each asset', async () => {
+    const { setCveTransport } = await import('../services/vuln/cveSync');
+    const fixtures = path.join(__dirname, 'fixtures', 'cve');
+    const calls: string[] = [];
+    setCveTransport(async (url: string) => {
+      calls.push(url);
+      const id = decodeURIComponent(url.match(/CVE-\d{4}-\d+/)![0]);
+      const file = path.join(fixtures, `${id}.${url.includes('nvd.nist.gov') ? 'nvd' : 'cve'}.json`);
+      if (!fs.existsSync(file)) return new Response('{}', { status: 404 });
+      return new Response(fs.readFileSync(file), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }, 0);
+    try {
+      await root.login('root', PW);
+      expect((await root.req('POST', '/api/admin/tenants', { name: 'Verico', language: 'es', admin: { username: 'vera', password: PW } })).status).toBe(201);
+      await admin.login('vera', PW);
+
+      /* One nginx row; each asset reports its own version. */
+      const row = (await admin.req('POST', '/api/tech-stack', { technology: 'nginx', vendor: 'F5' })).body.item;
+      const old = (await admin.req('POST', '/api/assets', { name: 'EDGE-OLD', criticality: 'high', stackItemIds: [row.id], stackVersions: { [row.id]: '1.22.1' } })).body.item;
+      expect(old.stackVersions).toEqual({ [row.id]: '1.22.1' });
+      await admin.req('POST', '/api/assets/import?mode=merge', undefined, { raw: 'name,criticality,technologies\nEDGE-NEW,high,nginx 1.31.8\n' });
+      const assets = (await admin.req('GET', '/api/assets')).body.assets;
+      expect(assets.find((a: any) => a.name === 'EDGE-NEW').stackVersions).toEqual({ [row.id]: '1.31.8' });
+      /* Editing the stack row keeps per-asset versions. */
+      await admin.req('PUT', `/api/tech-stack/${row.id}`, { technology: 'nginx', vendor: 'F5', assetIds: assets.map((a: any) => a.id) });
+      const stackRow = (await admin.req('GET', '/api/tech-stack')).body.stack[0];
+      expect(Object.fromEntries(stackRow.assets.map((a: any) => [a.name, a.version]))).toEqual({ 'EDGE-NEW': '1.31.8', 'EDGE-OLD': '1.22.1' });
+
+      const { getSqlite } = await import('../db/client');
+      const ins = getSqlite().prepare(`INSERT INTO articles (title, summary, source, severity, category, published_at, url) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+      ins.run('nginx mp4 module flaw (CVE-2024-7347)', 'Over-read in ngx_http_mp4_module', 'TestFeed', 'high', 'VULNERABILITY', new Date().toISOString(), 'https://news.example/nginx-7347');
+      ins.run('nginx tuning tips', 'How to tune nginx workers', 'TestFeed', 'high', 'VULNERABILITY', new Date().toISOString(), 'https://news.example/nginx-tips');
+      ins.run('PHP-CGI argument injection CVE-2024-4577 mentions nginx setups', 'nginx + php-fpm', 'TestFeed', 'critical', 'VULNERABILITY', new Date().toISOString(), 'https://news.example/php-4577');
+
+      /* Default channel = verified only. */
+      const ch = await admin.req('POST', '/api/channels', { name: 'SOC', type: 'rocketchat', webhookUrl: hookUrl, minSeverity: 'low', includeAssets: true, schedule: { type: 'interval', intervalHours: 6 } });
+      expect(ch.body.channel.verifiedOnly).toBe(true);
+      received.length = 0;
+      const run = await admin.req('POST', `/api/channels/${ch.body.channel.id}/run`);
+      expect(run.body.status).toBe('sent');
+      expect(run.body.articleCount).toBe(1);
+      const text = received[0].body.text;
+      expect(text).toContain('CVE-2024-7347');
+      /* Rocket.Chat markdown escapes the parentheses. */
+      expect(text.replace(/\\/g, '')).toContain('nginx 1.22.1 (CVE-2024-7347, corregida en 1.27.1)');
+      expect(text).toContain('EDGE-OLD');
+      expect(text).not.toContain('EDGE-NEW');
+      expect(text).not.toContain('tuning');
+      expect(text).not.toContain('PHP-CGI');
+      expect(calls.some((u) => u.includes('cveawg.mitre.org'))).toBe(true);
+
+      /* Patching the last vulnerable asset clears it: nothing more to send. */
+      await admin.req('PUT', `/api/assets/${old.id}`, { name: 'EDGE-OLD', criticality: 'high', stackItemIds: [row.id], stackVersions: { [row.id]: '1.27.1' } });
+      const newsRes = await admin.req('GET', '/api/tech-stack/news');
+      const news = newsRes.body.news;
+      const n7347 = news.find((n: any) => n.url === 'https://news.example/nginx-7347');
+      expect(n7347.vuln.status).toBe('not_affected');
+      expect(news.find((n: any) => n.url === 'https://news.example/nginx-tips').vuln.status).toBe('no_cve');
+      expect(news.find((n: any) => n.url === 'https://news.example/php-4577').vuln.status).toBe('not_affected');
+
+      getSqlite().prepare('DELETE FROM channel_sent_articles').run();
+      const again = await admin.req('POST', `/api/channels/${ch.body.channel.id}/run`);
+      expect(again.body.status).toBe('skipped');
+      expect(again.body.detail).toMatch(/No confirmed vulnerabilities/);
+
+      /* Opting out restores the old behaviour (every stack match). */
+      const upd = await admin.req('PUT', `/api/channels/${ch.body.channel.id}`, { verifiedOnly: false });
+      expect(upd.body.channel.verifiedOnly).toBe(false);
+
+      /* CPE override validation. */
+      expect((await admin.req('PUT', `/api/tech-stack/${row.id}`, { technology: 'nginx', cpe: 'not a cpe' })).status).toBe(400);
+      const cpe = await admin.req('PUT', `/api/tech-stack/${row.id}`, { technology: 'nginx', cpe: 'cpe:2.3:a:f5:nginx_open_source:*:*:*:*:*:*:*:*' });
+      expect(cpe.body.item.cpe).toBe('f5:nginx_open_source');
+    } finally {
+      setCveTransport(null);
+    }
   });
 });

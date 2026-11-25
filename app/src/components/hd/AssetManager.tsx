@@ -109,6 +109,12 @@ function techLabel(t: TechStackItem): string {
   return t.version ? `${t.technology} ${t.version}` : t.technology;
 }
 
+/* "nginx 1.22.1" using the version installed on the asset when it has one. */
+function installedLabel(t: TechStackItem, versions: Record<number, string> | undefined): string {
+  const v = versions?.[t.id] || t.version;
+  return v ? `${t.technology} ${v}` : t.technology;
+}
+
 export default function AssetManager({ canEdit, refreshKey, onChanged }: { canEdit: boolean; refreshKey?: number; onChanged?: () => void }) {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [stack, setStack] = useState<TechStackItem[]>([]);
@@ -233,7 +239,7 @@ export default function AssetManager({ canEdit, refreshKey, onChanged }: { canEd
                   <td className="px-3 py-2 text-text-secondary">{[a.brand, a.model].filter(Boolean).join(' ') || '—'}</td>
                   <td className="px-3 py-2 text-text-secondary text-xs">
                     {a.stackItemIds.length
-                      ? a.stackItemIds.map((id) => techById.get(id)).filter(Boolean).map((t) => techLabel(t!)).join(', ')
+                      ? a.stackItemIds.map((id) => techById.get(id)).filter(Boolean).map((t) => installedLabel(t!, a.stackVersions)).join(', ')
                       : <span className="text-text-tertiary">—</span>}
                   </td>
                   {canEdit && (
@@ -244,6 +250,7 @@ export default function AssetManager({ canEdit, refreshKey, onChanged }: { canEd
                           values: {
                             name: a.name, type: a.type, criticality: a.criticality, environment: a.environment ?? '', hostname: a.hostname ?? '',
                             ip: a.ip ?? '', brand: a.brand ?? '', model: a.model ?? '', owner: a.owner ?? '', notes: a.notes ?? '', stackItemIds: a.stackItemIds,
+                            stackVersions: { ...(a.stackVersions ?? {}) },
                           },
                         })}
                         className="p-1.5 rounded text-text-tertiary hover:text-accent hover:bg-accent/10 cursor-pointer"
@@ -319,6 +326,29 @@ export default function AssetManager({ canEdit, refreshKey, onChanged }: { canEd
                   empty={tr('The stack is empty.')}
                 />
               </Field>
+              {(editing.values.stackItemIds?.length ?? 0) > 0 && (
+                <div className="sm:col-span-2 rounded-md border border-border-default p-3">
+                  <div className="text-[11px] font-jetbrains uppercase tracking-[0.08em] text-text-tertiary mb-1">{tr('Installed versions')}</div>
+                  <p className="text-[11px] text-text-tertiary mb-2">
+                    {tr('The version on this asset is what vulnerabilities are checked against. Empty = the version in Technologies.')}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {(editing.values.stackItemIds ?? []).map((id) => techById.get(id)).filter((t): t is TechStackItem => !!t).map((t) => (
+                      <label key={t.id} className="flex items-center gap-2 text-sm">
+                        <span className="flex-1 truncate text-text-secondary" title={t.technology}>{t.technology}</span>
+                        <Input
+                          value={editing.values.stackVersions?.[t.id] ?? ''}
+                          onChange={(e) => set({ stackVersions: { ...(editing.values.stackVersions ?? {}), [t.id]: e.target.value } })}
+                          className={`${inputCls} font-jetbrains w-36 h-8`}
+                          maxLength={100}
+                          placeholder={t.version || tr('version')}
+                          aria-label={tr('Version of {tech} on this asset', { tech: t.technology })}
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="sm:col-span-2">
                 <Field label={tr('Notes')} htmlFor="as-notes">
                   <Textarea id="as-notes" value={editing.values.notes ?? ''} onChange={(e) => set({ notes: e.target.value })} className={inputCls} maxLength={1000} rows={2} />

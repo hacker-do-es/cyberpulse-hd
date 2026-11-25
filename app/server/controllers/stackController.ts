@@ -8,13 +8,17 @@ import { CSV_TEMPLATE, stackKey, toStackCsv } from '../services/csv';
 import { getStackNewsWithAssets } from '../services/stackNews';
 import { importStack } from '../useCases/importStack';
 
-function stackItem(row: StackRow, assets: AssetRef[] = []) {
+type AssetWithVersion = AssetRef & { version?: string | null };
+
+function stackItem(row: StackRow, assets: AssetWithVersion[] = []) {
   return {
     id: row.id,
     technology: row.technology,
     version: row.version || undefined,
     vendor: row.vendor || undefined,
     category: row.category || undefined,
+    cpe: row.cpe || undefined,
+    /* Each asset with the version installed on it (null = the row's). */
     assets,
     createdAt: row.createdAt,
   };
@@ -41,7 +45,25 @@ function parseStackValues(body: any, tenantId: number, exceptId?: number): Stack
   if (stackRepository.keys(tenantId, exceptId).some((r) => stackKey(r) === key)) {
     throw conflict('That technology and version are already in the stack');
   }
-  return { technology, version, vendor: optStr(body?.vendor, 100), category: optStr(body?.category, 100) };
+  return { technology, version, vendor: optStr(body?.vendor, 100), category: optStr(body?.category, 100), ...cpeOf(body) };
+}
+
+/* "vendor:product" as CVE records/CPEs name it; '' clears it; absent = keep. */
+function cpeOf(body: any): { cpe?: string | null } {
+  if (body?.cpe === undefined) return {};
+  const raw = typeof body.cpe === 'string' ? body.cpe.trim().toLowerCase() : '';
+  if (!raw) return { cpe: null };
+  /* Accept a full CPE 2.3 string too: cpe:2.3:a:f5:nginx:... */
+  const m = raw.match(/^cpe:2\.3:[aoh]:([^:]+):([^:]+)/);
+  const value = m ? `${m[1]}:${m[2]}` : raw;
+  if (value.length > 200 || !/^[a-z0-9._\-+!~]+:[a-z0-9._\-+!~]+$/.test(value)) throw badRequest('CPE must look like vendor:product (e.g. f5:nginx_open_source)');
+  return { cpe: value };
+}
+
+function withVersions(tid: number): Map<number, AssetWithVersion[]> {
+  const out = new Map<number, AssetWithVersion[]>();
+  for (const [id, list] of assetRepository.softwareByStackItem(tid)) out.set(id, list.map((l) => ({ ...l.asset, version: l.version })));
+  return out;
 }
 
 function csvDownload(res: express.Response, filename: string, body: string) {
@@ -54,7 +76,7 @@ function csvDownload(res: express.Response, filename: string, body: string) {
 export const stackController = {
   list(req: express.Request, res: express.Response) {
     const tid = tenantOf(req);
-    const links = assetRepository.linksByStackItem(tid);
+    const links = withVersions(tid);
     res.json({ stack: stackRepository.listByTenant(tid).map((r) => stackItem(r, links.get(r.id) ?? [])) });
   },
 
@@ -64,7 +86,7 @@ export const stackController = {
     const assetIds = assetIdsOf(req.body, tid);
     const row = stackRepository.create(tid, values);
     if (assetIds) assetRepository.setLinks(row.id, assetIds);
-    res.status(201).json({ item: stackItem(row, assetRepository.linksByStackItem(tid).get(row.id) ?? []) });
+    res.status(201).json({ item: stackItem(row, withVersions(tid).get(row.id) ?? []) });
   },
 
   /* Edits one row in place; empty optional fields are cleared. */
@@ -78,7 +100,7 @@ export const stackController = {
     const assetIds = assetIdsOf(req.body, tid);
     const row = stackRepository.update(id, tid, values);
     if (assetIds) assetRepository.setLinks(id, assetIds);
-    res.json({ item: stackItem(row!, assetRepository.linksByStackItem(tid).get(id) ?? []) });
+    res.json({ item: stackItem(row!, withVersions(tid).get(id) ?? []) });
   },
 
   remove(req: express.Request, res: express.Response) {
@@ -96,7 +118,7 @@ export const stackController = {
 
   exportCsv(req: express.Request, res: express.Response) {
     const tid = tenantOf(req);
-    const links = assetRepository.linksByStackItem(tid);
+    const links = withVersions(tid);
     csvDownload(res, 'tech-stack.csv', toStackCsv(stackRepository.listByTenant(tid).map((r) => ({
       ...r, assets: (links.get(r.id) ?? []).map((a) => a.name),
     }))));

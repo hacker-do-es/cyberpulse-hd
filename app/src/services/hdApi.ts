@@ -106,9 +106,14 @@ export interface Asset {
   owner?: string;
   notes?: string;
   stackItemIds: number[];
+  /* stack row id → version installed on this asset (absent = the row's). */
+  stackVersions?: Record<number, string>;
 }
 
-export type AssetInput = Omit<Asset, 'id' | 'stackItemIds'> & { stackItemIds?: number[] };
+export type AssetInput = Omit<Asset, 'id' | 'stackItemIds' | 'stackVersions'> & {
+  stackItemIds?: number[];
+  stackVersions?: Record<number, string | null>;
+};
 
 export const assetApi = {
   list: () => call<{ assets: Asset[] }>('GET', '/api/assets').then((r) => r.assets),
@@ -227,6 +232,8 @@ export interface Channel {
   /** Digest channels only (always false/null for LinkedIn). */
   includeAssets: boolean;
   minAssetCriticality: 'low' | 'medium' | 'high' | null;
+  /* Only CVEs confirmed against installed versions (digest channels). */
+  verifiedOnly: boolean;
   /** Custom digest header; null = default. */
   header: string | null;
   /** Custom digest footer; null = default, '' = no footer. */
@@ -260,6 +267,7 @@ export interface ChannelInput {
   useAi: boolean;
   includeAssets?: boolean;
   minAssetCriticality?: 'low' | 'medium' | 'high' | null;
+  verifiedOnly?: boolean;
   header?: string | null;
   footer?: string | null;
 }

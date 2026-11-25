@@ -14,7 +14,7 @@ function csvDownload(res: express.Response, filename: string, body: string) {
   res.send('\uFEFF' + body);
 }
 
-function assetItem(row: AssetRow, stackItemIds: number[] = []) {
+function assetItem(row: AssetRow, stackItemIds: number[] = [], stackVersions: Record<number, string | null> = {}) {
   return {
     id: row.id,
     name: row.name,
@@ -28,6 +28,8 @@ function assetItem(row: AssetRow, stackItemIds: number[] = []) {
     owner: row.owner ?? undefined,
     notes: row.notes ?? undefined,
     stackItemIds,
+    /* stack row id → version installed on this asset (absent = the row's). */
+    stackVersions: Object.fromEntries(Object.entries(stackVersions).filter(([, v]) => v)),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -60,6 +62,23 @@ function stackItemIdsOf(body: any): number[] | undefined {
   return body.stackItemIds.map(Number).filter((n: number) => Number.isInteger(n) && n > 0);
 }
 
+/* Optional {stackRowId: "1.2.3" | null}: versions installed on the asset. */
+function stackVersionsOf(body: any): Record<number, string | null> | undefined {
+  const v = body?.stackVersions;
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== 'object' || Array.isArray(v) || Object.keys(v).length > 2000) throw badRequest('stackVersions must be an object of id → version');
+  const out: Record<number, string | null> = {};
+  for (const [k, raw] of Object.entries(v)) {
+    const id = Number(k);
+    if (!Number.isInteger(id) || id <= 0) continue;
+    if (raw !== null && typeof raw !== 'string') throw badRequest('Versions must be text');
+    const s = typeof raw === 'string' ? raw.trim() : '';
+    if (s.length > 100) throw badRequest('Version too long (max 100 characters)');
+    out[id] = s || null;
+  }
+  return out;
+}
+
 function save<T>(fn: () => T): T {
   try {
     return fn();
@@ -73,8 +92,9 @@ export const assetController = {
   list(req: express.Request, res: express.Response) {
     const tid = tenantOf(req);
     const links = assetRepository.stackItemsByAsset(tid);
+    const versions = assetRepository.versionsByAsset(tid);
     res.json({
-      assets: assetRepository.listByTenant(tid).map((a) => assetItem(a, links.get(a.id) ?? [])),
+      assets: assetRepository.listByTenant(tid).map((a) => assetItem(a, links.get(a.id) ?? [], versions.get(a.id))),
       types: ASSET_TYPES,
       criticalities: ASSET_CRITICALITIES,
     });
@@ -84,9 +104,10 @@ export const assetController = {
     const tid = tenantOf(req);
     const values = parseAssetValues(req.body);
     const ids = stackItemIdsOf(req.body);
+    const versions = stackVersionsOf(req.body);
     const row = save(() => assetRepository.create(tid, values));
-    if (ids) assetRepository.setStackItems(row.id, tid, ids);
-    res.status(201).json({ item: assetItem(row, assetRepository.stackItemsByAsset(tid).get(row.id) ?? []) });
+    if (ids) assetRepository.setStackItems(row.id, tid, ids, versions);
+    res.status(201).json({ item: assetItem(row, assetRepository.stackItemsByAsset(tid).get(row.id) ?? [], assetRepository.versionsByAsset(tid).get(row.id)) });
   },
 
   update(req: express.Request, res: express.Response) {
@@ -95,9 +116,10 @@ export const assetController = {
     if (!assetRepository.findInTenant(id, tid)) throw notFound('Asset not found');
     const values = parseAssetValues(req.body);
     const ids = stackItemIdsOf(req.body);
+    const versions = stackVersionsOf(req.body);
     const row = save(() => assetRepository.update(id, tid, values))!;
-    if (ids) assetRepository.setStackItems(id, tid, ids);
-    res.json({ item: assetItem(row, assetRepository.stackItemsByAsset(tid).get(id) ?? []) });
+    if (ids) assetRepository.setStackItems(id, tid, ids, versions);
+    res.json({ item: assetItem(row, assetRepository.stackItemsByAsset(tid).get(id) ?? [], assetRepository.versionsByAsset(tid).get(id)) });
   },
 
   import(req: express.Request, res: express.Response) {
@@ -111,9 +133,16 @@ export const assetController = {
   exportCsv(req: express.Request, res: express.Response) {
     const tid = tenantOf(req);
     const links = assetRepository.stackItemsByAsset(tid);
-    const tech = new Map(stackRepository.listByTenant(tid).map((t) => [t.id, t.version ? `${t.technology} ${t.version}` : t.technology]));
+    const versions = assetRepository.versionsByAsset(tid);
+    const rows = new Map(stackRepository.listByTenant(tid).map((t) => [t.id, t]));
+    const label = (assetId: number, id: number): string | null => {
+      const t = rows.get(id);
+      if (!t) return null;
+      const v = versions.get(assetId)?.[id] || t.version;
+      return v ? `${t.technology} ${v}` : t.technology;
+    };
     csvDownload(res, 'assets.csv', toAssetCsv(assetRepository.listByTenant(tid).map((a) => ({
-      ...a, technologies: (links.get(a.id) ?? []).map((id) => tech.get(id)).filter((x): x is string => !!x),
+      ...a, technologies: (links.get(a.id) ?? []).map((id) => label(a.id, id)).filter((x): x is string => !!x),
     }))));
   },
 

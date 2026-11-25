@@ -6,6 +6,8 @@ import { toSqlUtc } from '../services/schedule';
 import { cleanOldArticles, scrapeAll } from '../services/scraper';
 import { runChannelDigest } from '../useCases/runChannelDigest';
 import { publishDuePosts } from '../services/linkedin/queueWorker';
+import { runCveJob } from '../services/vuln/cveSync';
+import { cveRepository } from '../repositories/cveRepository';
 
 /* ------------------------------------------------------------------ */
 /*  Scrape                                                             */
@@ -93,7 +95,16 @@ export function startJobs(): void {
   cron.schedule('0 2 * * *', () => {
     cleanOldArticles();
     deliveryRepository.prune();
+    /* CVE data nobody looked at in 90 days is re-fetched if ever needed. */
+    cveRepository.pruneOlderThan(toSqlUtc(new Date(Date.now() - 90 * 86400_000)));
   });
+
+  /* CVE affected-version data for the news of the last 30 days, so version
+     verdicts are ready before digests run. First pass shortly after start
+     (after the initial scrape has had time to add articles). */
+  const cveJob = () => runCveJob().catch((err) => console.error('[CVE] sync failed:', err));
+  setTimeout(cveJob, 90_000).unref();
+  cron.schedule('*/20 * * * *', cveJob);
 
   cron.schedule('* * * * *', () => {
     schedulerTick().catch((err) => console.error('[SCHEDULER] tick failed:', err));

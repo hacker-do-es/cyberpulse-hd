@@ -6,7 +6,11 @@ import { assetRepository } from '../repositories/assetRepository';
 import { stackRepository } from '../repositories/stackRepository';
 import { parseAssetCsv, type AssetCsvRow } from '../services/assetCsv';
 
-/* "PHP 8.2" matches the row PHP / 8.2; "PHP" matches every PHP row. */
+/* "PHP 8.2" matches the row PHP / 8.2; "PHP" matches every PHP row.
+   "nginx 1.22.1" with no such row but an "nginx" row links that row with
+   1.22.1 as the version installed on this asset. */
+type TechLink = { id: number; version: string | null };
+
 function techResolver(tenantId: number) {
   const rows = stackRepository.idsByKey(tenantId);
   const exact = new Map<string, number[]>();
@@ -19,9 +23,20 @@ function techResolver(tenantId: number) {
       exact.set(full, [...(exact.get(full) ?? []), r.id]);
     }
   }
-  return (label: string): number[] => {
-    const k = label.trim().toLowerCase();
-    return exact.get(k) ?? byName.get(k) ?? [];
+  const names = Array.from(byName.keys()).sort((a, b) => b.length - a.length);
+  return (label: string): TechLink[] => {
+    const raw = label.trim();
+    const k = raw.toLowerCase();
+    const hit = exact.get(k) ?? byName.get(k);
+    if (hit) return hit.map((id) => ({ id, version: null }));
+    /* Longest known name followed by a version: "WordPress 6.2.2". */
+    for (const name of names) {
+      if (!k.startsWith(`${name} `)) continue;
+      const version = raw.slice(name.length).trim();
+      if (!/^v?\d/i.test(version) || version.length > 100) continue;
+      return [{ id: byName.get(name)![0], version }];
+    }
+    return [];
   };
 }
 
@@ -37,20 +52,20 @@ export function importAssets(tenantId: number, csv: string, mode: 'merge' | 'rep
   const toCreate: AssetCsvRow[] = [];
   const toUpdate: Array<AssetCsvRow & { id: number }> = [];
   const unknownTech = new Set<string>();
-  const links = new Map<string, number[]>();
+  const links = new Map<string, TechLink[]>();
 
   for (const r of parsed.rows) {
     const hit = existing.get(r.name.toLowerCase());
     if (hit) toUpdate.push({ ...r, id: hit.id });
     else toCreate.push(r);
     if (r.technologies) {
-      const ids: number[] = [];
+      const byId = new Map<number, string | null>();
       for (const t of r.technologies) {
         const found = resolve(t);
         if (found.length === 0) unknownTech.add(t);
-        ids.push(...found);
+        for (const f of found) if (!byId.has(f.id) || f.version) byId.set(f.id, f.version);
       }
-      links.set(r.name.toLowerCase(), Array.from(new Set(ids)));
+      links.set(r.name.toLowerCase(), Array.from(byId, ([id, version]) => ({ id, version })));
     }
   }
 
@@ -84,10 +99,14 @@ export function importAssets(tenantId: number, csv: string, mode: 'merge' | 'rep
     if (toDelete.length) {
       tx.delete(assets).where(and(eq(assets.tenantId, tenantId), inArray(assets.id, toDelete.map((a) => a.id)))).run();
     }
-    const setLinks = (assetId: number, ids: number[] | undefined) => {
-      if (ids === undefined) return;
+    const setLinks = (assetId: number, list: TechLink[] | undefined) => {
+      if (list === undefined) return;
       tx.delete(stackItemAssets).where(eq(stackItemAssets.assetId, assetId)).run();
-      if (ids.length) tx.insert(stackItemAssets).values(ids.map((stackItemId) => ({ stackItemId, assetId }))).run();
+      if (list.length) {
+        tx.insert(stackItemAssets).values(list.map((l) => ({
+          stackItemId: l.id, assetId, version: l.version, source: 'csv', updatedAt: sql`CURRENT_TIMESTAMP`,
+        }))).run();
+      }
     };
     for (const r of toCreate) {
       const id = tx.insert(assets).values({ tenantId, name: r.name, ...r.values }).returning({ id: assets.id }).get().id;

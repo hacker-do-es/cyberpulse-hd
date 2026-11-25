@@ -64,6 +64,13 @@
       "when": 1795436856939,
       "tag": "0008_asset_types_native",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1795605654509,
+      "tag": "0009_asset_versions_cve",
+      "breakpoints": true
     }
   ]
 }

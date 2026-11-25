@@ -129,6 +129,9 @@ export const techStack = sqliteTable('user_tech_stack', {
   version: text('version'),
   vendor: text('vendor'),
   category: text('category'),
+  /* Optional "vendor:product" as CVE records name it (e.g. "f5:nginx"),
+     for when the technology's name alone does not identify the product. */
+  cpe: text('cpe'),
   createdAt: text('created_at').default(now),
 }, (t) => [index('idx_tech_stack_tenant').on(t.tenantId)]);
 
@@ -164,9 +167,19 @@ export const assets = sqliteTable('assets', {
 ]);
 
 /* Which assets run each stack row (many to many, same company). */
+export const SOFTWARE_SOURCES = ['manual', 'csv', 'script', 'github'] as const;
+export type SoftwareSource = (typeof SOFTWARE_SOURCES)[number];
+
+/* Which assets run each stack row (many to many, same company), and the
+   version installed on that asset. NULL version = the stack row's own. */
 export const stackItemAssets = sqliteTable('stack_item_assets', {
   stackItemId: integer('stack_item_id').notNull().references(() => techStack.id, { onDelete: 'cascade' }),
   assetId: integer('asset_id').notNull().references(() => assets.id, { onDelete: 'cascade' }),
+  version: text('version'),
+  source: text('source').notNull().default('manual'),
+  lastSeenAt: text('last_seen_at'),
+  /* No default: SQLite cannot ADD COLUMN with CURRENT_TIMESTAMP; set by code. */
+  updatedAt: text('updated_at'),
 }, (t) => [
   primaryKey({ columns: [t.stackItemId, t.assetId] }),
   index('idx_stack_item_assets_asset').on(t.assetId),
@@ -222,6 +235,9 @@ export const channels = sqliteTable('channels', {
      or above this criticality (NULL = any news matching the stack). */
   includeAssets: integer('include_assets', { mode: 'boolean' }).notNull().default(false),
   minAssetCriticality: text('min_asset_criticality'),
+  /* Digest channels only: send just the news whose CVE is confirmed to
+     affect the installed version of an asset or stack row. */
+  verifiedOnly: integer('verified_only', { mode: 'boolean' }).notNull().default(true),
 }, (t) => [
   index('idx_channels_tenant').on(t.tenantId),
   index('idx_channels_next_run').on(t.nextRunAt),
@@ -387,3 +403,23 @@ export const linkedinQueue = sqliteTable('linkedin_queue', {
 
 export type LinkedinQueueRow = typeof linkedinQueue.$inferSelect;
 
+
+/* ------------------------------------------------------------------ */
+/*  CVE data (shared, cached)                                          */
+/* ------------------------------------------------------------------ */
+
+/* What CVE.org (the CNA's record) and NVD (CPE configurations) say about
+   which product versions a CVE affects, normalised (services/vuln). Shared
+   by every company; refreshed by the vuln job. */
+export const cveRecords = sqliteTable('cve_records', {
+  cveId: text('cve_id').primaryKey(),
+  /* ok = fetched (possibly without product data yet), not_found, error */
+  status: text('status').notNull(),
+  /* JSON: { products: AffectedProduct[], cvss: number | null } */
+  data: text('data'),
+  fetchedAt: text('fetched_at').notNull(),
+  nvdFetchedAt: text('nvd_fetched_at'),
+  error: text('error'),
+}, (t) => [index('idx_cve_records_fetched').on(t.fetchedAt)]);
+
+export type CveRecordRow = typeof cveRecords.$inferSelect;

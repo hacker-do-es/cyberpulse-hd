@@ -213,8 +213,31 @@ export interface TechStackItem {
   version?: string;
   vendor?: string;
   category?: string;
-  assets?: AssetRef[];
+  /* "vendor:product" as CVE records name it, when the name is not enough. */
+  cpe?: string;
+  /* Each asset with the version installed on it (null = the row's). */
+  assets?: Array<AssetRef & { version?: string | null }>;
   createdAt?: string;
+}
+
+/* Is the article's CVE confirmed against installed versions? */
+export type VulnStatus = 'affected' | 'not_affected' | 'pending' | 'unverified' | 'no_cve';
+export type VulnUnitStatus = 'affected' | 'not_affected' | 'not_listed' | 'unknown' | 'no_version' | 'pending';
+
+export interface VulnUnit {
+  stackId: number;
+  technology: string;
+  version: string | null;
+  assetId: number | null;
+  status: VulnUnitStatus;
+  cve?: string;
+  fixedIn?: string;
+}
+
+export interface ArticleVuln {
+  status: VulnStatus;
+  cves: string[];
+  units: VulnUnit[];
 }
 
 export interface TechStackResponse {
@@ -226,6 +249,7 @@ export interface TechStackNewsArticle extends NewsArticle {
   matchedTechnologies: string[];
   matchedStackIds?: number[];
   affectedAssets?: AssetRef[];
+  vuln?: ArticleVuln;
 }
 
 export interface TechStackNewsResponse {
@@ -250,6 +274,8 @@ export interface CreateTechStackParams {
   version?: string;
   vendor?: string;
   category?: string;
+  /* "vendor:product"; '' clears it, absent keeps it. */
+  cpe?: string;
   /* When present, replaces the row's assets. */
   assetIds?: number[];
 }

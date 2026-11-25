@@ -3,7 +3,7 @@ import { decryptSecret } from '../lib/crypto';
 import { channelRepository, deliveryRepository } from '../repositories/channelRepository';
 import { tenantRepository } from '../repositories/tenantRepository';
 import { AiError } from '../services/ai';
-import { aiSummary, digestEmail, digestText, selectCandidates, testEmail, testText, withAssets } from '../services/digest';
+import { aiSummary, digestEmail, digestText, emptyStats, isVerifiedOnly, selectCandidates, testEmail, testText, withAssets } from '../services/digest';
 import { assetRepository } from '../repositories/assetRepository';
 import { MailError, sendEmail, summarizeReport } from '../services/mail/send';
 import { parseStoredTarget } from '../services/mail/target';
@@ -54,8 +54,16 @@ async function buildAndSend(channel: ChannelRow, tenant: TenantRow, now: Date): 
   /* Assets are looked up only for channels that use them (LinkedIn returned
      above and never sees them). */
   const assetLinks = channel.includeAssets || channel.minAssetCriticality ? assetRepository.linksByStackItem(tenant.id) : undefined;
-  const selected = await selectCandidates(channel, stack, now, assetLinks);
+  const stats = emptyStats();
+  const selected = await selectCandidates(channel, stack, now, assetLinks, stats);
   if (selected.length === 0) {
+    if (isVerifiedOnly(channel) && stats.matched > 0) {
+      return {
+        status: 'skipped',
+        articleCount: 0,
+        detail: `No confirmed vulnerabilities for the installed versions (${stats.matched} matching news: ${stats.notAffected} not affected, ${stats.unverified} unverified, ${stats.noCve} without CVE)`,
+      };
+    }
     return { status: 'skipped', articleCount: 0, detail: 'No new news matching the stack' };
   }
   /* The AI summary below is given `selected`, which never carries assets:

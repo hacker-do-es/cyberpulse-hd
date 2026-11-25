@@ -105,6 +105,7 @@ export default function ChannelsTab() {
                       {c.type === 'linkedin' && c.linkedin?.requireApproval && <Badge>{tr('Needs approval')}</Badge>}
                       {!c.active && <Badge>{tr("Paused")}</Badge>}
                       {c.useAi && <Badge><Zap size={10} /> {tr("AI summary")}</Badge>}
+                      {c.type !== 'linkedin' && c.verifiedOnly && <Badge tone="accent">{tr("Confirmed CVEs only")}</Badge>}
                       {c.includeAssets && <Badge tone="warn"><HardDrive size={10} /> {tr("Lists assets")}</Badge>}
                       {c.minAssetCriticality && <Badge>{tr('Assets ≥ {level}', { level: criticalityLabel(c.minAssetCriticality) })}</Badge>}
                     </div>
@@ -153,7 +154,7 @@ function toInput(c: Channel, patch: Partial<ChannelInput> = {}): ChannelInput {
   return {
     name: c.name, type: c.type, active: c.active, schedule: c.schedule,
     minSeverity: c.minSeverity, maxItems: c.maxItems, useAi: c.useAi,
-    includeAssets: c.includeAssets, minAssetCriticality: c.minAssetCriticality, ...patch,
+    includeAssets: c.includeAssets, minAssetCriticality: c.minAssetCriticality, verifiedOnly: c.verifiedOnly, ...patch,
   };
 }
 
@@ -175,7 +176,7 @@ const EMPTY: ChannelInput = {
   name: '', type: 'slack', webhookUrl: '', active: true,
   schedule: { type: 'weekly', intervalHours: 6, timeOfDay: '08:30', weekdays: [1, 2, 3, 4, 5] },
   minSeverity: 'medium', maxItems: 15, useAi: true, header: null, footer: null, headerHtml: null, footerHtml: null,
-  includeAssets: false, minAssetCriticality: null,
+  includeAssets: false, minAssetCriticality: null, verifiedOnly: true,
 };
 
 const splitRecipients = (t: string) => t.split(/[\s,;]+/).map((r) => r.trim()).filter(Boolean);
@@ -450,6 +451,18 @@ function ChannelDialog({ channel, aiConfigured, onClose, onSaved }: {
             )}
             <p className="text-xs text-text-tertiary">{tr("Use Test after saving to preview the header and footer in the channel.")}</p>
           </fieldset>
+          )}
+
+          {f.type !== 'linkedin' && (
+            <label className="flex items-start gap-3 cursor-pointer border border-border-default rounded-lg p-4">
+              <Switch checked={f.verifiedOnly !== false} onCheckedChange={(v) => setF({ ...f, verifiedOnly: v })} className="mt-0.5" />
+              <span className="text-sm">
+                <span className="text-text-primary">{tr("Only confirmed vulnerabilities")}</span>
+                <span className="block text-xs text-text-tertiary">
+                  {tr("Sends a news item only when one of its CVEs affects the version installed on an asset (checked against CVE.org and NVD). News without a CVE, or about technologies with no version entered, is left out. Turn off to receive every news item matching the stack.")}
+                </span>
+              </span>
+            </label>
           )}
 
           {f.type !== 'linkedin' && (

@@ -86,6 +86,7 @@ function channelOut(row: ChannelRow) {
     useAi: row.useAi,
     includeAssets: row.type === 'linkedin' ? false : row.includeAssets,
     minAssetCriticality: row.type === 'linkedin' ? null : row.minAssetCriticality,
+    verifiedOnly: row.type === 'linkedin' ? false : row.verifiedOnly,
     header: row.headerText,
     footer: row.footerText,
     headerHtml: row.headerHtml,
@@ -219,6 +220,8 @@ function parseChannelInput(body: any, existing?: ChannelRow, userId?: number): O
     webhookUrl,
     includeAssets,
     minAssetCriticality,
+    verifiedOnly: type === 'linkedin' ? false
+      : body?.verifiedOnly === undefined ? (existing ? existing.verifiedOnly : true) : body.verifiedOnly === true,
     scheduleType: schedule.type,
     intervalHours: schedule.intervalHours,
     timeOfDay: schedule.timeOfDay,

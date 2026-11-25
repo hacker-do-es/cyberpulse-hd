@@ -7,6 +7,7 @@ export interface StackValues {
   version: string | null;
   vendor: string | null;
   category: string | null;
+  cpe?: string | null;
 }
 
 export const stackRepository = {
