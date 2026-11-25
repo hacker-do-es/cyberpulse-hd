@@ -15,7 +15,7 @@
 
 set -euo pipefail
 
-AGENT_VERSION="1.0.0"
+AGENT_VERSION="1.0.1"
 CONF="/etc/cyberpulse-agent.conf"
 BIN="/usr/local/sbin/cyberpulse-agent"
 
@@ -59,7 +59,11 @@ collect() {
   [ -r /sys/class/dmi/id/product_name ] && line "model" "$(clean "$(cat /sys/class/dmi/id/product_name)")"
 
   if command -v ip >/dev/null 2>&1; then
-    ip -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n 16 | while read -r a; do line "ip" "$a"; done
+    # Physical/VPN interfaces only: container bridges and temporary IPv6
+    # addresses say nothing about the host.
+    ip -o addr show scope global 2>/dev/null \
+      | awk '$2 !~ /^(docker|br-|veth|virbr|vboxnet|cni|flannel|cali|lxc|podman|vmnet)/ && $0 !~ /temporary/ {print $4}' \
+      | cut -d/ -f1 | head -n 16 | while read -r a; do line "ip" "$a"; done
   fi
 
   if command -v dpkg-query >/dev/null 2>&1; then
@@ -94,8 +98,9 @@ send() {
   [ -n "${CYBERPULSE_URL:-}" ] && [ -n "${CYBERPULSE_TOKEN:-}" ] || die "$CONF needs CYBERPULSE_URL and CYBERPULSE_TOKEN"
   command -v curl >/dev/null 2>&1 || die "curl is required"
 
-  local tmp; tmp="$(mktemp -d)"; chmod 700 "$tmp"
-  trap 'rm -rf "$tmp"' RETURN
+  CP_TMP="$(mktemp -d)"; chmod 700 "$CP_TMP"
+  trap 'rm -rf -- "${CP_TMP:-}"' EXIT
+  local tmp="$CP_TMP"
   collect "${CYBERPULSE_TYPE:-}" > "$tmp/report.txt"
   # The token goes in a header file, never on the command line (ps).
   printf 'Authorization: Bearer %s\n' "$CYBERPULSE_TOKEN" > "$tmp/headers"

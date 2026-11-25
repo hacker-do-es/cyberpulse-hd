@@ -62,4 +62,20 @@ describe('inventory report mapping', () => {
     expect(r.packages).toHaveLength(0);
     expect(r.ips).toEqual(['10.0.0.1']);
   });
+
+  it('judges vendor-repository packages by upstream ranges, not the distro tracker', () => {
+    const m = mapReport(parseReport([
+      ...head,
+      'os\tdebian\t\t13\tDebian GNU/Linux 13 (trixie)',
+      'pkg\tdpkg\tdocker-ce\t5:29.10.0-1~debian.13~trixie\tdocker-ce\t5:29.10.0-1~debian.13~trixie',
+      'pkg\tdpkg\tnodejs\t20.20.2-1nodesource1\tnodejs\t20.20.2-1nodesource1',
+      'pkg\tdpkg\tpostgresql-17\t17.7-1.pgdg13+1\tpostgresql-17\t17.7-1.pgdg13+1',
+      'pkg\tdpkg\topenssh-server\t1:10.0p1-7+deb13u4\topenssh\t1:10.0p1-7+deb13u4',
+    ].join('\n')));
+    const by = Object.fromEntries(m.map((x) => [x.entry.tech, x]));
+    expect(by['Docker Engine']).toMatchObject({ version: '29.10.0', package: null });
+    expect(by['Node.js']).toMatchObject({ version: '20.20.2', package: null });
+    expect(by.PostgreSQL).toMatchObject({ version: '17.7', package: null });
+    expect(by.OpenSSH.package).toBe('Debian:13|openssh|1:10.0p1-7+deb13u4');
+  });
 });

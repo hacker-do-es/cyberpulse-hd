@@ -117,6 +117,13 @@ export function upstreamVersion(v: string): string {
   return v.replace(/^\d+:/, '').replace(/-[^-]*$/, '').replace(/[+~].*$/, '');
 }
 
+const THIRD_PARTY_NAMES = /^(docker-ce(-cli)?|containerd\.io|docker-desktop|google-chrome-stable|code|teamviewer|anydesk|forticlient|mongodb-org-server|grafana|gitlab-(ce|ee)|jenkins|elasticsearch|cloudflared|slack-desktop|zoom|virtualbox-\d+\.\d+|mysql-community-server)$/;
+const THIRD_PARTY_VERSION = /pgdg|nodesource|~debian\.|~ubuntu\.|[~.]bpo\d*|\.mariadb\.|percona/i;
+
+export function isThirdParty(name: string, version: string): boolean {
+  return THIRD_PARTY_NAMES.test(name) || THIRD_PARTY_VERSION.test(version);
+}
+
 /* Image tag or OCI version label → version, when it looks like one. */
 function imageVersion(ref: string, label: string): string | null {
   const fromLabel = label.match(/^v?(\d+(?:\.\d+)+)/);
@@ -157,9 +164,14 @@ export function mapReport(r: ParsedReport): MappedTech[] {
   for (const p of r.packages) {
     const e = catalogFor(p.source, p.name);
     if (!e) continue;
-    const pkg = eco && p.source !== 'rpm'
-      ? `${eco}|${p.srcName}|${p.srcVersion}`
-      : `${p.source}|${p.srcName}|${p.srcVersion}`;
+    /* Vendor repositories (Docker, NodeSource, PGDG, Google...) ship
+       upstream builds the distro tracker knows nothing about: OSV would
+       answer "no CVEs". Judge those by the vendor's own CVE ranges. */
+    const pkg = isThirdParty(p.name, p.version)
+      ? null
+      : eco && p.source !== 'rpm'
+        ? `${eco}|${p.srcName}|${p.srcVersion}`
+        : `${p.source}|${p.srcName}|${p.srcVersion}`;
     put({ entry: e, version: upstreamVersion(p.version), package: pkg });
   }
   for (const a of r.apps) {
