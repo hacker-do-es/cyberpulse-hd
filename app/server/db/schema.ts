@@ -160,7 +160,15 @@ export const assets = sqliteTable('assets', {
   notes: text('notes'),
   createdAt: text('created_at').default(now),
   updatedAt: text('updated_at').default(now),
+  /* Inventory agent (F2): sha256 of the host's machine id, so a renamed
+     host is still the same asset; what it last reported and when. */
+  agentId: text('agent_id'),
+  agentVersion: text('agent_version'),
+  osName: text('os_name'),
+  osVersion: text('os_version'),
+  lastReportAt: text('last_report_at'),
 }, (t) => [
+  uniqueIndex('idx_assets_tenant_agent').on(t.tenantId, t.agentId),
   uniqueIndex('idx_assets_tenant_name').on(t.tenantId, sql`${t.name} COLLATE NOCASE`),
   check('assets_type_check', sql`${t.type} IN ('server', 'workstation', 'laptop', 'network', 'firewall', 'cloud', 'saas', 'application', 'database', 'mobile', 'iot', 'identity', 'monitoring', 'cicd', 'automation', 'siem', 'vpn', 'dns', 'proxy', 'security', 'other')`),
   check('assets_criticality_check', sql`${t.criticality} IN ('low', 'medium', 'high')`),
@@ -180,6 +188,14 @@ export const stackItemAssets = sqliteTable('stack_item_assets', {
   lastSeenAt: text('last_seen_at'),
   /* No default: SQLite cannot ADD COLUMN with CURRENT_TIMESTAMP; set by code. */
   updatedAt: text('updated_at'),
+  /* Agent-reported distro package ("Debian:13|openssh" = OSV ecosystem and
+     source package), checked against OSV, which knows the distro's
+     backported fixes; osvCves = CVE ids OSV says affect this exact package
+     version. missingCount = consecutive agent reports without it. */
+  package: text('package'),
+  osvCves: text('osv_cves'),
+  osvCheckedAt: text('osv_checked_at'),
+  missingCount: integer('missing_count').notNull().default(0),
 }, (t) => [
   primaryKey({ columns: [t.stackItemId, t.assetId] }),
   index('idx_stack_item_assets_asset').on(t.assetId),
@@ -423,3 +439,26 @@ export const cveRecords = sqliteTable('cve_records', {
 }, (t) => [index('idx_cve_records_fetched').on(t.fetchedAt)]);
 
 export type CveRecordRow = typeof cveRecords.$inferSelect;
+
+/* ------------------------------------------------------------------ */
+/*  Inventory agents                                                   */
+/* ------------------------------------------------------------------ */
+
+/* Per-company tokens the inventory agents use to report. Only the sha256
+   is stored; the token is shown once when created. Scope: inventory write. */
+export const inventoryTokens = sqliteTable('inventory_tokens', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  tokenHash: text('token_hash').notNull().unique(),
+  /* First characters, to recognise the token in lists ("cpi_AbC1…"). */
+  prefix: text('prefix').notNull(),
+  createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: text('created_at').default(now),
+  expiresAt: text('expires_at'),
+  lastUsedAt: text('last_used_at'),
+  lastUsedIp: text('last_used_ip'),
+  revokedAt: text('revoked_at'),
+}, (t) => [index('idx_inventory_tokens_tenant').on(t.tenantId)]);
+
+export type InventoryTokenRow = typeof inventoryTokens.$inferSelect;

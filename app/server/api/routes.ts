@@ -8,6 +8,7 @@ import {
 } from '../controllers/newsController';
 import { stackController } from '../controllers/stackController';
 import { assetController } from '../controllers/assetController';
+import { inventoryController } from '../controllers/inventoryController';
 import { tenantSettingsController } from '../controllers/tenantSettingsController';
 import { userController } from '../controllers/userController';
 import { handle } from '../lib/http';
@@ -35,6 +36,12 @@ export function apiRouter(appVersion: string): express.Router {
   /* LinkedIn sends the browser back here; the user is identified by the
      single-use OAuth state (the Strict session cookie is not sent). */
   api.get('/linkedin/callback', writeLimiter, handle(linkedinController.callback));
+
+  /* Inventory agents: token in Authorization, plain-text report. */
+  api.post('/inventory/report', writeLimiter,
+    express.text({ type: () => true, limit: '3mb', inflate: false }), handle(inventoryController.report));
+  /* The agent scripts hold no secrets: downloadable for one-line installs. */
+  api.get('/inventory/agent/:os', handle(inventoryController.script));
 
   /* Machine access for AI agents (X-API-Key), read-mostly. */
   api.post('/mcp', writeLimiter, requireMcpKey, handle(mcpController.handle));
@@ -78,6 +85,12 @@ export function apiRouter(appVersion: string): express.Router {
   api.post('/assets', ...requireTenantAdmin, writeLimiter, handle(assetController.create));
   api.put('/assets/:id', ...requireTenantAdmin, writeLimiter, handle(assetController.update));
   api.delete('/assets/:id', ...requireTenantAdmin, writeLimiter, handle(assetController.remove));
+
+  /* Inventory agents: tokens (admins) and the hosts that report. */
+  api.get('/inventory/agents', requireTenant, handle(inventoryController.agents));
+  api.get('/inventory/tokens', ...requireTenantAdmin, handle(inventoryController.listTokens));
+  api.post('/inventory/tokens', ...requireTenantAdmin, writeLimiter, handle(inventoryController.createToken));
+  api.delete('/inventory/tokens/:id', ...requireTenantAdmin, writeLimiter, handle(inventoryController.revokeToken));
 
   /* Company: settings and AI provider */
   api.get('/tenant/settings', ...requireTenantAdmin, handle(tenantSettingsController.get));

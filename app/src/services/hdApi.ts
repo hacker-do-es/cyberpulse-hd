@@ -474,3 +474,39 @@ export const linkedinQueueApi = {
   cancel: (id: number) => call<{ post: QueuedPost }>('POST', `/api/linkedin/queue/${id}/cancel`).then((r) => r.post),
 };
 
+
+/* ------------------------------------------------------------------ */
+/*  Inventory agents                                                   */
+/* ------------------------------------------------------------------ */
+
+export interface InventoryToken {
+  id: number;
+  name: string;
+  prefix: string;
+  createdAt: string | null;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  lastUsedIp: string | null;
+  revokedAt: string | null;
+}
+
+export interface InventoryAgent {
+  assetId: number;
+  name: string;
+  hostname: string | null;
+  ip: string | null;
+  osName: string | null;
+  osVersion: string | null;
+  agentVersion: string | null;
+  lastReportAt: string | null;
+  stale: boolean;
+  technologies: number;
+}
+
+export const inventoryApi = {
+  agents: () => call<{ agents: InventoryAgent[]; staleAfterDays: number }>('GET', '/api/inventory/agents'),
+  tokens: () => call<{ tokens: InventoryToken[] }>('GET', '/api/inventory/tokens').then((r) => r.tokens),
+  createToken: (name: string, expiresInDays: number) =>
+    call<{ token: string; item: InventoryToken }>('POST', '/api/inventory/tokens', { name, expiresInDays }),
+  revokeToken: (id: number) => call<{ success: true }>('DELETE', `/api/inventory/tokens/${id}`),
+};

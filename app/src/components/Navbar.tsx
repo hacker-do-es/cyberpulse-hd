@@ -1,9 +1,9 @@
-import { Newspaper, FileText, History, Server, Radio, Settings, Building2, ScrollText, Layers, HardDrive } from 'lucide-react';
+import { Newspaper, FileText, History, Server, Radio, Settings, Building2, ScrollText, Layers, HardDrive, Bot } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { Role } from '@/services/hdApi';
 import { tr } from '@/lib/i18n';
 
-export type TabId = 'news' | 'my-stack' | 'technologies' | 'assets' | 'generate' | 'history' | 'channels' | 'settings' | 'admin' | 'logs';
+export type TabId = 'news' | 'my-stack' | 'technologies' | 'assets' | 'agents' | 'generate' | 'history' | 'channels' | 'settings' | 'admin' | 'logs';
 
 interface TabConfig {
   id: TabId;
@@ -17,6 +17,7 @@ const tabs: TabConfig[] = [
   { id: 'my-stack', label: 'My Stack', icon: <Server size={16} /> },
   { id: 'technologies', label: 'Technologies', icon: <Layers size={16} /> },
   { id: 'assets', label: 'Assets', icon: <HardDrive size={16} /> },
+  { id: 'agents', label: 'Agents', icon: <Bot size={16} /> },
   { id: 'generate', label: 'Generate Post', icon: <FileText size={16} /> },
   { id: 'history', label: 'History', icon: <History size={16} /> },
   { id: 'channels', label: 'Channels', icon: <Radio size={16} />, roles: ['admin', 'superadmin'] },

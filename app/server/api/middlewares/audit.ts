@@ -46,10 +46,13 @@ const ACTIONS: Record<string, string> = {
   'POST /linkedin/queue/:id/reject': 'linkedin.reject',
   'POST /linkedin/queue/:id/cancel': 'linkedin.cancel',
   'POST /mcp': 'mcp.call',
+  'POST /inventory/tokens': 'inventory.token-create',
+  'DELETE /inventory/tokens/:id': 'inventory.token-revoke',
 };
 
 /* Generating text and previews change nothing: not worth an audit line. */
-const SKIP = new Set(['POST /auth/login', 'POST /generate', 'POST /digest', 'POST /generate-ai', 'POST /channels/preview-email']);
+/* Agent reports are audited by the controller (with company and host). */
+const SKIP = new Set(['POST /inventory/report', 'POST /auth/login', 'POST /generate', 'POST /digest', 'POST /generate-ai', 'POST /channels/preview-email']);
 
 export function auditTrail(req: express.Request, res: express.Response, next: express.NextFunction) {
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();

@@ -8,6 +8,7 @@ import { runChannelDigest } from '../useCases/runChannelDigest';
 import { publishDuePosts } from '../services/linkedin/queueWorker';
 import { runCveJob } from '../services/vuln/cveSync';
 import { cveRepository } from '../repositories/cveRepository';
+import { runOsvJob } from '../services/vuln/osv';
 
 /* ------------------------------------------------------------------ */
 /*  Scrape                                                             */
@@ -105,6 +106,10 @@ export function startJobs(): void {
   const cveJob = () => runCveJob().catch((err) => console.error('[CVE] sync failed:', err));
   setTimeout(cveJob, 90_000).unref();
   cron.schedule('*/20 * * * *', cveJob);
+
+  /* Agent-reported distro packages: re-check against OSV once a day (new
+     CVEs, tracker updates); reports trigger their own check. */
+  cron.schedule('15 4 * * *', () => void runOsvJob());
 
   cron.schedule('* * * * *', () => {
     schedulerTick().catch((err) => console.error('[SCHEDULER] tick failed:', err));

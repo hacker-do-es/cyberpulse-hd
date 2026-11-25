@@ -1320,3 +1320,145 @@ describe('version-verified vulnerabilities', () => {
     }
   });
 });
+
+describe('inventory agents', () => {
+  const root = new Client();
+  const admin = new Client();
+  const member = new Client();
+  let token = '';
+
+  const report = (extra: string[] = []) => [
+    'agent\t1.0.0',
+    'host\tweb01',
+    'fqdn\tweb01.agentco.local',
+    `machine\t${'a'.repeat(64)}`,
+    'type\tserver',
+    'os\tdebian\t\t13\tDebian GNU/Linux 13 (trixie)',
+    'kernel\t6.12.48+deb13-amd64',
+    'vendor\tDell Inc.',
+    'model\tPowerEdge R650',
+    'ip\t10.0.0.21',
+    'pkg\tdpkg\tnginx\t1.26.3-3+deb13u1\tnginx\t1.26.3-3+deb13u1',
+    'pkg\tdpkg\tlibc6\t2.41-12\tglibc\t2.41-12',
+    'pkg\tdpkg\tadduser\t3.152\tadduser\t3.152',
+    'image\tghcr.io/linuxserver/plex:1.43.5\t',
+    ...extra,
+  ].join('\n');
+
+  const post = (body: string, tok = token) => fetch(`${base}/api/inventory/report`, {
+    method: 'POST', headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'text/plain' }, body,
+  });
+
+  it('issues tokens to admins only, shows them once, and serves the agent scripts', async () => {
+    await root.login('root', PW);
+    expect((await root.req('POST', '/api/admin/tenants', { name: 'Agentco', language: 'es', admin: { username: 'agad', password: PW } })).status).toBe(201);
+    await admin.login('agad', PW);
+    expect((await admin.req('POST', '/api/users', { username: 'agmem', password: PW, role: 'member' })).status).toBe(201);
+    await member.login('agmem', PW);
+
+    expect((await member.req('POST', '/api/inventory/tokens', { name: 'x' })).status).toBe(403);
+    const created = await admin.req('POST', '/api/inventory/tokens', { name: 'Servers', expiresInDays: 365 });
+    expect(created.status).toBe(201);
+    token = created.body.token;
+    expect(token).toMatch(/^cpi_[A-Za-z0-9_-]{40,}$/);
+    const list = (await admin.req('GET', '/api/inventory/tokens')).body.tokens;
+    expect(JSON.stringify(list)).not.toContain(token);
+    expect(list[0]).toMatchObject({ name: 'Servers', prefix: token.slice(0, 10) });
+
+    const sh = await fetch(`${base}/api/inventory/agent/linux`);
+    expect(sh.status).toBe(200);
+    expect(await sh.text()).toContain('CyberPulse inventory agent for Linux');
+    expect((await fetch(`${base}/api/inventory/agent/windows`)).status).toBe(200);
+    expect((await fetch(`${base}/api/inventory/agent/mac`)).status).toBe(404);
+  });
+
+  it('turns a report into an asset with versioned technologies, judged by OSV for distro packages', async () => {
+    const { setOsvTransport } = await import('../services/vuln/osv');
+    const osvCalls: any[] = [];
+    setOsvTransport(async (url: string, init?: RequestInit) => {
+      if (url.includes('/v1/vulns/')) {
+        return new Response(JSON.stringify({ id: 'DSA-9999-1', upstream: ['CVE-2026-0003', 'DEBIAN-CVE-2026-0003'] }), { status: 200 });
+      }
+      const body = JSON.parse(String(init?.body));
+      osvCalls.push(body);
+      return new Response(JSON.stringify({
+        results: body.queries.map((q: any) => ({
+          vulns: q.package.name === 'nginx' ? [{ id: 'DEBIAN-CVE-2026-0001' }, { id: 'DSA-9999-1' }] : [],
+        })),
+      }), { status: 200 });
+    });
+    try {
+      expect((await post(report(), 'cpi_' + 'x'.repeat(43))).status).toBe(401);
+      expect((await post('host\tx\n')).status).toBe(400);
+
+      const r = await post(report());
+      expect(r.status).toBe(200);
+      const body = await r.json();
+      expect(body).toMatchObject({ ok: true, asset: 'web01', created: true });
+      expect(body.technologies).toBe(4); // nginx, glibc, Plex, Linux Kernel (adduser ignored)
+
+      const assets = (await admin.req('GET', '/api/assets')).body.assets;
+      const web = assets.find((a: any) => a.name === 'web01');
+      expect(web).toMatchObject({ type: 'server', hostname: 'web01.agentco.local', ip: '10.0.0.21', brand: 'Dell Inc.', model: 'PowerEdge R650' });
+      const stack = (await admin.req('GET', '/api/tech-stack')).body.stack;
+      const ver = Object.fromEntries(stack.map((s: any) => [s.technology, s.assets[0]?.version]));
+      expect(ver).toMatchObject({ nginx: '1.26.3', glibc: '2.41', 'Plex Media Server': '1.43.5', 'Linux Kernel': '6.12.48' });
+
+      /* OSV check runs in the background after the report. */
+      for (let i = 0; i < 50 && osvCalls.length === 0; i++) await new Promise((res) => setTimeout(res, 20));
+      await new Promise((res) => setTimeout(res, 50));
+      expect(osvCalls[0].queries).toEqual(expect.arrayContaining([
+        { package: { name: 'nginx', ecosystem: 'Debian:13' }, version: '1.26.3-3+deb13u1' },
+        { package: { name: 'glibc', ecosystem: 'Debian:13' }, version: '2.41-12' },
+      ]));
+
+      const { getSqlite } = await import('../db/client');
+      const ins = getSqlite().prepare(`INSERT INTO articles (title, summary, source, severity, category, published_at, url) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+      ins.run('nginx flaw CVE-2026-0001', 'nginx resolver', 'TestFeed', 'high', 'VULNERABILITY', new Date().toISOString(), 'https://news.example/agent-nginx');
+      ins.run('glibc flaw CVE-2026-0002', 'glibc qsort', 'TestFeed', 'high', 'VULNERABILITY', new Date().toISOString(), 'https://news.example/agent-glibc');
+      const news = (await admin.req('GET', '/api/tech-stack/news')).body.news;
+      const n1 = news.find((n: any) => n.url === 'https://news.example/agent-nginx');
+      expect(n1.vuln.status).toBe('affected');
+      expect(n1.vuln.units[0]).toMatchObject({ technology: 'nginx', version: '1.26.3', status: 'affected', cve: 'CVE-2026-0001' });
+      /* Advisory ids without a CVE (DSA/DLA) are resolved to their CVEs. */
+      ins.run('nginx flaw CVE-2026-0003', 'nginx http3', 'TestFeed', 'high', 'VULNERABILITY', new Date().toISOString(), 'https://news.example/agent-nginx-dsa');
+      const news2 = (await admin.req('GET', '/api/tech-stack/news')).body.news;
+      expect(news2.find((n: any) => n.url === 'https://news.example/agent-nginx-dsa').vuln.status).toBe('affected');
+      /* OSV says this Debian glibc build is not affected (backported fix). */
+      expect(news.find((n: any) => n.url === 'https://news.example/agent-glibc').vuln.status).toBe('not_affected');
+
+      const agents = (await admin.req('GET', '/api/inventory/agents')).body.agents;
+      expect(agents[0]).toMatchObject({ name: 'web01', osName: 'Debian GNU/Linux 13 (trixie)', agentVersion: '1.0.0', stale: false, technologies: 4 });
+      expect((await member.req('GET', '/api/inventory/agents')).status).toBe(200);
+    } finally {
+      setOsvTransport(null);
+    }
+  });
+
+  it('removes what the agent stops reporting after two reports, never manual links', async () => {
+    const stack = (await admin.req('GET', '/api/tech-stack')).body.stack;
+    const web = (await admin.req('GET', '/api/assets')).body.assets.find((a: any) => a.name === 'web01');
+    /* A technology added by hand to the same asset. */
+    const manual = (await admin.req('POST', '/api/tech-stack', { technology: 'Custom App', version: '2.0' })).body.item;
+    await admin.req('PUT', `/api/assets/${web.id}`, { name: 'web01', type: 'server', stackItemIds: [...web.stackItemIds, manual.id] });
+
+    const without = (txt: string) => txt.split('\n').filter((l) => !l.includes('plex')).join('\n');
+    await post(without(report()));
+    let s = (await admin.req('GET', '/api/tech-stack')).body.stack;
+    expect(s.find((x: any) => x.technology === 'Plex Media Server').assets).toHaveLength(1);
+    await post(without(report()));
+    s = (await admin.req('GET', '/api/tech-stack')).body.stack;
+    expect(s.find((x: any) => x.technology === 'Plex Media Server').assets).toHaveLength(0);
+    expect(s.find((x: any) => x.technology === 'Custom App').assets).toHaveLength(1);
+    expect(stack.length).toBeGreaterThan(0);
+
+    /* Same machine id, renamed host: still the same asset. */
+    const renamed = await (await post(report().replace('host\tweb01', 'host\tweb01-new'))).json();
+    expect(renamed).toMatchObject({ asset: 'web01', created: false });
+
+    /* Revoked token stops working. */
+    const tok = (await admin.req('GET', '/api/inventory/tokens')).body.tokens[0];
+    expect((await admin.req('DELETE', `/api/inventory/tokens/${tok.id}`)).status).toBe(200);
+    expect((await post(report())).status).toBe(401);
+  });
+});

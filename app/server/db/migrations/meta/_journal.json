@@ -71,6 +71,13 @@
       "when": 1795605654509,
       "tag": "0009_asset_versions_cve",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1795611877148,
+      "tag": "0010_inventory_agents",
+      "breakpoints": true
     }
   ]
 }

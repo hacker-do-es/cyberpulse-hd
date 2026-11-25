@@ -89,17 +89,20 @@ export const assetRepository = {
 
   /* stack row id → the assets running it with the version installed on
      each (NULL = the stack row's own version), for one company. */
-  softwareByStackItem(tenantId: number): Map<number, Array<{ asset: AssetRef; version: string | null }>> {
-    const rows = getDb().select({ stackItemId: stackItemAssets.stackItemId, version: stackItemAssets.version, asset: assets })
+  softwareByStackItem(tenantId: number): Map<number, Array<{ asset: AssetRef; version: string | null; package?: string | null; osvCves?: string | null; osvCheckedAt?: string | null }>> {
+    const rows = getDb().select({
+      stackItemId: stackItemAssets.stackItemId, version: stackItemAssets.version, asset: assets,
+      package: stackItemAssets.package, osvCves: stackItemAssets.osvCves, osvCheckedAt: stackItemAssets.osvCheckedAt,
+    })
       .from(stackItemAssets)
       .innerJoin(assets, eq(assets.id, stackItemAssets.assetId))
       .where(eq(assets.tenantId, tenantId))
       .orderBy(asc(sql`${assets.name} COLLATE NOCASE`))
       .all();
-    const map = new Map<number, Array<{ asset: AssetRef; version: string | null }>>();
+    const map = new Map<number, Array<{ asset: AssetRef; version: string | null; package?: string | null; osvCves?: string | null; osvCheckedAt?: string | null }>>();
     for (const r of rows) {
       const list = map.get(r.stackItemId) ?? [];
-      list.push({ asset: ref(r.asset), version: r.version });
+      list.push({ asset: ref(r.asset), version: r.version, package: r.package, osvCves: r.osvCves, osvCheckedAt: r.osvCheckedAt });
       map.set(r.stackItemId, list);
     }
     return map;

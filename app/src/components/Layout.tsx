@@ -19,6 +19,7 @@ import { tabsForRole } from './Navbar';
 import ChannelsTab from './hd/ChannelsTab';
 import SettingsTab from './hd/SettingsTab';
 import { AssetsTab, TechnologiesTab } from './hd/InventoryTabs';
+import AgentsTab from './hd/AgentsTab';
 import AdminTab from './hd/AdminTab';
 import AccountDialog from './hd/AccountDialog';
 import {
@@ -305,6 +306,9 @@ export default function Layout() {
       case 'assets':
         if (!hasTenant) return <NeedsCompany onPick={() => setActiveTab('admin')} />;
         return <AssetsTab key={`assets-${me?.activeTenant?.id}`} onChanged={refreshStackNews} />;
+      case 'agents':
+        if (!hasTenant) return <NeedsCompany onPick={() => setActiveTab('admin')} />;
+        return <AgentsTab key={`agents-${me?.activeTenant?.id}`} />;
       case 'settings':
         if (!hasTenant) return <NeedsCompany onPick={() => setActiveTab('admin')} />;
         return <SettingsTab key={`settings-${me?.activeTenant?.id}`} />;

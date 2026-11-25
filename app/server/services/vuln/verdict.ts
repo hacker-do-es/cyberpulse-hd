@@ -17,6 +17,7 @@ import type { StackRow } from '../../db/schema';
 import type { AssetRef } from '../../repositories/assetRepository';
 import type { CveRecord } from '../../repositories/cveRepository';
 import { evaluateCve, extractCves, keyOf, matchingProducts } from './cveData';
+import { osvSupported } from './osv';
 
 export type ArticleVulnStatus = 'affected' | 'not_affected' | 'pending' | 'unverified' | 'no_cve';
 export type UnitStatus = 'affected' | 'not_affected' | 'not_listed' | 'unknown' | 'no_version' | 'pending';
@@ -27,6 +28,9 @@ export interface Unit {
   technology: string;
   version: string | null;
   asset: AssetRef | null;
+  /* Agent-reported distro package: judged by OSV instead of CVE ranges.
+     'pending' = not checked yet; 'unsupported' = distro OSV cannot judge. */
+  osv?: { cves: string[] } | 'pending' | 'unsupported';
 }
 
 export interface UnitVerdict {
@@ -73,15 +77,32 @@ export function techKeys(technology: string): string[] {
   return Array.from(keys);
 }
 
+type SoftwareLink = { asset: AssetRef; version: string | null; package?: string | null; osvCves?: string | null; osvCheckedAt?: string | null };
+
+function osvOf(l: SoftwareLink): Unit['osv'] {
+  if (!l.package) return undefined;
+  if (!osvSupported(l.package)) return 'unsupported';
+  if (!l.osvCheckedAt) return 'pending';
+  try {
+    const cves = JSON.parse(l.osvCves ?? '[]');
+    return { cves: Array.isArray(cves) ? cves.map(String) : [] };
+  } catch {
+    return 'pending';
+  }
+}
+
 export function buildUnits(
   rows: Pick<StackRow, 'id' | 'technology' | 'version'>[],
-  software: Map<number, Array<{ asset: AssetRef; version: string | null }>>,
+  software: Map<number, SoftwareLink[]>,
 ): Map<number, Unit[]> {
   const out = new Map<number, Unit[]>();
   for (const r of rows) {
     const links = software.get(r.id) ?? [];
     out.set(r.id, links.length
-      ? links.map((l) => ({ stackId: r.id, technology: r.technology, version: l.version || r.version || null, asset: l.asset }))
+      ? links.map((l) => {
+        const osv = osvOf(l);
+        return { stackId: r.id, technology: r.technology, version: l.version || r.version || null, asset: l.asset, ...(osv ? { osv } : {}) };
+      })
       : [{ stackId: r.id, technology: r.technology, version: r.version || null, asset: null }]);
   }
   return out;
@@ -111,6 +132,17 @@ export function evaluateArticle(cves: string[], matchedStackIds: number[], ctx: 
       if (!keys) {
         keys = techKeys(u.technology);
         keysCache.set(stackId, keys);
+      }
+      /* Distro packages: OSV's per-package answer replaces range checks
+         (Debian/Ubuntu backport fixes without changing upstream numbers). */
+      if (u.osv) {
+        if (u.osv === 'pending' || u.osv === 'unsupported') {
+          units.push({ ...base, status: u.osv === 'pending' ? 'pending' : 'unknown' });
+          continue;
+        }
+        const hit = cves.find((c) => (u.osv as { cves: string[] }).cves.includes(c));
+        units.push(hit ? { ...base, status: 'affected', cve: hit } : { ...base, status: 'not_affected' });
+        continue;
       }
       if (!u.version) {
         /* Without a version we can still tell a CVE is about another product. */
