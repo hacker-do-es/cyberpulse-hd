@@ -57,13 +57,13 @@ export const inventoryController = {
     inventoryTokenRepository.markUsed(row.id, req.ip ?? null);
     audit({
       action: 'inventory.report',
-      detail: `ok asset=${result.assetName}${result.created ? ' (new)' : ''} tech=${result.technologies} removed=${result.removed} token=${row.prefix}`,
+      detail: `ok asset=${result.assetName}${result.created ? ' (new)' : ''} tech=${result.technologies} removed=${result.removed} containers=${result.containers} (+${result.containersCreated}) token=${row.prefix}`,
       tenantId: row.tenantId,
       ip: req.ip ?? null,
     });
-    res.json({ ok: true, asset: result.assetName, created: result.created, technologies: result.technologies, removed: result.removed });
+    res.json({ ok: true, asset: result.assetName, created: result.created, technologies: result.technologies, removed: result.removed, containers: result.containers });
     /* Distro packages are checked against OSV in the background. */
-    setImmediate(() => void runOsvJob(result.assetId));
+    setImmediate(() => void runOsvJob());
   },
 
   script(req: express.Request, res: express.Response) {
@@ -113,6 +113,8 @@ export const inventoryController = {
         return {
           assetId: asset.id,
           name: asset.name,
+          type: asset.type,
+          parentAssetId: asset.parentAssetId,
           hostname: asset.hostname,
           ip: asset.ip,
           osName: asset.osName,

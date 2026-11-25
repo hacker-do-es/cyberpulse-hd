@@ -1462,3 +1462,64 @@ describe('inventory agents', () => {
     expect((await post(report())).status).toBe(401);
   });
 });
+
+describe('inventory agents: containers', () => {
+  const root = new Client();
+  const admin = new Client();
+  let token = '';
+  const post = (body: string) => fetch(`${base}/api/inventory/report`, {
+    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'text/plain' }, body,
+  });
+  const report = (containers: string[]) => [
+    'agent\t1.1.0', 'host\tdocker01', `machine\t${'d'.repeat(64)}`, 'type\tserver',
+    'os\tdebian\t\t13\tDebian GNU/Linux 13 (trixie)', 'kernel\t6.12.48+deb13-amd64',
+    ...containers,
+  ].join('\n');
+
+  it('reports each running container as its own asset, linked to its host', async () => {
+    await root.login('root', PW);
+    expect((await root.req('POST', '/api/admin/tenants', { name: 'Dockerco', language: 'es', admin: { username: 'dkad', password: PW } })).status).toBe(201);
+    await admin.login('dkad', PW);
+    token = (await admin.req('POST', '/api/inventory/tokens', { name: 'Docker hosts' })).body.token;
+
+    const plex = [
+      'container\tplex\tlscr.io/linuxserver/plex:latest\t1.43.5.11079-b3b13e506-ls333\tb114819bff5f',
+      'cos\tplex\tubuntu\tdebian\t26.04\tUbuntu 26.04.1 LTS',
+      'cpkg\tplex\tdpkg\tlibssl3t64\t3.5.5-1ubuntu1\topenssl\t3.5.5-1ubuntu1',
+      'cpkg\tplex\tdpkg\tcoreutils\t9.5-1ubuntu1\tcoreutils\t9.5-1ubuntu1',
+    ];
+    const api = [
+      'container\tapi\tnode-backend:prod\t\t3c7df91484ec',
+      'cos\tapi\talpine\t\t3.24.3\tAlpine Linux v3.24',
+      'cpkg\tapi\tapk\tlibssl3\t3.5.9-r0\topenssl\t3.5.9-r0',
+      'cpkg\tapi\tbin\tnode\t24.22.1\tnode\t24.22.1',
+    ];
+    const r = await (await post(report([...plex, ...api]))).json();
+    expect(r).toMatchObject({ ok: true, asset: 'docker01', containers: 2 });
+
+    const assets = (await admin.req('GET', '/api/assets')).body.assets;
+    const host = assets.find((a: any) => a.name === 'docker01');
+    const plexAsset = assets.find((a: any) => a.name === 'plex (docker01)');
+    expect(plexAsset).toMatchObject({ type: 'container', parentAssetId: host.id, agent: true, osName: 'Ubuntu 26.04.1 LTS', model: 'lscr.io/linuxserver/plex:latest' });
+    const stack = (await admin.req('GET', '/api/tech-stack')).body.stack;
+    const on = (tech: string) => Object.fromEntries((stack.find((s: any) => s.technology === tech)?.assets ?? []).map((a: any) => [a.name, a.version]));
+    expect(on('Plex Media Server')).toEqual({ 'plex (docker01)': '1.43.5.11079' });
+    expect(on('OpenSSL')).toEqual({ 'plex (docker01)': '3.5.5', 'api (docker01)': '3.5.9' });
+    expect(on('Node.js')).toEqual({ 'api (docker01)': '24.22.1' });
+
+    /* Distro packages inside containers are judged with the image's own distro. */
+    const { getSqlite } = await import('../db/client');
+    const pkgs = getSqlite().prepare(`SELECT package FROM stack_item_assets WHERE package IS NOT NULL ORDER BY package`).all().map((x: any) => x.package);
+    expect(pkgs).toEqual(expect.arrayContaining(['Alpine:v3.24|openssl|3.5.9-r0', 'Ubuntu:26.04:LTS|openssl|3.5.5-1ubuntu1']));
+
+    /* Recreated container (same name, new image version): same asset, new version. */
+    const r2 = await (await post(report([plex[0].replace('1.43.5.11079-b3b13e506-ls333', '1.43.6.12000-ls340'), ...plex.slice(1), ...api]))).json();
+    expect(r2.containers).toBe(2);
+    const stack2 = (await admin.req('GET', '/api/tech-stack')).body.stack;
+    expect(stack2.find((s: any) => s.technology === 'Plex Media Server').assets).toEqual([expect.objectContaining({ name: 'plex (docker01)', version: '1.43.6.12000' })]);
+    expect((await admin.req('GET', '/api/assets')).body.assets.filter((a: any) => a.type === 'container')).toHaveLength(2);
+
+    const agents = (await admin.req('GET', '/api/inventory/agents')).body.agents;
+    expect(agents.find((a: any) => a.name === 'api (docker01)')).toMatchObject({ type: 'container', parentAssetId: host.id });
+  });
+});

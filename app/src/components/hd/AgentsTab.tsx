@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Bot, Copy, Download, KeyRound, Monitor, Plus, RefreshCw, Terminal, Trash2 } from 'lucide-react';
+import { Bot, Box, ChevronDown, ChevronRight, Copy, Download, KeyRound, Monitor, Plus, RefreshCw, Terminal, Trash2 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -92,6 +93,7 @@ function Instructions({ token }: { token: string }) {
           <ul className="list-disc pl-5 text-xs text-text-tertiary space-y-1">
             <li>{tr('Installs a daily systemd timer (or cron) that sends the report; the first report is sent right away.')}</li>
             <li>{tr('Optional: --type server|workstation|laptop (detected from the hardware otherwise).')}</li>
+            <li>{tr('With Docker, every running container becomes its own asset (linked to the host) with its image application and the packages inside, read with a read-only "docker exec". Add --no-container-packages to report only the image.')}</li>
             <li>{tr('Review what would be sent, without sending: bash cyberpulse-agent.sh print')}</li>
             <li>{tr('Remove: sudo cyberpulse-agent uninstall')}</li>
           </ul>
@@ -117,6 +119,32 @@ function Instructions({ token }: { token: string }) {
   );
 }
 
+function AgentRow({ a, nested, extra }: { a: InventoryAgent; nested?: boolean; extra?: ReactNode }) {
+  const last = sqlUtc(a.lastReportAt);
+  return (
+    <tr className={`border-t border-border-default ${nested ? 'bg-bg-elevated/30' : ''}`}>
+      <td className={`px-3 py-2 ${nested ? 'pl-9' : ''}`}>
+        <div className="text-text-primary font-medium flex items-center gap-1.5">
+          {nested && <Box size={13} className="text-text-tertiary" />}
+          {a.name}
+        </div>
+        {!nested && <div className="text-[11px] font-jetbrains text-text-tertiary">{[a.hostname, a.ip].filter(Boolean).join(' · ')}</div>}
+        {extra}
+      </td>
+      <td className="px-3 py-2 text-text-secondary">
+        {a.osName ?? '—'}
+        {a.osVersion && <span className="block text-[11px] font-jetbrains text-text-tertiary">{a.osVersion}</span>}
+      </td>
+      <td className="px-3 py-2 text-text-secondary font-jetbrains">{a.technologies}</td>
+      <td className="px-3 py-2 whitespace-nowrap">
+        <span className="text-text-secondary text-xs" title={last?.toLocaleString() ?? ''}>{last ? timeAgo(last) : '—'}</span>
+        {a.stale && <span className="ml-2"><Badge tone="warn">{tr('Stale')}</Badge></span>}
+      </td>
+      <td className="px-3 py-2 text-[11px] font-jetbrains text-text-tertiary">{a.agentVersion ?? '—'}</td>
+    </tr>
+  );
+}
+
 export default function AgentsTab() {
   useI18n();
   const { me } = useAuth();
@@ -129,6 +157,7 @@ export default function AgentsTab() {
   const [created, setCreated] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [revoking, setRevoking] = useState<InventoryToken | null>(null);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   const load = useCallback(async () => {
     try {
@@ -174,6 +203,12 @@ export default function AgentsTab() {
   };
 
   const active = tokens.filter((t) => !t.revokedAt);
+  const ids = new Set(agents.map((a) => a.assetId));
+  const hosts = agents.filter((a) => !a.parentAssetId || !ids.has(a.parentAssetId));
+  const containersOf = new Map<number, InventoryAgent[]>();
+  for (const a of agents) {
+    if (a.parentAssetId && ids.has(a.parentAssetId)) containersOf.set(a.parentAssetId, [...(containersOf.get(a.parentAssetId) ?? []), a]);
+  }
 
   return (
     <div className="max-w-6xl mx-auto pb-12 space-y-6">
@@ -205,26 +240,21 @@ export default function AgentsTab() {
                 </tr>
               </thead>
               <tbody>
-                {agents.map((a) => {
-                  const last = sqlUtc(a.lastReportAt);
-                  return (
-                    <tr key={a.assetId} className="border-t border-border-default">
-                      <td className="px-3 py-2">
-                        <div className="text-text-primary font-medium">{a.name}</div>
-                        <div className="text-[11px] font-jetbrains text-text-tertiary">{[a.hostname, a.ip].filter(Boolean).join(' · ')}</div>
-                      </td>
-                      <td className="px-3 py-2 text-text-secondary">
-                        {a.osName ?? '—'}
-                        {a.osVersion && <span className="block text-[11px] font-jetbrains text-text-tertiary">{a.osVersion}</span>}
-                      </td>
-                      <td className="px-3 py-2 text-text-secondary font-jetbrains">{a.technologies}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <span className="text-text-secondary text-xs" title={last?.toLocaleString() ?? ''}>{last ? timeAgo(last) : '—'}</span>
-                        {a.stale && <span className="ml-2"><Badge tone="warn">{tr('Stale')}</Badge></span>}
-                      </td>
-                      <td className="px-3 py-2 text-[11px] font-jetbrains text-text-tertiary">{a.agentVersion ?? '—'}</td>
-                    </tr>
-                  );
+                {hosts.map((a) => {
+                  const kids = containersOf.get(a.assetId) ?? [];
+                  const open = expanded.has(a.assetId);
+                  return [
+                    <AgentRow key={a.assetId} a={a} extra={kids.length > 0 && (
+                      <button
+                        onClick={() => setExpanded((e) => { const n = new Set(e); if (n.has(a.assetId)) n.delete(a.assetId); else n.add(a.assetId); return n; })}
+                        className="mt-1 flex items-center gap-1 text-[11px] text-accent hover:underline cursor-pointer"
+                      >
+                        {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                        {tr('{n} containers', { n: kids.length })}
+                      </button>
+                    )} />,
+                    ...(open ? kids.map((c) => <AgentRow key={c.assetId} a={c} nested />) : []),
+                  ];
                 })}
               </tbody>
             </table>

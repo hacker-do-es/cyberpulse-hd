@@ -39,6 +39,7 @@ const TYPE_ALIASES: Record<string, AssetType> = {
   'web application': 'application', webapp: 'application', 'web app': 'application', website: 'application', web: 'application',
   'sitio web': 'application', 'aplicacion web': 'application', api: 'application', 'rest api': 'application', service: 'application', servicio: 'application',
   cdn: 'proxy', 'cloud service': 'cloud', paas: 'cloud', iaas: 'cloud', 'saas app': 'saas', 'saas application': 'saas',
+  container: 'container', contenedor: 'container', docker: 'container', 'docker container': 'container', pod: 'container',
   vm: 'server', 'virtual machine': 'server', 'maquina virtual': 'server', host: 'server', nas: 'server', storage: 'server',
   'load balancer': 'network', lb: 'network', ap: 'network', 'access point': 'network', 'punto de acceso': 'network', vpn: 'vpn', utm: 'firewall',
   'dns record': 'dns', domain: 'dns', dominio: 'dns', printer: 'other', impresora: 'other',

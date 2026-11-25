@@ -944,6 +944,10 @@ export const ES: Record<string, string> = {
   'Agents using {name} will stop reporting. Their assets stay as they are.': 'Los agentes que usan {name} dejarán de reportar. Sus activos se quedan como están.',
   'Invalid inventory token': 'Token de inventario no válido',
   'Send the report as text/plain': 'Envía el reporte como text/plain',
+  'Container': 'Contenedor',
+  'on {host}': 'en {host}',
+  '{n} containers': '{n} contenedores',
+  'With Docker, every running container becomes its own asset (linked to the host) with its image application and the packages inside, read with a read-only "docker exec". Add --no-container-packages to report only the image.': 'Con Docker, cada contenedor en ejecución pasa a ser un activo propio (vinculado al host) con la aplicación de su imagen y los paquetes de adentro, leídos con un "docker exec" de solo lectura. Agrega --no-container-packages para informar solo la imagen.',
 };
 
 /* Server messages with values in them. */

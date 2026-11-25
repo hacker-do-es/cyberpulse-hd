@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { sqliteTable, integer, text, index, uniqueIndex, primaryKey, check } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, integer, text, index, uniqueIndex, primaryKey, check, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 
 /* Single source of truth for the database structure. Changes here are turned
    into SQL migrations with `npm run db:generate` (drizzle-kit) and applied on
@@ -140,7 +140,7 @@ export const techStack = sqliteTable('user_tech_stack', {
    client's assets it affects. Asset names are sensitive (they map the
    client's attack surface): they are never sent to the AI provider nor to
    LinkedIn, and digests only include them on channels that opt in. */
-export const ASSET_TYPES = ['server', 'workstation', 'laptop', 'network', 'firewall', 'cloud', 'saas', 'application', 'database', 'mobile', 'iot', 'identity', 'monitoring', 'cicd', 'automation', 'siem', 'vpn', 'dns', 'proxy', 'security', 'other'] as const;
+export const ASSET_TYPES = ['server', 'workstation', 'laptop', 'network', 'firewall', 'cloud', 'saas', 'application', 'database', 'mobile', 'iot', 'identity', 'monitoring', 'cicd', 'automation', 'siem', 'vpn', 'dns', 'proxy', 'security', 'container', 'other'] as const;
 export type AssetType = (typeof ASSET_TYPES)[number];
 export const ASSET_CRITICALITIES = ['low', 'medium', 'high'] as const;
 export type AssetCriticality = (typeof ASSET_CRITICALITIES)[number];
@@ -167,10 +167,12 @@ export const assets = sqliteTable('assets', {
   osName: text('os_name'),
   osVersion: text('os_version'),
   lastReportAt: text('last_report_at'),
+  /* A container (or VM) reported by the agent of the host it runs on. */
+  parentAssetId: integer('parent_asset_id').references((): AnySQLiteColumn => assets.id, { onDelete: 'set null' }),
 }, (t) => [
   uniqueIndex('idx_assets_tenant_agent').on(t.tenantId, t.agentId),
   uniqueIndex('idx_assets_tenant_name').on(t.tenantId, sql`${t.name} COLLATE NOCASE`),
-  check('assets_type_check', sql`${t.type} IN ('server', 'workstation', 'laptop', 'network', 'firewall', 'cloud', 'saas', 'application', 'database', 'mobile', 'iot', 'identity', 'monitoring', 'cicd', 'automation', 'siem', 'vpn', 'dns', 'proxy', 'security', 'other')`),
+  check('assets_type_check', sql`${t.type} IN ('server', 'workstation', 'laptop', 'network', 'firewall', 'cloud', 'saas', 'application', 'database', 'mobile', 'iot', 'identity', 'monitoring', 'cicd', 'automation', 'siem', 'vpn', 'dns', 'proxy', 'security', 'container', 'other')`),
   check('assets_criticality_check', sql`${t.criticality} IN ('low', 'medium', 'high')`),
 ]);
 

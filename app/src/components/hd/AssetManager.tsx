@@ -142,6 +142,7 @@ export default function AssetManager({ canEdit, refreshKey, onChanged }: { canEd
   }, [load, refreshKey]);
 
   const techById = useMemo(() => new Map(stack.map((t) => [t.id, t])), [stack]);
+  const assetName = useMemo(() => new Map(assets.map((a) => [a.id, a.name])), [assets]);
 
   const save = async () => {
     if (!editing || !editing.values.name.trim() || saving) return;
@@ -229,7 +230,11 @@ export default function AssetManager({ canEdit, refreshKey, onChanged }: { canEd
                 <tr key={a.id} className="border-t border-border-default hover:bg-bg-elevated/50 align-top">
                   <td className="px-3 py-2">
                     <div className="text-text-primary font-medium">{a.name}</div>
-                    <div className="text-[11px] text-text-tertiary">{assetTypeLabel(a.type)}{a.environment ? ` · ${a.environment}` : ''}</div>
+                    <div className="text-[11px] text-text-tertiary">
+                      {assetTypeLabel(a.type)}{a.environment ? ` · ${a.environment}` : ''}
+                      {a.parentAssetId && assetName.get(a.parentAssetId) ? ` · ${tr('on {host}', { host: assetName.get(a.parentAssetId)! })}` : ''}
+                      {a.agent && <span className="ml-1.5 align-middle"><Badge tone="accent">{tr('Agent')}</Badge></span>}
+                    </div>
                   </td>
                   <td className="px-3 py-2"><CriticalityBadge value={a.criticality} /></td>
                   <td className="px-3 py-2 text-text-secondary font-jetbrains text-xs">

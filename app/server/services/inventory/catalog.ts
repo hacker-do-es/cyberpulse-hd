@@ -69,8 +69,9 @@ export const CATALOG: CatalogEntry[] = [
   { tech: 'Prowlarr', vendor: 'Prowlarr', category: 'Media', image: /^linuxserver\/prowlarr$/ },
   { tech: 'Bazarr', vendor: 'Bazarr', category: 'Media', image: /^linuxserver\/bazarr$/ },
   { tech: 'Transmission', vendor: 'Transmission Project', category: 'Media', pkg: /^transmission-daemon$/, image: /^linuxserver\/transmission$/ },
-  { tech: 'Watchtower', vendor: 'containrrr', category: 'Containers', image: /^(containrrr|nickfedor)\/watchtower$/ },
+  { tech: 'Watchtower', vendor: 'containrrr', category: 'Containers', image: /^(containrrr|nickfedor|nicholas-fedor)\/watchtower$/ },
   { tech: 'Gluetun', vendor: 'qdm12', category: 'VPN', image: /^qmcgaw\/gluetun$/ },
+  { tech: 'Seerr', vendor: 'Seerr', category: 'Media', image: /^seerr-team\/seerr$|^fallenbagel\/jellyseerr$/ },
   { tech: 'n8n', vendor: 'n8n GmbH', category: 'Automation', image: /^n8nio\/n8n$/ },
   { tech: 'Rocket.Chat', vendor: 'Rocket.Chat Technologies', category: 'Collaboration', image: /^(library\/)?rocket\.chat$|^rocketchat\/rocket\.chat$/ },
   { tech: 'Directus', vendor: 'Monospace Inc.', category: 'CMS', image: /^directus\/directus$/ },
@@ -103,9 +104,16 @@ export const CATALOG: CatalogEntry[] = [
   { tech: 'KeePass', vendor: 'Dominik Reichl', category: 'Security', pkg: /^keepass2$/, win: /^KeePass Password Safe/ },
 ];
 
-export type PackageSource = 'dpkg' | 'rpm' | 'apk' | 'win' | 'image';
+export type PackageSource = 'dpkg' | 'rpm' | 'apk' | 'bin' | 'win' | 'image';
+
+/* Binaries the agent asks for their version inside containers. */
+const BINARIES: Record<string, string> = { node: 'Node.js', python3: 'Python', php: 'PHP', nginx: 'nginx', java: 'Java' };
 
 export function catalogFor(source: PackageSource, name: string): CatalogEntry | undefined {
+  if (source === 'bin') {
+    const tech = BINARIES[name.trim().toLowerCase()];
+    return tech ? CATALOG.find((e) => e.tech === tech) : undefined;
+  }
   const n = source === 'win' ? name.trim() : name.trim().toLowerCase();
   for (const e of CATALOG) {
     const re = source === 'win' ? e.win : source === 'image' ? e.image : e.pkg;

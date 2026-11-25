@@ -89,7 +89,7 @@ export interface ImportSummary {
 /*  Assets                                                             */
 /* ------------------------------------------------------------------ */
 
-export const ASSET_TYPES = ['server', 'workstation', 'laptop', 'network', 'firewall', 'cloud', 'saas', 'application', 'database', 'mobile', 'iot', 'identity', 'monitoring', 'cicd', 'automation', 'siem', 'vpn', 'dns', 'proxy', 'security', 'other'] as const;
+export const ASSET_TYPES = ['server', 'workstation', 'laptop', 'network', 'firewall', 'cloud', 'saas', 'application', 'database', 'mobile', 'iot', 'identity', 'monitoring', 'cicd', 'automation', 'siem', 'vpn', 'dns', 'proxy', 'security', 'container', 'other'] as const;
 export type AssetType = (typeof ASSET_TYPES)[number];
 export const ASSET_CRITICALITIES = ['high', 'medium', 'low'] as const;
 
@@ -106,11 +106,16 @@ export interface Asset {
   owner?: string;
   notes?: string;
   stackItemIds: number[];
+  /* Kept up to date by an inventory agent; containers point to their host. */
+  agent?: boolean;
+  parentAssetId?: number;
+  osName?: string;
+  lastReportAt?: string;
   /* stack row id → version installed on this asset (absent = the row's). */
   stackVersions?: Record<number, string>;
 }
 
-export type AssetInput = Omit<Asset, 'id' | 'stackItemIds' | 'stackVersions'> & {
+export type AssetInput = Omit<Asset, 'id' | 'stackItemIds' | 'stackVersions' | 'agent' | 'parentAssetId' | 'osName' | 'lastReportAt'> & {
   stackItemIds?: number[];
   stackVersions?: Record<number, string | null>;
 };
@@ -493,6 +498,8 @@ export interface InventoryToken {
 export interface InventoryAgent {
   assetId: number;
   name: string;
+  type: AssetType;
+  parentAssetId: number | null;
   hostname: string | null;
   ip: string | null;
   osName: string | null;

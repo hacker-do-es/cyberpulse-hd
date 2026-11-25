@@ -39,7 +39,7 @@ export function apiRouter(appVersion: string): express.Router {
 
   /* Inventory agents: token in Authorization, plain-text report. */
   api.post('/inventory/report', writeLimiter,
-    express.text({ type: () => true, limit: '3mb', inflate: false }), handle(inventoryController.report));
+    express.text({ type: () => true, limit: '12mb', inflate: false }), handle(inventoryController.report));
   /* The agent scripts hold no secrets: downloadable for one-line installs. */
   api.get('/inventory/agent/:os', handle(inventoryController.script));
 

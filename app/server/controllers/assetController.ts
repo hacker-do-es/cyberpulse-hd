@@ -28,6 +28,11 @@ function assetItem(row: AssetRow, stackItemIds: number[] = [], stackVersions: Re
     owner: row.owner ?? undefined,
     notes: row.notes ?? undefined,
     stackItemIds,
+    /* Inventory agent: kept up to date automatically; containers point to their host. */
+    agent: row.agentId !== null,
+    parentAssetId: row.parentAssetId ?? undefined,
+    osName: row.osName ?? undefined,
+    lastReportAt: row.lastReportAt ?? undefined,
     /* stack row id → version installed on this asset (absent = the row's). */
     stackVersions: Object.fromEntries(Object.entries(stackVersions).filter(([, v]) => v)),
     createdAt: row.createdAt,

@@ -6,16 +6,20 @@
 # against the versions really installed. Read-only: it changes nothing on the
 # host except its own config, timer and this script.
 #
-#   sudo ./cyberpulse-agent.sh install --url https://cyberpulse.example --token cpi_...  [--type server|workstation|laptop]
+#   sudo ./cyberpulse-agent.sh install --url https://cyberpulse.example --token cpi_...  [--type server|workstation|laptop] [--no-container-packages]
 #   ./cyberpulse-agent.sh print       # show the report that would be sent, send nothing
 #   sudo cyberpulse-agent run         # send now (the timer does this daily)
 #   sudo cyberpulse-agent uninstall
+#
+# Each running Docker container is reported as its own asset: the image's
+# application and the packages inside it (read with a read-only
+# "docker exec"; --no-container-packages turns that off).
 #
 # Needs: bash, curl, coreutils (sha256sum). Outbound HTTPS to the CyberPulse URL only.
 
 set -euo pipefail
 
-AGENT_VERSION="1.0.1"
+AGENT_VERSION="1.1.0"
 CONF="/etc/cyberpulse-agent.conf"
 BIN="/usr/local/sbin/cyberpulse-agent"
 
@@ -80,12 +84,52 @@ collect() {
   fi
 
   if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-    docker ps --format '{{.Image}}' 2>/dev/null | sort -u | head -n 200 | while read -r img; do
+    local inner; inner="$(mktemp)"
+    # Runs inside each container (POSIX sh, busybox-compatible): OS release
+    # and installed packages. Read-only.
+    cat > "$inner" <<'INNER'
+if [ -r /etc/os-release ]; then
+  . /etc/os-release
+  printf 'cos\t%s\t%s\t%s\t%s\n' "$ID" "$ID_LIKE" "$VERSION_ID" "$PRETTY_NAME"
+fi
+if command -v dpkg-query >/dev/null 2>&1; then
+  dpkg-query -W -f='${db:Status-Abbrev}\t${Package}\t${Version}\t${source:Package}\t${source:Version}\n' 2>/dev/null \
+    | awk -F'\t' '$1 ~ /^ii/ { printf "cpkg\tdpkg\t%s\t%s\t%s\t%s\n", $2, $3, $4, $5 }'
+elif command -v apk >/dev/null 2>&1; then
+  apk list -I 2>/dev/null | awk '{
+    full=$1; origin=$3; gsub(/[{}]/, "", origin);
+    n=split(full, p, "-"); ver=p[n-1] "-" p[n]; name=p[1]; for (i=2; i<=n-2; i++) name=name "-" p[i];
+    printf "cpkg\tapk\t%s\t%s\t%s\t%s\n", name, ver, origin, ver }'
+elif command -v rpm >/dev/null 2>&1; then
+  rpm -qa --qf 'cpkg\trpm\t%{NAME}\t%{VERSION}-%{RELEASE}\t%{NAME}\t%{VERSION}-%{RELEASE}\n' 2>/dev/null
+fi
+# Runtimes installed outside the package manager (official node/python
+# images build them from source): ask the binary for its version.
+for b in node python3 php nginx java; do
+  command -v "$b" >/dev/null 2>&1 || continue
+  case "$b" in
+    node) v=$(node --version 2>/dev/null) ;;
+    python3) v=$(python3 --version 2>&1) ;;
+    php) v=$(php -r 'echo PHP_VERSION;' 2>/dev/null) ;;
+    nginx) v=$(nginx -v 2>&1) ;;
+    java) v=$(java -version 2>&1 | head -n 1) ;;
+  esac
+  v=$(printf '%s' "$v" | grep -oE '[0-9]+(\.[0-9]+)+' | head -n 1)
+  [ -n "$v" ] && printf 'cpkg\tbin\t%s\t%s\t%s\t%s\n' "$b" "$v" "$b" "$v"
+done
+INNER
+    docker ps --format '{{.Names}}	{{.Image}}	{{.ID}}' 2>/dev/null | head -n 300 | while IFS=$'\t' read -r cname img cid; do
       local label
       label="$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$img" 2>/dev/null || true)"
       [ "$label" = "<no value>" ] && label=""
-      line "image" "$(clean "$img")" "$(clean "$label")"
+      line "container" "$(clean "$cname")" "$(clean "$img")" "$(clean "$label")" "$(clean "$cid")"
+      if [ "${CONTAINER_PACKAGES:-1}" = "1" ]; then
+        # Containers without a shell (distroless, scratch) just report nothing.
+        timeout 30 docker exec -i "$cid" sh < "$inner" 2>/dev/null \
+          | awk -v n="$(clean "$cname")" 'BEGIN { FS = OFS = "\t" } $1 == "cos" || $1 == "cpkg" { k = $1; $1 = n; print k, $0 }' || true
+      fi
     done
+    rm -f "$inner"
   fi
 }
 
@@ -101,7 +145,7 @@ send() {
   CP_TMP="$(mktemp -d)"; chmod 700 "$CP_TMP"
   trap 'rm -rf -- "${CP_TMP:-}"' EXIT
   local tmp="$CP_TMP"
-  collect "${CYBERPULSE_TYPE:-}" > "$tmp/report.txt"
+  CONTAINER_PACKAGES="${CYBERPULSE_CONTAINER_PACKAGES:-1}" collect "${CYBERPULSE_TYPE:-}" > "$tmp/report.txt"
   # The token goes in a header file, never on the command line (ps).
   printf 'Authorization: Bearer %s\n' "$CYBERPULSE_TOKEN" > "$tmp/headers"
   curl -fsS --proto '=https' --tlsv1.2 --max-time 120 --retry 3 --retry-delay 30 \
@@ -114,12 +158,13 @@ send() {
 
 install_agent() {
   need_root
-  local url="" token="" type=""
+  local url="" token="" type="" cpk="1"
   while [ $# -gt 0 ]; do
     case "$1" in
       --url) url="$2"; shift 2 ;;
       --token) token="$2"; shift 2 ;;
       --type) type="$2"; shift 2 ;;
+      --no-container-packages) cpk="0"; shift ;;
       *) die "unknown option $1" ;;
     esac
   done
@@ -134,6 +179,7 @@ install_agent() {
 CYBERPULSE_URL='${url%/}'
 CYBERPULSE_TOKEN='$token'
 CYBERPULSE_TYPE='$type'
+CYBERPULSE_CONTAINER_PACKAGES='$cpk'
 EOF
   chmod 600 "$CONF"
 
