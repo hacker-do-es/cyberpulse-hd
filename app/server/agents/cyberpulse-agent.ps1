@@ -26,7 +26,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$AgentVersion = '1.0.1'
+$AgentVersion = '1.0.2'
 $InstallDir = Join-Path $env:ProgramFiles 'CyberPulse'
 $DataDir = Join-Path $env:ProgramData 'CyberPulse'
 $ConfFile = Join-Path $DataDir 'agent.json'
@@ -49,14 +49,31 @@ function Test-Admin {
   return (New-Object Security.Principal.WindowsPrincipal($id)).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+# Always the 64-bit registry view: a 32-bit PowerShell would otherwise see
+# WOW6432Node (no MachineGuid, no 64-bit programs).
+function Get-Hklm {
+  $view = if ([Environment]::Is64BitOperatingSystem) { [Microsoft.Win32.RegistryView]::Registry64 } else { [Microsoft.Win32.RegistryView]::Default }
+  return [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, $view)
+}
+
+function Get-RegValue {
+  param($Hive, [string]$Path, [string]$Name)
+  $k = $Hive.OpenSubKey($Path)
+  if ($null -eq $k) { return $null }
+  try { return $k.GetValue($Name) } finally { $k.Close() }
+}
+
 function Get-Report([string]$type) {
+  $hklm = Get-Hklm
   $out = New-Object System.Collections.Generic.List[string]
   $out.Add((Line @('agent', $AgentVersion)))
   $out.Add((Line @('host', $env:COMPUTERNAME)))
   try { $out.Add((Line @('fqdn', [System.Net.Dns]::GetHostEntry('').HostName))) } catch { }
 
   # Only a hash of the machine GUID leaves the computer.
-  $guid = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Cryptography' -Name MachineGuid).MachineGuid
+  $guid = Get-RegValue $hklm 'SOFTWARE\Microsoft\Cryptography' 'MachineGuid'
+  if (-not $guid) { $guid = (Get-CimInstance Win32_ComputerSystemProduct).UUID }
+  if (-not $guid) { $guid = $env:COMPUTERNAME }
   $sha = [System.Security.Cryptography.SHA256]::Create()
   $hash = ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes("cyberpulse:$guid")) | ForEach-Object { $_.ToString('x2') }) -join ''
   $out.Add((Line @('machine', $hash)))
@@ -73,8 +90,8 @@ function Get-Report([string]$type) {
   $out.Add((Line @('type', $type)))
 
   # Microsoft states affected ranges as full builds: 10.0.<build>.<UBR>.
-  $cv = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
-  $build = "10.0.$($cv.CurrentBuild).$($cv.UBR)"
+  $cvPath = 'SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+  $build = "10.0.$(Get-RegValue $hklm $cvPath 'CurrentBuild').$(Get-RegValue $hklm $cvPath 'UBR')"
   $out.Add((Line @('winos', $os.Caption, $build)))
   $out.Add((Line @('vendor', $cs.Manufacturer)))
   $out.Add((Line @('model', $cs.Model)))
@@ -86,22 +103,27 @@ function Get-Report([string]$type) {
       ForEach-Object { $out.Add((Line @('ip', $_.IPAddress))) }
   } catch { }
 
-  $keys = @(
-    'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
-    'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
-  )
   $seen = @{}
-  foreach ($k in $keys) {
-    Get-ItemProperty $k -ErrorAction SilentlyContinue |
-      Where-Object { $_.DisplayName -and -not $_.ParentKeyName } |
-      ForEach-Object {
-        $id = "$($_.DisplayName)|$($_.DisplayVersion)"
+  foreach ($path in @('SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall', 'SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall')) {
+    $root = $hklm.OpenSubKey($path)
+    if ($null -eq $root) { continue }
+    foreach ($sub in $root.GetSubKeyNames()) {
+      $k = $root.OpenSubKey($sub)
+      if ($null -eq $k) { continue }
+      try {
+        $name = $k.GetValue('DisplayName')
+        if (-not $name -or $k.GetValue('ParentKeyName')) { continue }
+        $ver = $k.GetValue('DisplayVersion')
+        $id = "$name|$ver"
         if (-not $seen.ContainsKey($id)) {
           $seen[$id] = $true
-          $out.Add((Line @('app', $_.DisplayName, $_.DisplayVersion, $_.Publisher)))
+          $out.Add((Line @('app', $name, $ver, $k.GetValue('Publisher'))))
         }
-      }
+      } finally { $k.Close() }
+    }
+    $root.Close()
   }
+  $hklm.Close()
   return ($out -join "`n") + "`n"
 }
 
