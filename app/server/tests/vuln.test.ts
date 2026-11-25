@@ -119,3 +119,28 @@ describe('article verdicts', () => {
     expect(evaluateArticle(['CVE-2024-7347'], [1], noVersion).status).toBe('unverified');
   });
 });
+
+describe('F5 style per-branch ranges plus an open range for old branches', () => {
+  /* Shape of CVE-2026-123007 (NGINX Open Source): fixed in 1.31.9 and
+     1.30.7, every older branch from 1.9.5 left affected. */
+  const data = {
+    cvss: null, published: null,
+    products: [{
+      source: 'cna' as const, vendor: 'F5', product: 'NGINX Open Source', defaultStatus: 'unknown' as const,
+      entries: [
+        { status: 'affected' as const, start: '1.31.0', startIncl: true, end: '1.31.9', endIncl: false },
+        { status: 'affected' as const, start: '1.30.0', startIncl: true, end: '1.30.7', endIncl: false },
+        { status: 'affected' as const, start: '1.9.5', startIncl: true, end: '*', endIncl: false },
+      ],
+    }],
+  };
+  const st = (v: string) => evaluateCve(data, techKeys('nginx'), null, v);
+  it('treats a branch at its fix as patched, older branches as affected', () => {
+    expect(st('1.31.8')).toEqual({ status: 'affected', fixedIn: '1.31.9' });
+    expect(st('1.31.9').status).toBe('not_affected');
+    expect(st('1.30.7').status).toBe('not_affected');
+    expect(st('1.30.6').status).toBe('affected');
+    expect(st('1.22.1').status).toBe('affected');
+    expect(st('1.9.4').status).toBe('not_affected');
+  });
+});

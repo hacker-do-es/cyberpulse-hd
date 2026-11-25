@@ -310,6 +310,13 @@ export function evaluateProduct(p: AffectedProduct, version: string): ProductVer
     const a = atLeast(v, lo, e.startIncl !== false);
     const b = atMost(v, hi, e.endIncl === true);
     if (a === null || b === null) return { status: 'unknown' };
+    /* At or past this branch's fix ("1.31.0 ≤ v < 1.31.9" and v = 1.31.9):
+       counts as an "unaffected" entry as specific as the branch range, so
+       it beats a broad "1.9.5 ≤ v < *" listed for unpatched old branches. */
+    if (a && b === false && e.status === 'affected' && e.end && e.end !== '*' && !e.endIncl) {
+      const end = parseVersion(e.end);
+      if (end && sameBranch(v, end)) hits.push({ status: 'unaffected', start: startNums(e) });
+    }
     if (a && b) {
       const r = applyChanges(v, e);
       if (!r) return { status: 'unknown' };
