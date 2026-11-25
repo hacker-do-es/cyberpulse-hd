@@ -26,7 +26,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$AgentVersion = '1.0.0'
+$AgentVersion = '1.0.1'
 $InstallDir = Join-Path $env:ProgramFiles 'CyberPulse'
 $DataDir = Join-Path $env:ProgramData 'CyberPulse'
 $ConfFile = Join-Path $DataDir 'agent.json'
@@ -135,20 +135,24 @@ function Install-Agent {
   $script = Join-Path $InstallDir 'cyberpulse-agent.ps1'
   Copy-Item -Path $PSCommandPath -Destination $script -Force
 
-  @{ url = $Url.TrimEnd('/'); token = $Token; type = $Type } | ConvertTo-Json | Set-Content -Path $ConfFile -Encoding UTF8
-  # The config holds the token: SYSTEM and Administrators only.
+  # The config holds the token: SYSTEM and Administrators only, set BEFORE
+  # the file is written. Well-known SIDs, not names: group names are
+  # localised ("Administradores", "Administrateurs"...).
   $acl = New-Object System.Security.AccessControl.DirectorySecurity
   $acl.SetAccessRuleProtection($true, $false)
-  foreach ($who in @('NT AUTHORITY\SYSTEM', 'BUILTIN\Administrators')) {
+  foreach ($sid in @('S-1-5-18', 'S-1-5-32-544')) {
+    $who = New-Object System.Security.Principal.SecurityIdentifier($sid)
     $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($who, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')))
   }
   Set-Acl -Path $DataDir -AclObject $acl
+  @{ url = $Url.TrimEnd('/'); token = $Token; type = $Type } | ConvertTo-Json | Set-Content -Path $ConfFile -Encoding UTF8
 
   $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$script`" -Run"
   $start = (Get-Date).Date.AddHours(9).AddMinutes((Get-Random -Minimum 0 -Maximum 120))
   $trigger = New-ScheduledTaskTrigger -Daily -At $start
   $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
-  $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+  $system = (New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')).Translate([System.Security.Principal.NTAccount]).Value
+  $principal = New-ScheduledTaskPrincipal -UserId $system -LogonType ServiceAccount -RunLevel Highest
   Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
   Write-Output "Installed: scheduled task '$TaskName' (daily). Sending the first report..."
   Send-Report
