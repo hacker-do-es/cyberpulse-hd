@@ -14,34 +14,40 @@
 
 ## Qué hace
 
-CyberPulse lee más de 100 fuentes de ciberseguridad (CISA, CERTs nacionales, fabricantes, medios especializados y bases de exploits) y cruza cada noticia con las tecnologías que usa cada cliente y con los activos que las corren. A cada cliente le llega a sus canales un resumen periódico con solo lo que le afecta, ordenado por severidad, con un resumen ejecutivo escrito por IA (Claude u OpenAI) y, si lo pide, la lista de activos afectados por cada noticia.
+CyberPulse lee más de 100 fuentes de ciberseguridad (CISA, CERTs nacionales, fabricantes, medios especializados y bases de exploits) y cruza cada noticia con las tecnologías que usa cada cliente y con los activos que las corren. Cuando una noticia trae CVEs, los **verifica contra la versión instalada en cada activo** (CVE.org, NVD y OSV), así que solo avisa de lo que realmente afecta. A cada cliente le llega a sus canales un resumen periódico agrupado por la criticidad de los activos afectados, con un resumen ejecutivo escrito por IA (Claude u OpenAI).
+
+El inventario se mantiene solo: un **agente de inventario** para Linux y Windows reporta cada día el sistema operativo, los paquetes y programas instalados y los contenedores Docker en ejecución, y CyberPulse actualiza los activos y sus versiones sin CSV.
 
 Es una plataforma **multiempresa**: Hacker-Do da de alta a cada cliente como una empresa, y cada una tiene su propio stack, sus activos, su API key de IA, sus canales y sus horarios, completamente aislados del resto.
 
 ### Flujo de trabajo
 
 1. **Hacker-Do crea la empresa** y su primer usuario administrador.
-2. **El cliente carga sus tecnologías y sus activos**, a mano o importando CSV.
+2. **El cliente carga sus tecnologías y sus activos**: instalando el agente en sus servidores y PCs, a mano o importando CSV (por ejemplo, el resultado de un escaneo de superficie de ataque).
 3. **Configura uno o más canales** (Slack, Rocket.Chat, Telegram, Discord, email o LinkedIn) con su horario, severidad mínima y, opcionalmente, criticidad mínima de los activos.
-4. **CyberPulse envía el digest** en cada horario, solo con las noticias nuevas que afectan a ese stack. Si no hay nada nuevo, no envía nada.
+4. **CyberPulse envía el digest** en cada horario, solo con las vulnerabilidades nuevas confirmadas para las versiones instaladas (o con todas las noticias del stack, si el canal lo prefiere). Si no hay nada nuevo, no envía nada.
 
 > Las capturas de este README son de la misma versión desplegada en `cyberpulse.hacker-do.es`, con una empresa de demostración ("Demo Corp") y feeds reales; no contienen datos de clientes.
 
 ## Recorrido por la aplicación
 
-La interfaz está en **español e inglés** (selector de idioma arriba a la derecha). Las solapas son: **News Feed**, **My Stack**, **Technologies**, **Assets**, **Generate Post**, **History**, **Channels**, **Settings** y, para el superadmin, **Companies** y **Logs**. En pantallas de menos de ~1760 px solo la solapa activa muestra su nombre; el resto muestra el ícono, con el nombre al pasar el mouse.
+La interfaz está en **español e inglés** (selector de idioma arriba a la derecha). Las solapas son: **News Feed**, **My Stack**, **Technologies**, **Assets**, **Agents**, **Generate Post**, **History**, **Channels**, **Settings** y, para el superadmin, **Companies** y **Logs**. Cada usuario ve solo las solapas y los botones que su rol le permite. En pantallas de menos de ~1760 px solo la solapa activa muestra su nombre; el resto muestra el ícono, con el nombre al pasar el mouse.
 
 ### Acceso seguro
 
 <p align="center"><img src="docs/screenshots/login.png" alt="Pantalla de login" width="820" /></p>
 
-Cada usuario entra con su usuario y contraseña, con 2FA opcional (Google o Microsoft Authenticator, 1Password…). Tras 5 intentos fallidos (contraseña o código 2FA) la cuenta se bloquea 15 minutos, también si los intentos llegan en paralelo. Hay tres roles:
+Cada usuario entra con su usuario y contraseña, con 2FA opcional (Google o Microsoft Authenticator, 1Password…). Tras 5 intentos fallidos (contraseña o código 2FA) la cuenta se bloquea 15 minutos, también si los intentos llegan en paralelo. Hay cinco roles:
 
 | Rol | Puede |
 |---|---|
-| `superadmin` (Hacker-Do) | Crear, renombrar, desactivar y borrar empresas, entrar a gestionar cualquiera de ellas y ver el log del servidor. |
-| `admin` (del cliente) | Gestionar tecnologías, activos, IA, canales, cola de LinkedIn y usuarios de su empresa. |
-| `member` (del cliente) | Leer noticias, ver tecnologías y activos, y generar posts. Solo lectura sobre la configuración. |
+| `superadmin` (Hacker-Do) | Todo: crear, renombrar, desactivar y borrar empresas, gestionar las fuentes, crear usuarios de soporte, entrar a cualquier empresa como su admin y ver el log del servidor. |
+| `support` (Hacker-Do) | Elegir cualquier empresa y trabajar en ella como **operador**, y leer el log. No gestiona empresas, fuentes, usuarios ni integraciones. |
+| `admin` (del cliente) | Todo dentro de su empresa. Es el único que gestiona **usuarios** e **integraciones**: canales (crear, editar, pausar, borrar), proveedor de IA y ajustes, y conexión con LinkedIn (incluida la aprobación de posts). |
+| `operator` (del cliente) | El trabajo diario: cualquier operación sobre tecnologías y activos (alta, edición, borrado, importación CSV, fusión), tokens de agentes, ver los canales (con los secretos ocultos) y usar **Test** y **Send now**, generar posts con IA y ver su historial. |
+| `member` (del cliente, "Lector") | Solo lectura: noticias, My Stack, tecnologías, activos y agentes. |
+
+Los permisos de cada rol están definidos en un único archivo (`app/server/shared/permissions.ts`) que usan tanto las guardas de cada endpoint como la interfaz.
 
 ### Feed de noticias
 
@@ -51,7 +57,14 @@ La solapa **News Feed** (imagen de arriba) muestra todas las noticias recolectad
 
 <p align="center"><img src="docs/screenshots/my-stack.png" alt="My Stack con activos afectados" width="820" /></p>
 
-Solo las noticias que afectan a las tecnologías de la empresa, con indicadores de cuántos artículos coinciden y cuál es la categoría más frecuente. Cada noticia indica qué tecnologías coinciden y **qué activos afecta** (coloreados por criticidad), y se puede filtrar por tecnología, por activo (ordenados por criticidad) o por categoría; la búsqueda también encuentra por nombre de activo.
+Solo las noticias que afectan a las tecnologías de la empresa, con indicadores de cuántos artículos coinciden y cuántas **vulnerabilidades están confirmadas**. Cada noticia indica qué tecnologías coinciden, **qué activos afecta** (coloreados por criticidad) y su **veredicto**:
+
+- **Afectado:** la versión instalada en al menos un activo está dentro del rango vulnerable del CVE; se muestra la versión que lo corrige.
+- **No afectado:** todas las versiones instaladas están fuera del rango (por ejemplo, ya actualizadas).
+- **Sin verificar:** no hay versión cargada, la noticia no trae CVE o los datos del CVE no permiten decidirlo.
+- **Pendiente:** el CVE todavía se está descargando.
+
+Se puede filtrar por veredicto, por tecnología, por activo (ordenados por criticidad) o por categoría; la búsqueda también encuentra por nombre de activo.
 
 El cruce exige coincidencia de palabra completa: "Go" no coincide con "governments", y los nombres ambiguos (Chrome, Windows, Office…) necesitan contexto. El fabricante suma relevancia, pero por sí solo no alcanza para una coincidencia.
 
@@ -65,17 +78,56 @@ En **Technologies** el admin carga el software y los servicios que usa la empres
 - **Edición en línea:** el lápiz convierte la fila en campos editables, incluido el selector de activos; Enter guarda y Esc cancela.
 - **Importación CSV** con vista previa antes de confirmar, en modo *añadir* o *reemplazar*. La columna opcional `assets` vincula activos (y crea los que no existan), también en filas que ya estaban.
 - **Exportación CSV** protegida contra inyección de fórmulas.
+- **Versión por activo:** cada activo puede correr una versión distinta de la misma tecnología (la que reporta el agente o la que se carga a mano); si no tiene, se usa la de la fila. El veredicto de los CVE se calcula con la versión de cada activo.
+- **CPE opcional** (`fabricante:producto`) para cuando el nombre de la tecnología no coincide con el que usan CVE.org y NVD.
 
 ### Activos
 
 <p align="center"><img src="docs/screenshots/assets.png" alt="Gestión de activos" width="820" /></p>
 
-En **Assets** se registran los servidores, equipos, aplicaciones y servicios del cliente: nombre, tipo, **criticidad** (alta, media, baja), entorno, hostname, IPs, marca, modelo, responsable, notas y las tecnologías que corre cada uno. La vinculación funciona en los dos sentidos (desde el activo o desde la fila de tecnología).
+En **Assets** se registran los servidores, equipos, aplicaciones y servicios del cliente: nombre, tipo, **criticidad** (alta, media, baja), entorno, hostname, IPs, marca, modelo, responsable, notas y las tecnologías que corre cada uno, con la versión instalada en ese activo. La vinculación funciona en los dos sentidos (desde el activo o desde la fila de tecnología).
 
+- **Origen:** cada activo indica si lo inventarió un agente (con su sistema operativo, versión del agente y último reporte) o si se cargó a mano, y la lista se puede filtrar por origen.
+- **Contenedores:** cada contenedor Docker en ejecución que reporta un agente es un activo propio, de tipo `container`, colgado del host que lo corre.
+- **Fusionar duplicados:** cuando el agente da de alta un activo que ya estaba cargado a mano, CyberPulse sugiere la fusión (mismo hostname, nombre igual al hostname, nombre parecido o notas que mencionan el contenedor). También se pueden marcar varios activos y fusionarlos: un diálogo deja elegir campo por campo qué valor conservar, se unen las tecnologías y versiones, y el activo resultante sigue recibiendo los reportes del agente.
 - **Importación CSV** con vista previa: modo *agregar y actualizar* (cruza por nombre) o *reemplazar todos* (lista antes de confirmar los que se van a borrar). Avisa de filas inválidas y de tecnologías que no están en el stack.
 - **Exportación CSV** en el mismo formato, para editar en Excel y volver a importar.
 
 Los nombres de los activos describen la superficie de ataque del cliente, así que se tratan como dato sensible: nunca se envían al proveedor de IA ni a LinkedIn, y los digests solo los incluyen en los canales donde se active.
+
+### Agentes de inventario
+
+En **Agents** se instalan y siguen los agentes que mantienen el inventario al día:
+
+1. **Crear un token** de inventario (con vencimiento opcional; hasta 20 tokens activos por empresa). Se muestra una sola vez; se guarda solo su hash.
+2. **Instalar el agente** con el comando que muestra la propia solapa, para Linux o Windows:
+
+```bash
+# Linux (como root)
+curl -fsSLo cyberpulse-agent.sh https://cyberpulse.hacker-do.es/api/inventory/agent/linux
+sudo bash cyberpulse-agent.sh install --url https://cyberpulse.hacker-do.es --token cpi_...
+```
+
+```powershell
+# Windows (PowerShell como administrador)
+Invoke-WebRequest https://cyberpulse.hacker-do.es/api/inventory/agent/windows -OutFile cyberpulse-agent.ps1
+.\cyberpulse-agent.ps1 -Install -Url https://cyberpulse.hacker-do.es -Token cpi_...
+```
+
+El agente es de solo lectura: no cambia nada en el equipo salvo su propia configuración y su tarea programada (un timer de systemd en Linux, una tarea programada en Windows). Una vez por día envía por HTTPS el hostname, las IPs (sin interfaces virtuales), el sistema operativo y su versión, los paquetes o programas instalados y, en Linux, los contenedores Docker en ejecución con la imagen y los paquetes de cada uno (leídos con un `docker exec` de solo lectura; `--no-container-packages` lo desactiva). `print` / `-Print` muestra el reporte sin enviarlo.
+
+Con cada reporte CyberPulse:
+
+- Crea el activo, o reconoce uno existente por hostname, y lo marca como inventariado por agente.
+- Traduce los paquetes a tecnologías del stack con un catálogo propio (servidores web, bases de datos, lenguajes, Docker, navegadores, Windows…) y actualiza la versión instalada en ese activo.
+- Da de baja una tecnología cuando falta en **2 reportes seguidos**. Nunca borra lo que se cargó a mano.
+- Marca el host como **desactualizado** si pasan 7 días sin reportes.
+
+Los paquetes de Debian, Ubuntu y Alpine se verifican además con [OSV](https://osv.dev) usando la versión exacta de la distribución, que incluye los parches retroportados.
+
+### Verificación de CVE
+
+Cada 20 minutos CyberPulse descarga los CVE que mencionan las noticias del stack desde [CVE.org](https://www.cve.org) y [NVD](https://nvd.nist.gov) (más rápido con `NVD_API_KEY`), los guarda y calcula el veredicto de cada activo comparando su versión con los rangos afectados de cada producto. Los paquetes de distribución se revisan con OSV una vez por día y después de cada reporte de agente. El veredicto se ve en My Stack y decide qué llega a los canales.
 
 ### Canales de entrega
 
@@ -94,29 +146,36 @@ Para todos:
 
 - **Horario:** diario, días hábiles, semanal, días a elección a una hora fija, o cada N horas, siempre en la zona horaria de la empresa (con cambio de horario incluido).
 - **Severidad mínima** y **máximo de artículos** por envío.
-- **Activos afectados:** opción para listar debajo de cada noticia los activos que afecta (por ejemplo `activos: WEB01 (alta)`), **apagada por defecto**, y opción para enviar solo las noticias que afecten activos de una criticidad mínima. Nunca disponible en LinkedIn.
+- **Solo vulnerabilidades confirmadas** (activado por defecto): el canal recibe únicamente los CVE verificados como afectados para las versiones instaladas, con la versión que los corrige. Las noticias que no se pueden verificar no se envían. Desactivado, el canal recibe todas las noticias del stack. No aplica a LinkedIn.
+- **Activos afectados:** opción para listar debajo de cada noticia los activos que afecta, con hostname e IP (por ejemplo `WEB01 · web01.example.com · 10.0.2.11 (alta)`), **apagada por defecto**, y opción para enviar solo las noticias que afecten activos de una criticidad mínima. Nunca disponible en LinkedIn.
 - **Cabecera y pie personalizados** (con `{company}` y `{count}`), para que el mensaje lleve la identidad del cliente.
 - Botones **Test** (mensaje de prueba) y **Send now**, más el **historial de envíos** de cada canal.
 
-El digest agrupa las noticias por severidad, nunca repite un artículo en el mismo canal y, si no hay novedades, no se envía.
+El digest es de lectura rápida: agrupa las noticias por la criticidad de los activos afectados (críticos primero), con un resumen de severidades al principio, y cada noticia es una tarjeta con su severidad, CVSS, CVE, tecnología y versión instalada, versión que lo corrige y activos afectados. Nunca repite un artículo en el mismo canal y, si no hay novedades, no se envía.
+
+Los operadores pueden ver los canales y usar **Test** y **Send now**; crearlos, editarlos, pausarlos o borrarlos es solo para el admin.
 
 ### LinkedIn
 
-Cada usuario conecta su propia cuenta de LinkedIn desde **My account** (perfil personal) y, si la instalación tiene habilitada la app de Community Management, también las **Company Pages** que administra.
+LinkedIn es una integración, así que la gestionan los admins: cada admin conecta su propia cuenta desde **My account** (perfil personal) y, si la instalación tiene habilitada la app de Community Management, también las **Company Pages** que administra.
 
-- **Canales de LinkedIn:** formato, tono, extensión e idioma de los posts, posts por ejecución y límite diario. Por defecto, los posts como Company Page pasan por una **cola de aprobación** (en Channels) donde un admin los aprueba, edita o rechaza; los del perfil personal se publican directo (configurable por canal).
-- **Generate Post** puede publicar al momento o **programar** el post: queda en la misma cola y lo publica el servidor a la hora indicada.
+- **Canales de LinkedIn:** formato, tono, extensión e idioma de los posts, posts por ejecución y límite diario. Por defecto, los posts como Company Page pasan por una **cola de aprobación** (en Channels) donde un admin los aprueba, edita o rechaza; los del perfil personal se publican directo (configurable por canal). Un operador puede ejecutar el canal para proponer posts, pero no aprobarlos.
+- **Generate Post** permite a los admins publicar al momento o **programar** el post: queda en la misma cola y lo publica el servidor a la hora indicada.
 - Los tokens se guardan cifrados y nunca vuelven al navegador; si una conexión vence, el canal se pausa.
 
 ### Posts e historial
 
-**Generate Post** redacta, a partir de una o varias noticias (con buscador para elegirlas), un post listo para publicar, eligiendo formato, tono, extensión e idioma; con IA si la empresa tiene API key, o con plantillas si no. **History** guarda los posts generados para copiarlos o reutilizarlos.
+**Generate Post** (admins y operadores) redacta, a partir de una o varias noticias (con buscador para elegirlas), un post listo para publicar, eligiendo formato, tono, extensión e idioma; con IA si la empresa tiene API key, o con plantillas si no. **History** guarda los posts generados para copiarlos o reutilizarlos.
 
 ### Settings
 
-Para los admins: **idioma del digest** (español o inglés), **zona horaria** de la empresa, **proveedor de IA** con su API key (se guarda cifrada y nunca vuelve al navegador; también acepta APIs compatibles con OpenAI) y los **usuarios** de la empresa.
+Para los admins: **idioma del digest** (español o inglés), **zona horaria** de la empresa, **proveedor de IA** con su API key (se guarda cifrada y nunca vuelve al navegador; también acepta APIs compatibles con OpenAI) y los **usuarios** de la empresa con su rol (admin, operador o lector).
 
-### Logs (superadmin)
+### Companies (superadmin)
+
+Alta, renombrado, desactivación y borrado de empresas (el borrado pide escribir el nombre), entrada a cualquiera de ellas, y el panel **Support users** para crear, desactivar o borrar las cuentas de soporte de Hacker-Do y resetear su contraseña o 2FA.
+
+### Logs (superadmin y soporte)
 
 La solapa **Logs** muestra el log del servidor y la **auditoría** de cada cambio (logins, altas y bajas, cambios de stack, activos, canales, usuarios, envíos), con usuario, empresa e IP real. Tiene filtros por nivel y origen, búsqueda, rango de fechas, modo en vivo y descarga en `.txt`. Los secretos se enmascaran antes de guardarse, y se conservan 14 días (máximo 50 000 líneas).
 
@@ -134,6 +193,8 @@ Abrir `http://localhost:3001`, entrar con el superadmin, y en **Companies → Ne
 > **Importante:** guardá una copia de `CYBERPULSE_SECRET`. Sin él no se pueden descifrar las API keys, los webhooks, los tokens de LinkedIn y Telegram, las contraseñas SMTP ni los secretos 2FA guardados.
 
 Por defecto el puerto solo escucha en `127.0.0.1`; publicalo detrás de un reverse proxy con HTTPS (Traefik, Cloudflare Tunnel) y poné `TRUST_PROXY=1`. Para probar en una LAN por `http://IP:3001`: `CYBERPULSE_BIND=0.0.0.0` y `CYBERPULSE_PLAIN_HTTP=true`.
+
+Para la verificación de CVE conviene pedir una API key gratuita de [NVD](https://nvd.nist.gov/developers/request-an-api-key) y ponerla en `NVD_API_KEY`: sin ella NVD admite una consulta cada 6,5 segundos; con ella, una cada 0,7.
 
 La base de datos se migra sola al arrancar, dejando antes una copia `cyberpulse.pre-migration-<fecha>.db`. Una base creada por versiones anteriores (esquema v10) se convierte automáticamente la primera vez, dejando una copia `cyberpulse.pre-drizzle-<fecha>.db`.
 
@@ -153,6 +214,7 @@ Se necesita una app en [LinkedIn Developers](https://www.linkedin.com/developers
 
 ```bash
 docker exec -it cyberpulse npx tsx server/cli.ts create-superadmin <usuario>
+docker exec -it cyberpulse npx tsx server/cli.ts create-support <usuario>
 docker exec -it cyberpulse npx tsx server/cli.ts set-password <usuario>
 docker exec -it cyberpulse npx tsx server/cli.ts reset-totp <usuario>
 docker exec -it cyberpulse npx tsx server/cli.ts list-users
@@ -214,7 +276,7 @@ FW-PERIMETRO,firewall,high,prod,fw01.example.local,10.0.0.1|203.0.113.10,Fortine
 ```
 
 - Solo `name` es obligatoria y la fila de cabecera es necesaria. Cabeceras en español: `nombre`, `tipo`, `criticidad`, `entorno`, `marca`, `modelo`, `responsable`, `notas`, `tecnologías`.
-- `type`: `server`, `workstation`, `laptop`, `network`, `firewall`, `cloud`, `saas`, `application`, `database`, `mobile`, `iot`, `other`. También se aceptan nombres en español (`servidor`, `portátil`…) y los habituales de otros inventarios (`web_application`, `api`, `cdn`, `dns_record`, `vm`, `load_balancer`…).
+- `type`: `server`, `workstation`, `laptop`, `network`, `firewall`, `cloud`, `saas`, `application`, `database`, `mobile`, `iot`, `identity`, `monitoring`, `cicd`, `automation`, `siem`, `vpn`, `dns`, `proxy`, `security`, `other` (los agentes agregan `container`). También se aceptan nombres en español (`servidor`, `portátil`…) y los habituales de otros inventarios y escáneres de superficie de ataque (`web_application`, `api`, `cdn`, `dns_record`, `vm`, `load_balancer`, `sso`, `idp`, `ci/cd`, `waf`…).
 - `criticality`: `high`/`alta`/`critical`, `medium`/`media`, `low`/`baja`.
 - Varias IPs o tecnologías en una celda se separan con `|`. Las tecnologías se buscan en el stack por nombre (`PHP`) o por nombre y versión (`PHP 8.2`).
 - Una columna que no está en el archivo conserva el valor actual del activo; una celda vacía lo borra.
@@ -224,6 +286,8 @@ FW-PERIMETRO,firewall,high,prod,fw01.example.local,10.0.0.1|203.0.113.10,Fortine
 
 - Secretos de empresa (API keys de IA, URLs de webhook, tokens de Telegram y LinkedIn, contraseñas SMTP, semillas TOTP) cifrados con AES-256-GCM; en producción el servidor no arranca sin `CYBERPULSE_SECRET`.
 - Aislamiento por empresa aplicado en cada consulta del backend (`tenant_id`), incluidos los vínculos entre activos y tecnologías, cubierto por tests end-to-end.
+- Permisos por rol definidos en un único mapa y aplicados en cada endpoint (no solo ocultando botones), con tests de rol × endpoint.
+- Tokens de los agentes guardados como hash SHA-256, con prefijo visible, vencimiento opcional, revocación y registro del último uso e IP. El endpoint de reportes solo acepta texto plano con un tamaño máximo y no ejecuta nada de lo que recibe.
 - Webhooks y SMTP con protección SSRF: solo `https` para webhooks, sin redirecciones, y resolución DNS propia que solo acepta direcciones unicast públicas (clasificadas con [ipaddr.js](https://github.com/whitequark/ipaddr.js) según los registros de IANA: se rechazan privadas, loopback, link-local y metadata de la nube, CGNAT, y formas IPv6 que esconden una IPv4 como NAT64 y 6to4). La conexión va a la IP ya validada.
 - El bloqueo de login y el anti-replay del 2FA se aplican con actualizaciones atómicas en la base, así que no se pueden esquivar con requests en paralelo.
 - El contenido de los feeds se trata como no confiable: se escapa en cada plataforma (no puede inyectar `@channel` ni enlaces), y del resumen de IA se eliminan URLs, así que los enlaces del digest salen siempre de la base de datos.
@@ -252,11 +316,13 @@ El servidor (`app/server/`) está organizado en capas; cada una depende solo de 
 |---|---|---|
 | API | `api/` | Todos los endpoints y sus guardas (`routes.ts`); middlewares de autenticación, CSRF, CORS, rate limits, auditoría y errores |
 | Controllers | `controllers/` | Leen y validan el request, llaman a un caso de uso o servicio y arman la respuesta |
-| Casos de uso | `useCases/` | Flujos que cruzan varios servicios: login, alta de empresa, importación CSV de tecnologías y activos, envío del digest de un canal, canal de LinkedIn |
-| Servicios | `services/` | Lógica de negocio: autenticación, matcher de stack, digest, scraper, proveedores de IA, webhooks, email, LinkedIn, CSV, logs, horarios |
+| Casos de uso | `useCases/` | Flujos que cruzan varios servicios: login, alta de empresa, importación CSV de tecnologías y activos, reportes de agentes, fusión de activos, envío del digest de un canal, canal de LinkedIn |
+| Servicios | `services/` | Lógica de negocio: autenticación, matcher de stack, verificación de CVE (`vuln/`: versiones, CVE.org/NVD, OSV, veredicto), inventario (`inventory/`: catálogo de paquetes y reportes), digest, scraper, proveedores de IA, webhooks, email, LinkedIn, CSV, logs, horarios |
 | Repositorios | `repositories/` | Todo el acceso a la base, un módulo por entidad, con el query builder de Drizzle |
 | Base de datos | `db/` | Esquema (`schema.ts`), conexión y migraciones |
-| Jobs | `jobs/` | Scrape programado, scheduler de canales, publicación de la cola de LinkedIn y retención |
+| Jobs | `jobs/` | Scrape programado, scheduler de canales, publicación de la cola de LinkedIn, descarga de CVE (cada 20 min), chequeo OSV (diario) y retención |
+| Permisos | `shared/permissions.ts` | Roles y permisos, usados por las guardas de la API y por la interfaz |
+| Agentes | `agents/` | Scripts del agente de inventario (Linux y Windows), servidos por la API |
 
 ### Base de datos y migraciones
 
@@ -274,4 +340,4 @@ Node ejecuta todo el JavaScript en un solo hilo, así que el servidor evita trab
 
 ## Créditos y licencia
 
-Basado en [CyberPulse](https://github.com/safernandez666/CyberPulse) de **Santiago Fernández**, publicado bajo licencia MIT. Esta versión agrega la plataforma multiempresa, autenticación con 2FA, activos, canales (Slack, Rocket.Chat, Telegram, Discord, email y LinkedIn con cola de aprobación), programación, importación CSV, auditoría, interfaz en español e inglés, integración con Claude y la identidad de Hacker-Do, y rehace la integración con LinkedIn con conexión por usuario. Ver [`LICENSE`](LICENSE) y [`NOTICE`](NOTICE). La documentación original está en [`docs/upstream/`](docs/upstream/).
+Basado en [CyberPulse](https://github.com/safernandez666/CyberPulse) de **Santiago Fernández**, publicado bajo licencia MIT. Esta versión agrega la plataforma multiempresa, autenticación con 2FA y roles, activos con agentes de inventario, verificación de CVE por versión, canales (Slack, Rocket.Chat, Telegram, Discord, email y LinkedIn con cola de aprobación), programación, importación CSV, auditoría, interfaz en español e inglés, integración con Claude y la identidad de Hacker-Do, y rehace la integración con LinkedIn con conexión por usuario. Ver [`LICENSE`](LICENSE) y [`NOTICE`](NOTICE). La documentación original está en [`docs/upstream/`](docs/upstream/).
