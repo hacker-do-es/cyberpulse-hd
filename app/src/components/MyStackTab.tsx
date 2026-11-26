@@ -93,11 +93,19 @@ export default function MyStackTab({
     localStorage.setItem('cyberpulse.mystack.vuln', vulnFilter);
   }, [vulnFilter]);
 
+  /* The company filter narrows every other filter's options and counts. */
+  const scoped = useMemo(
+    () => (selectedCompanies.length > 0
+      ? articles.filter((a) => (a.tenants ?? []).some((t) => selectedCompanies.includes(t.id)))
+      : articles),
+    [articles, selectedCompanies]
+  );
+
   const vulnCounts = useMemo(() => {
     const c: Record<Exclude<VulnFilter, 'all'>, number> = { affected: 0, not_affected: 0, unverified: 0, no_cve: 0 };
-    for (const a of articles) c[vulnGroup(a.vuln?.status)]++;
+    for (const a of scoped) c[vulnGroup(a.vuln?.status)]++;
     return c;
-  }, [articles]);
+  }, [scoped]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
 
@@ -107,19 +115,24 @@ export default function MyStackTab({
   }, [searchQuery]);
 
   const categories = useMemo(
-    () => Array.from(new Set(articles.map((a) => a.category))).sort(),
-    [articles]
+    () => Array.from(new Set(scoped.map((a) => a.category))).sort(),
+    [scoped]
   );
 
   const technologies = useMemo(
-    () => Array.from(new Set(articles.flatMap((a) => a.matchedTechnologies))).sort(),
-    [articles]
+    () => Array.from(new Set(scoped.flatMap((a) => a.matchedTechnologies))).sort(),
+    [scoped]
   );
+  const techCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const a of scoped) for (const t of a.matchedTechnologies) c[t] = (c[t] || 0) + 1;
+    return c;
+  }, [scoped]);
 
   /* Assets affected by at least one article, most critical first, with counts. */
   const affectedAssets = useMemo(() => {
     const byId = new Map<number, { asset: AssetRef; count: number }>();
-    for (const a of articles) {
+    for (const a of scoped) {
       for (const asset of a.affectedAssets ?? []) {
         const e = byId.get(asset.id);
         if (e) e.count++;
@@ -128,7 +141,7 @@ export default function MyStackTab({
     }
     const rank = { high: 2, medium: 1, low: 0 } as const;
     return Array.from(byId.values()).sort((x, y) => rank[y.asset.criticality] - rank[x.asset.criticality] || y.count - x.count);
-  }, [articles]);
+  }, [scoped]);
 
   /* Companies with at least one matched article, most articles first. */
   const companyCounts = useMemo(() => {
@@ -142,11 +155,8 @@ export default function MyStackTab({
   }, [articles, companies]);
 
   const filteredAndSorted = useMemo(() => {
-    let filtered = [...articles];
+    let filtered = [...scoped];
 
-    if (selectedCompanies.length > 0) {
-      filtered = filtered.filter((a) => (a.tenants ?? []).some((t) => selectedCompanies.includes(t.id)));
-    }
 
     if (vulnFilter !== 'all') {
       filtered = filtered.filter((a) => vulnGroup(a.vuln?.status) === vulnFilter);
@@ -193,7 +203,7 @@ export default function MyStackTab({
     }
 
     return sorted;
-  }, [articles, selectedCategories, selectedTech, selectedAssets, selectedCompanies, debouncedSearch, sortBy, vulnFilter]);
+  }, [scoped, selectedCategories, selectedTech, selectedAssets, debouncedSearch, sortBy, vulnFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredAndSorted.length / pageSize));
   const startIndex = (page - 1) * pageSize;
@@ -411,7 +421,7 @@ export default function MyStackTab({
           </button>
           {technologies.slice(0, 10).map((tech) => {
             const active = selectedTech.includes(tech);
-            const count = statistics.byTechnology[tech] || 0;
+            const count = techCounts[tech] || 0;
             return (
               <button
                 key={tech}
