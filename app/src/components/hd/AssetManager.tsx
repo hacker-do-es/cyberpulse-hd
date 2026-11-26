@@ -121,6 +121,15 @@ export default function AssetManager({ canEdit, refreshKey, onChanged }: { canEd
   const [stack, setStack] = useState<TechStackItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
+  /* Origin filter: every asset, only the ones an inventory agent keeps up
+     to date, or only the hand-made ones (remembered per browser). */
+  const [origin, setOrigin] = useState<'all' | 'agent' | 'manual'>(() => {
+    const v = typeof localStorage !== 'undefined' ? localStorage.getItem('cyberpulse.assets.origin') : null;
+    return v === 'agent' || v === 'manual' ? v : 'all';
+  });
+  useEffect(() => {
+    localStorage.setItem('cyberpulse.assets.origin', origin);
+  }, [origin]);
   const [editing, setEditing] = useState<{ id: number | null; values: AssetInput } | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Asset | null>(null);
@@ -179,7 +188,8 @@ export default function AssetManager({ canEdit, refreshKey, onChanged }: { canEd
     }
   };
 
-  const visible = assets.filter((a) =>
+  const agentCount = assets.filter((a) => a.agent).length;
+  const visible = assets.filter((a) => origin === 'all' || (origin === 'agent' ? !!a.agent : !a.agent)).filter((a) =>
     !filter || [a.name, a.hostname, a.ip, a.brand, a.model, a.environment, a.owner].join(' ').toLowerCase().includes(filter.toLowerCase())
   );
 
@@ -215,8 +225,23 @@ export default function AssetManager({ canEdit, refreshKey, onChanged }: { canEd
     >
       {canEdit && <DuplicateSuggestions assets={assets} refreshKey={version} onReview={(ids) => setMergeIds(ids)} />}
 
-      {assets.length > 8 && (
-        <Input placeholder={tr('Filter {n} assets…', { n: assets.length })} value={filter} onChange={(e) => setFilter(e.target.value)} className={`${inputCls} mb-3 max-w-xs`} />
+      {(assets.length > 8 || agentCount > 0) && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          {assets.length > 8 && (
+            <Input placeholder={tr('Filter {n} assets…', { n: assets.length })} value={filter} onChange={(e) => setFilter(e.target.value)} className={`${inputCls} max-w-xs`} />
+          )}
+          {agentCount > 0 && (
+            <label className="flex items-center gap-2 text-xs text-text-secondary">
+              {tr('Origin')}
+              <select className={`${selectCls} w-auto`} value={origin} onChange={(e) => setOrigin(e.target.value as typeof origin)}>
+                <option value="all">{tr('All ({n})', { n: assets.length })}</option>
+                <option value="agent">{tr('Inventoried by agent ({n})', { n: agentCount })}</option>
+                <option value="manual">{tr('Added by hand ({n})', { n: assets.length - agentCount })}</option>
+              </select>
+            </label>
+          )}
+          {origin !== 'all' && <span className="text-xs text-text-tertiary">{tr('{n} shown', { n: visible.length })}</span>}
+        </div>
       )}
 
       {loading ? (

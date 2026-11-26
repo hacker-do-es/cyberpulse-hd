@@ -969,6 +969,11 @@ export const ES: Record<string, string> = {
   'Merge {n}': 'Fusionar {n}',
   'Select {name}': 'Seleccionar {name}',
   'Select': 'Seleccionar',
+  'Origin': 'Origen',
+  'All ({n})': 'Todos ({n})',
+  'Inventoried by agent ({n})': 'Inventariados por agente ({n})',
+  'Added by hand ({n})': 'Cargados a mano ({n})',
+  '{n} shown': '{n} mostrados',
 };
 
 /* Server messages with values in them. */
