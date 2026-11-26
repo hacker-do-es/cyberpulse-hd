@@ -69,6 +69,7 @@ export function apiRouter(appVersion: string): express.Router {
   /* Company: technology stack */
   api.get('/tech-stack', ...tenantCan('inventory.read'), handle(stackController.list));
   api.get('/tech-stack/news', ...tenantCan('inventory.read'), handle(stackController.news));
+  api.get('/tech-stack/news/all', requirePermission('platform.switchTenant'), handle(stackController.newsAll));
   api.get('/tech-stack/export.csv', ...tenantCan('inventory.read'), handle(stackController.exportCsv));
   api.get('/tech-stack/template.csv', handle(stackController.template));
   api.post('/tech-stack', ...tenantCan('inventory.write'), writeLimiter, handle(stackController.create));

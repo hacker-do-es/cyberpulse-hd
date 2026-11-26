@@ -235,3 +235,29 @@ describe('CSV re-saved by a ";" locale Excel', () => {
     expect(stack.rows).toEqual([{ technology: 'PHP', version: '8.2', category: 'Runtime', assets: ['WEB01', 'WEB02'] }]);
   });
 });
+
+describe('My Stack over all companies', () => {
+  it('merges the same article across companies with the worst verdict', async () => {
+    const { mergeTenantNews, mergeVuln } = await import('../services/stackNews');
+    const base = { title: 't', summary: '', source: 's', severity: 'high', category: 'VULNERABILITY', publishedAt: null, publishDate: null, readTime: null, url: 'u', fetchedAt: null };
+    const asset = (id: number, name: string, criticality: 'low' | 'medium' | 'high') => ({ id, name, criticality, environment: null, hostname: null, ip: null });
+    const merged = mergeTenantNews([
+      { tenant: { id: 1, name: 'A' }, news: [{ ...base, id: '10', matchScore: 40, matchedTechnologies: ['nginx'], matchedStackIds: [1], affectedAssets: [asset(5, 'web', 'low')], vuln: { status: 'not_affected', cves: ['CVE-1'], units: [] } }] as any },
+      { tenant: { id: 2, name: 'B' }, news: [
+        { ...base, id: '10', matchScore: 70, matchedTechnologies: ['nginx', 'php'], matchedStackIds: [7], affectedAssets: [asset(9, 'lb', 'high')], vuln: { status: 'affected', cves: ['CVE-1', 'CVE-2'], units: [] } },
+        { ...base, id: '11', matchScore: 10, matchedTechnologies: ['php'], matchedStackIds: [8], affectedAssets: [], vuln: { status: 'no_cve', cves: [], units: [] } },
+      ] as any },
+    ]);
+    expect(merged.map((n) => n.id)).toEqual(['10', '11']);
+    const a = merged[0];
+    expect(a.matchScore).toBe(70);
+    expect(a.matchedTechnologies).toEqual(['nginx', 'php']);
+    expect(a.matchedStackIds).toEqual([1, 7]);
+    expect(a.affectedAssets.map((x) => x.name)).toEqual(['lb', 'web']);
+    expect(a.vuln.status).toBe('affected');
+    expect(a.vuln.cves).toEqual(['CVE-1', 'CVE-2']);
+    expect(a.tenants).toEqual([{ id: 1, name: 'A', status: 'not_affected' }, { id: 2, name: 'B', status: 'affected' }]);
+    expect(mergeVuln([{ status: 'not_affected', cves: [], units: [] }, { status: 'unverified', cves: [], units: [] }]).status).toBe('unverified');
+    expect(mergeVuln([{ status: 'no_cve', cves: [], units: [] }, { status: 'not_affected', cves: [], units: [] }]).status).toBe('not_affected');
+  });
+});

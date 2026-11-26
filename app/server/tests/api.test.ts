@@ -1296,6 +1296,23 @@ describe('assets (what runs the stack)', () => {
     expect(parseAssetOptions('linkedin', {}, { includeAssets: true, minAssetCriticality: 'high' })).toEqual({ includeAssets: false, minAssetCriticality: null });
     expect(parseAssetOptions('slack', { includeAssets: true })).toEqual({ includeAssets: true, minAssetCriticality: null });
   });
+  it('sums My Stack over every company for platform staff with no company picked', async () => {
+    /* Othercorp runs Zimbra too: the article appears once, with both companies. */
+    expect((await other.req('POST', '/api/tech-stack', { technology: 'Zimbra' })).status).toBe(201);
+    const res = await root.req('GET', '/api/tech-stack/news/all');
+    expect(res.status).toBe(200);
+    const zimbra = res.body.news.filter((n: any) => n.url === 'https://news.example/zimbra');
+    expect(zimbra).toHaveLength(1);
+    expect(zimbra[0].tenants.map((t: any) => t.name).sort()).toEqual(['Assetco', 'Othercorp']);
+    expect(zimbra[0].affectedAssets.map((a: any) => a.name)).toContain('WEB01');
+    expect(res.body.tenants.map((t: any) => t.name)).toEqual(expect.arrayContaining(['Assetco', 'Othercorp']));
+    expect(res.body.stackItems).toBeGreaterThan(1);
+    expect(res.body.statistics.matchedArticles).toBe(res.body.news.length);
+
+    /* Company users only ever see their own company. */
+    expect((await admin.req('GET', '/api/tech-stack/news/all')).status).toBe(403);
+    expect((await other.req('GET', '/api/tech-stack/news/all')).status).toBe(403);
+  });
 });
 
 describe('assets CSV import/export', () => {

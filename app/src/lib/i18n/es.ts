@@ -872,6 +872,7 @@ export const ES: Record<string, string> = {
   'CVEs whose affected versions include a version installed on your assets': 'CVEs cuyas versiones afectadas incluyen una versión instalada en tus activos',
   '{n} not affected · {u} unverified': '{n} no afectan · {u} sin verificar',
   'Affects you': 'Te afecta',
+  'No active company has technologies in its stack yet.': 'Ninguna empresa activa tiene tecnologías cargadas en su stack todavía.',
   'Checking CVE…': 'Consultando CVE…',
   'Installed versions are outside the affected ranges: {list}': 'Las versiones instaladas están fuera de los rangos afectados: {list}',
   'The CVE is about other products': 'El CVE es de otros productos',

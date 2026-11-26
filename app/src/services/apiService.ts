@@ -250,6 +250,8 @@ export interface TechStackNewsArticle extends NewsArticle {
   matchedStackIds?: number[];
   affectedAssets?: AssetRef[];
   vuln?: ArticleVuln;
+  /* Only in the all-companies view: the companies this article matches. */
+  tenants?: Array<{ id: number; name: string; status: VulnStatus }>;
 }
 
 export interface TechStackNewsResponse {
@@ -327,6 +329,18 @@ export async function deleteTechStackItem(id: number): Promise<void> {
   if (!res.ok || !data.success) {
     throw new Error(data.error || `Delete tech stack item failed (${res.status})`);
   }
+}
+
+export interface AllTenantsStackNewsResponse extends TechStackNewsResponse {
+  stackItems: number;
+  tenants: Array<{ id: number; name: string }>;
+}
+
+/* Platform staff with no company picked: My Stack summed over all companies. */
+export async function fetchAllTenantsStackNews(): Promise<AllTenantsStackNewsResponse> {
+  const res = await fetch('/api/tech-stack/news/all');
+  if (!res.ok) throw new Error(`Tech stack news API error: ${res.status}`);
+  return res.json();
 }
 
 export async function fetchTechStackNews(): Promise<TechStackNewsResponse> {

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Clock, RefreshCw, ExternalLink, Thermometer, ChevronLeft, ChevronRight, Server, TrendingUp, ShieldAlert, ShieldCheck, ShieldQuestion, Hourglass } from 'lucide-react';
+import { Search, Clock, RefreshCw, ExternalLink, Thermometer, ChevronLeft, ChevronRight, Server, Building2, TrendingUp, ShieldAlert, ShieldCheck, ShieldQuestion, Hourglass } from 'lucide-react';
 import type { AssetRef, TechStackNewsArticle, VulnStatus } from '@/services/apiService';
 import { AssetChips } from './hd/AssetManager';
 import { criticalityLabel } from './hd/assetLabels';
@@ -22,6 +22,9 @@ interface MyStackTabProps {
     bySeverity: Record<string, number>;
   };
   techStackCount: number;
+  /* All-companies view (platform staff, no company picked): the companies
+     whose stacks were matched. Adds a company filter and company chips. */
+  companies?: Array<{ id: number; name: string }>;
 }
 
 type SortOption = 'score' | 'date' | 'severity';
@@ -72,6 +75,7 @@ export default function MyStackTab({
   selectedArticleId,
   statistics,
   techStackCount,
+  companies,
 }: MyStackTabProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -79,6 +83,7 @@ export default function MyStackTab({
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedTech, setSelectedTech] = useState<string[]>([]);
   const [selectedAssets, setSelectedAssets] = useState<number[]>([]);
+  const [selectedCompanies, setSelectedCompanies] = useState<number[]>([]);
   const [vulnFilter, setVulnFilter] = useState<VulnFilter>(() => {
     const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('cyberpulse.mystack.vuln') : null;
     return (VULN_FILTERS.some((f) => f.key === saved) ? saved : 'all') as VulnFilter;
@@ -125,8 +130,23 @@ export default function MyStackTab({
     return Array.from(byId.values()).sort((x, y) => rank[y.asset.criticality] - rank[x.asset.criticality] || y.count - x.count);
   }, [articles]);
 
+  /* Companies with at least one matched article, most articles first. */
+  const companyCounts = useMemo(() => {
+    if (!companies) return [];
+    const counts = new Map<number, number>();
+    for (const a of articles) for (const t of a.tenants ?? []) counts.set(t.id, (counts.get(t.id) ?? 0) + 1);
+    return companies
+      .map((c) => ({ ...c, count: counts.get(c.id) ?? 0 }))
+      .filter((c) => c.count > 0)
+      .sort((x, y) => y.count - x.count || x.name.localeCompare(y.name));
+  }, [articles, companies]);
+
   const filteredAndSorted = useMemo(() => {
     let filtered = [...articles];
+
+    if (selectedCompanies.length > 0) {
+      filtered = filtered.filter((a) => (a.tenants ?? []).some((t) => selectedCompanies.includes(t.id)));
+    }
 
     if (vulnFilter !== 'all') {
       filtered = filtered.filter((a) => vulnGroup(a.vuln?.status) === vulnFilter);
@@ -153,7 +173,8 @@ export default function MyStackTab({
           a.title.toLowerCase().includes(q) ||
           a.summary.toLowerCase().includes(q) ||
           a.matchedTechnologies.some((tech) => tech.toLowerCase().includes(q)) ||
-          (a.affectedAssets ?? []).some((as) => as.name.toLowerCase().includes(q))
+          (a.affectedAssets ?? []).some((as) => as.name.toLowerCase().includes(q)) ||
+          (a.tenants ?? []).some((t) => t.name.toLowerCase().includes(q))
       );
     }
 
@@ -172,7 +193,7 @@ export default function MyStackTab({
     }
 
     return sorted;
-  }, [articles, selectedCategories, selectedTech, selectedAssets, debouncedSearch, sortBy, vulnFilter]);
+  }, [articles, selectedCategories, selectedTech, selectedAssets, selectedCompanies, debouncedSearch, sortBy, vulnFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredAndSorted.length / pageSize));
   const startIndex = (page - 1) * pageSize;
@@ -180,9 +201,20 @@ export default function MyStackTab({
 
   useEffect(() => {
     setPage(1);
-  }, [selectedCategories, selectedTech, selectedAssets, debouncedSearch, sortBy, pageSize, vulnFilter]);
+  }, [selectedCategories, selectedTech, selectedAssets, selectedCompanies, debouncedSearch, sortBy, pageSize, vulnFilter]);
 
-  if (techStackCount === 0) {
+  if (techStackCount === 0 && companies && !loading) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center gap-4 px-8 text-center">
+        <Building2 size={48} className="text-text-tertiary" />
+        <p className="text-sm text-text-secondary font-inter max-w-md">
+          {tr("No active company has technologies in its stack yet.")}
+        </p>
+      </div>
+    );
+  }
+
+  if (techStackCount === 0 && !companies) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-4 px-8 text-center">
         <Server size={48} className="text-text-tertiary" />
@@ -398,6 +430,34 @@ export default function MyStackTab({
                 `}
               >
                 {tech} <span className="text-text-tertiary ml-1">({count})</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Company filters (all-companies view) */}
+      {companies && (
+        <div className="mb-3 flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-medium font-jetbrains uppercase tracking-[0.08em] text-[#636E7B] mr-1">
+            {tr("Companies")}
+          </span>
+          <button
+            onClick={() => setSelectedCompanies([])}
+            className={`px-2.5 py-1 text-[11px] font-medium font-inter rounded-md transition-all duration-200 cursor-pointer ${selectedCompanies.length === 0 ? 'text-accent bg-accent-dim' : 'text-text-tertiary hover:text-text-secondary hover:bg-bg-elevated'}`}
+          >
+            {tr("All")} <span className="text-text-tertiary ml-1">({companies.length})</span>
+          </button>
+          {companyCounts.map((c) => {
+            const active = selectedCompanies.includes(c.id);
+            return (
+              <button
+                key={c.id}
+                onClick={() => setSelectedCompanies((prev) => (active ? prev.filter((id) => id !== c.id) : [...prev, c.id]))}
+                className={`px-2.5 py-1 text-[11px] font-medium font-jetbrains rounded-md transition-all duration-200 cursor-pointer ${active ? 'text-accent bg-accent-dim' : 'text-text-tertiary hover:text-text-secondary hover:bg-bg-elevated'}`}
+              >
+                <Building2 size={11} className="inline mr-1 -mt-0.5" />
+                {c.name} <span className="text-text-tertiary ml-1">({c.count})</span>
               </button>
             );
           })}
@@ -653,6 +713,23 @@ const StackNewsCard = memo(function StackNewsCard({ article, isSelected, onClick
           </span>
         )}
       </div>
+
+      {/* Row 3a: Companies (all-companies view) */}
+      {(article.tenants?.length ?? 0) > 0 && (
+        <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+          <span className="text-[10px] font-jetbrains uppercase tracking-wide text-text-tertiary">{tr("Companies")}</span>
+          {article.tenants!.map((t) => (
+            <span
+              key={t.id}
+              title={tr(VULN_STYLE[t.status].label)}
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-pill border text-[10px] font-medium font-jetbrains ${t.status === 'affected' ? VULN_STYLE.affected.cls : 'bg-bg-elevated text-text-secondary border-border-default'}`}
+            >
+              <Building2 size={10} />
+              {t.name}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Row 3b: Affected assets */}
       {(article.affectedAssets?.length ?? 0) > 0 && (

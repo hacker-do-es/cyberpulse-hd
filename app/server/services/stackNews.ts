@@ -161,3 +161,90 @@ export async function getStackNewsWithAssets(tenantId: number, limit: number) {
     })),
   };
 }
+
+/* ------------------------------------------------------------------ */
+/*  All companies (platform staff, no company picked)                  */
+/* ------------------------------------------------------------------ */
+
+export interface TenantRef {
+  id: number;
+  name: string;
+}
+
+type TenantNews = Awaited<ReturnType<typeof getStackNewsWithAssets>>['news'][number];
+type ArticleVuln = TenantNews['vuln'];
+
+/* Worst case first: one affected company makes the article "affected". */
+const VULN_RANK: Record<ArticleVuln['status'], number> = {
+  affected: 4, unverified: 3, pending: 2, not_affected: 1, no_cve: 0,
+};
+
+export function mergeVuln(list: ArticleVuln[]): ArticleVuln {
+  let status: ArticleVuln['status'] = 'no_cve';
+  for (const v of list) if (VULN_RANK[v.status] > VULN_RANK[status]) status = v.status;
+  return {
+    status,
+    cves: Array.from(new Set(list.flatMap((v) => v.cves))),
+    units: list.flatMap((v) => v.units),
+  };
+}
+
+export type AllTenantsNews = TenantNews & { tenants: Array<TenantRef & { status: ArticleVuln['status'] }> };
+
+/* One entry per article: technologies, stack rows and assets of every
+   company it matches, the best match score and the worst verdict. */
+export function mergeTenantNews(perTenant: Array<{ tenant: TenantRef; news: TenantNews[] }>): AllTenantsNews[] {
+  const byId = new Map<string, AllTenantsNews>();
+  for (const { tenant, news } of perTenant) {
+    for (const n of news) {
+      const seen = byId.get(n.id);
+      const t = { ...tenant, status: n.vuln.status };
+      if (!seen) {
+        byId.set(n.id, { ...n, tenants: [t] });
+        continue;
+      }
+      const assets = new Map(seen.affectedAssets.map((a) => [a.id, a]));
+      for (const a of n.affectedAssets) assets.set(a.id, a);
+      byId.set(n.id, {
+        ...seen,
+        matchScore: Math.max(seen.matchScore, n.matchScore),
+        matchedTechnologies: Array.from(new Set([...seen.matchedTechnologies, ...n.matchedTechnologies])),
+        matchedStackIds: Array.from(new Set([...seen.matchedStackIds, ...n.matchedStackIds])),
+        affectedAssets: Array.from(assets.values())
+          .sort((a, b) => criticalityRank(b.criticality) - criticalityRank(a.criticality) || a.name.localeCompare(b.name)),
+        vuln: mergeVuln([seen.vuln, n.vuln]),
+        tenants: [...seen.tenants, t],
+      });
+    }
+  }
+  return Array.from(byId.values()).sort((a, b) => b.matchScore - a.matchScore);
+}
+
+/* My Stack summed over every active company. Reuses each company's cached
+   matches, so it costs one pass per company the first time only. */
+export async function getAllTenantsStackNews(tenants: TenantRef[], limit: number) {
+  const perTenant: Array<{ tenant: TenantRef; news: TenantNews[] }> = [];
+  let totalArticles = 0;
+  let stackItems = 0;
+  for (const tenant of tenants) {
+    const count = stackRepository.count(tenant.id);
+    if (count === 0) continue;
+    stackItems += count;
+    const r = await getStackNewsWithAssets(tenant.id, limit);
+    totalArticles = Math.max(totalArticles, r.statistics.totalArticles);
+    perTenant.push({ tenant, news: r.news });
+  }
+  const news = mergeTenantNews(perTenant);
+  const byTechnology: Record<string, number> = {};
+  const bySeverity: Record<string, number> = {};
+  for (const n of news) {
+    for (const tech of n.matchedTechnologies) byTechnology[tech] = (byTechnology[tech] || 0) + 1;
+    bySeverity[n.category] = (bySeverity[n.category] || 0) + 1;
+  }
+  return {
+    news,
+    statistics: { totalArticles, matchedArticles: news.length, byTechnology, bySeverity },
+    stackItems,
+    tenants: perTenant.map((p) => p.tenant),
+  };
+}

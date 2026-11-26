@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useRSSFeeds } from '@/hooks/useRSSFeeds';
 import { countArticlesBySource, type TimeRange } from '@/lib/timeRange';
-import { createSource, deleteSource, fetchTechStackNews, fetchTechStack, type TechStackNewsArticle } from '@/services/apiService';
+import { createSource, deleteSource, fetchAllTenantsStackNews, fetchTechStackNews, fetchTechStack, type TechStackNewsArticle } from '@/services/apiService';
 import { LanguageToggle, tr, useI18n } from '@/lib/i18n';
 import { toast } from 'sonner';
 import { LinkedInPublishDialog } from './hd/LinkedIn';
@@ -183,41 +183,48 @@ export default function Layout() {
     setActiveTab('generate');
   }, []);
 
-  const loadStackNews = useCallback(async () => {
-    setLoadingStack(true);
-    try {
-      const [newsData, stackData] = await Promise.all([
-        fetchTechStackNews(),
-        fetchTechStack(),
-      ]);
+  /* Platform staff with no company picked see My Stack summed over every company. */
+  const allCompanies = !hasTenant && can('platform.switchTenant');
+  const [stackCompanies, setStackCompanies] = useState<Array<{ id: number; name: string }>>([]);
+
+  const fetchStack = useCallback(async () => {
+    if (allCompanies) {
+      const data = await fetchAllTenantsStackNews();
+      setStackNews(data.news);
+      setStackStatistics(data.statistics);
+      setTechStackCount(data.stackItems);
+      setStackCompanies(data.tenants);
+    } else {
+      const [newsData, stackData] = await Promise.all([fetchTechStackNews(), fetchTechStack()]);
       setStackNews(newsData.news);
       setStackStatistics(newsData.statistics);
       setTechStackCount(stackData.length);
-      setStackLastUpdated(new Date());
+      setStackCompanies([]);
+    }
+    setStackLastUpdated(new Date());
+  }, [allCompanies]);
+
+  const loadStackNews = useCallback(async () => {
+    setLoadingStack(true);
+    try {
+      await fetchStack();
     } catch (err) {
       console.error('[Layout] Failed to load tech stack news:', err);
     } finally {
       setLoadingStack(false);
     }
-  }, []);
+  }, [fetchStack]);
 
   const refreshStackNews = useCallback(async () => {
     setRefreshingStack(true);
     try {
-      const [newsData, stackData] = await Promise.all([
-        fetchTechStackNews(),
-        fetchTechStack(),
-      ]);
-      setStackNews(newsData.news);
-      setStackStatistics(newsData.statistics);
-      setTechStackCount(stackData.length);
-      setStackLastUpdated(new Date());
+      await fetchStack();
     } catch (err) {
       console.error('[Layout] Failed to refresh tech stack news:', err);
     } finally {
       setRefreshingStack(false);
     }
-  }, []);
+  }, [fetchStack]);
 
   /* Another company's matches must not leak into the picker after a switch. */
   useEffect(() => {
@@ -237,10 +244,10 @@ export default function Layout() {
 
   // Load tech stack news on mount and when switching to my-stack tab
   useEffect(() => {
-    if (activeTab === 'my-stack' && hasTenant) {
+    if (activeTab === 'my-stack' && (hasTenant || allCompanies)) {
       loadStackNews();
     }
-  }, [activeTab, loadStackNews, hasTenant, me?.activeTenant?.id]);
+  }, [activeTab, loadStackNews, hasTenant, allCompanies, me?.activeTenant?.id]);
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -267,10 +274,11 @@ export default function Layout() {
           />
         );
       case 'my-stack':
-        if (!hasTenant) return <NeedsCompany onPick={pickCompany} />;
+        if (!hasTenant && !allCompanies) return <NeedsCompany onPick={pickCompany} />;
         return (
           <MyStackTab
-            key="my-stack"
+            key={hasTenant ? 'my-stack' : 'my-stack-all'}
+            companies={allCompanies ? stackCompanies : undefined}
             articles={stackNews}
             loading={loadingStack}
             refreshing={refreshingStack}

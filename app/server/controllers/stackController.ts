@@ -5,7 +5,8 @@ import { badRequest, conflict, idParam, notFound, optStr, str, tenantOf } from '
 import { assetRepository, type AssetRef } from '../repositories/assetRepository';
 import { stackRepository, type StackValues } from '../repositories/stackRepository';
 import { CSV_TEMPLATE, stackKey, toStackCsv } from '../services/csv';
-import { getStackNewsWithAssets } from '../services/stackNews';
+import { tenantRepository } from '../repositories/tenantRepository';
+import { getAllTenantsStackNews, getStackNewsWithAssets } from '../services/stackNews';
 import { importStack } from '../useCases/importStack';
 
 type AssetWithVersion = AssetRef & { version?: string | null };
@@ -132,5 +133,13 @@ export const stackController = {
   async news(req: express.Request, res: express.Response) {
     const limit = Math.min(Number(req.query.limit) || 1000, config.maxNews);
     res.json(await getStackNewsWithAssets(tenantOf(req), limit));
+  },
+
+  /* My Stack over every active company: platform staff with no company
+     picked. Each article lists the companies it matches. */
+  async newsAll(req: express.Request, res: express.Response) {
+    const limit = Math.min(Number(req.query.limit) || 1000, config.maxNews);
+    const tenants = tenantRepository.listBasic().filter((t) => t.active).map(({ id, name }) => ({ id, name }));
+    res.json(await getAllTenantsStackNews(tenants, limit));
   },
 };
