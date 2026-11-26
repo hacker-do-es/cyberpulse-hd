@@ -16,8 +16,8 @@ export function roleLabel(role: Role | undefined): string {
 
 export function companyRoleHint(role: CompanyRole): string {
   switch (role) {
-    case 'admin': return tr('Everything, including users and integrations (channels, AI, agent tokens, LinkedIn).');
-    case 'operator': return tr('Works with the stack and assets and runs the existing channels. No users or integrations.');
+    case 'admin': return tr('Everything, including users and integrations (channels, AI, LinkedIn).');
+    case 'operator': return tr('Works with the stack, assets and inventory agents and runs the existing channels. No users or integrations.');
     case 'member': return tr('Sees the stack, assets, agents and news. Cannot change anything.');
   }
 }

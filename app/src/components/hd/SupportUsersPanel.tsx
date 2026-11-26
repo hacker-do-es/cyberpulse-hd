@@ -55,7 +55,7 @@ export default function SupportUsersPanel() {
     <Panel
       title={tr('Support users')}
       icon={<LifeBuoy size={18} />}
-      description={tr('Hacker-Do staff. They pick a company and work there as operators (stack, assets, running channels) and can read the logs. They cannot manage companies, feeds, users or integrations.')}
+      description={tr('Hacker-Do staff. They pick a company and work there as operators (stack, assets, agents, running channels) and can read the logs. They cannot manage companies, feeds, users or integrations.')}
       actions={<Button size="sm" onClick={() => setCreateOpen(true)}><UserPlus size={14} /> {tr('New support user')}</Button>}
     >
       {loading ? <p className="text-sm text-text-tertiary">{tr('Loading…')}</p> : users.length === 0 ? (

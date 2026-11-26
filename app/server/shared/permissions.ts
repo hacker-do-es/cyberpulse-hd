@@ -8,9 +8,10 @@
                  reads the audit log; cannot manage companies, feeds or users.
    Company roles:
      admin       everything inside the company: users and integrations
-                 (channels, AI provider, agent tokens, LinkedIn).
+                 (channels, AI provider, LinkedIn).
      operator    day-to-day work: any change to the stack and the assets,
-                 running existing channels, generating content and proposing
+                 inventory agent tokens (to add reporting hosts), running
+                 existing channels, generating content and proposing
                  LinkedIn posts. No users, no integrations.
      member      read only ("Lector" in the UI). */
 
@@ -46,11 +47,11 @@ export const PERMISSIONS = [
 export type Permission = (typeof PERMISSIONS)[number];
 
 const OPERATOR: Permission[] = [
-  'inventory.read', 'inventory.write', 'channels.read', 'channels.run', 'content.generate',
+  'inventory.read', 'inventory.write', 'agents.tokens', 'channels.read', 'channels.run', 'content.generate',
 ];
 
 const ADMIN: Permission[] = [
-  ...OPERATOR, 'channels.manage', 'settings.manage', 'agents.tokens', 'users.manage',
+  ...OPERATOR, 'channels.manage', 'settings.manage', 'users.manage',
   'linkedin.connect', 'linkedin.approve',
 ];
 

@@ -260,6 +260,14 @@ describe('multitenant API', () => {
     expect((await operatorA.req('DELETE', `/api/tech-stack/${t.body.item.id}`)).status).toBe(200);
     expect((await operatorA.req('GET', '/api/assets/duplicates')).status).toBe(200);
 
+    /* Agent tokens: operators add reporting hosts themselves. */
+    const tok = await operatorA.req('POST', '/api/inventory/tokens', { name: 'Operator hosts' });
+    expect(tok.status).toBe(201);
+    const listed = (await operatorA.req('GET', '/api/inventory/tokens')).body.tokens;
+    const mine = listed.find((t: any) => t.name === 'Operator hosts');
+    expect(mine).toBeTruthy();
+    expect((await operatorA.req('DELETE', `/api/inventory/tokens/${mine.id}`)).status).toBe(200);
+
     /* Channels: sees them, cannot configure them. */
     expect((await operatorA.req('GET', '/api/channels')).status).toBe(200);
     expect((await operatorA.req('POST', '/api/channels', { name: 'x', type: 'slack', webhookUrl: 'https://hooks.slack.com/services/T/B/C' })).status).toBe(403);
@@ -270,8 +278,6 @@ describe('multitenant API', () => {
     expect((await operatorA.req('POST', '/api/users', { username: 'x2', password: PW, role: 'admin' })).status).toBe(403);
     expect((await operatorA.req('GET', '/api/tenant/settings')).status).toBe(403);
     expect((await operatorA.req('PUT', '/api/tenant/settings', { language: 'en' })).status).toBe(403);
-    expect((await operatorA.req('GET', '/api/inventory/tokens')).status).toBe(403);
-    expect((await operatorA.req('POST', '/api/inventory/tokens', { name: 'x' })).status).toBe(403);
     expect((await operatorA.req('GET', '/api/inventory/agents')).status).toBe(200);
     expect((await operatorA.req('GET', '/api/linkedin/connect')).status).toBe(403);
     expect((await operatorA.req('POST', '/api/linkedin/posts', { text: 'x' })).status).toBe(403);
@@ -320,7 +326,6 @@ describe('multitenant API', () => {
     expect((await support.req('GET', '/api/users')).status).toBe(403);
     expect((await support.req('GET', '/api/admin/users')).status).toBe(403);
     expect((await support.req('GET', '/api/tenant/settings')).status).toBe(403);
-    expect((await support.req('POST', '/api/inventory/tokens', { name: 'x' })).status).toBe(403);
     expect((await support.req('POST', '/api/channels', { name: 'x', type: 'slack', webhookUrl: 'https://hooks.slack.com/services/T/B/C' })).status).toBe(403);
 
     /* Disabling a support user ends their sessions. */
