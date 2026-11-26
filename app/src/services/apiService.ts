@@ -205,6 +205,8 @@ export interface AssetRef {
   name: string;
   criticality: AssetCriticality;
   environment: string | null;
+  /* All-companies My Stack only: the asset's company. */
+  tenantId?: number;
 }
 
 export interface TechStackItem {

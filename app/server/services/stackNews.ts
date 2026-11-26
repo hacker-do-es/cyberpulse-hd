@@ -189,14 +189,17 @@ export function mergeVuln(list: ArticleVuln[]): ArticleVuln {
   };
 }
 
-export type AllTenantsNews = TenantNews & { tenants: Array<TenantRef & { status: ArticleVuln['status'] }> };
+export type AllTenantsNews = Omit<TenantNews, 'affectedAssets'> & {
+  affectedAssets: Array<TenantNews['affectedAssets'][number] & { tenantId: number }>; tenants: Array<TenantRef & { status: ArticleVuln['status'] }> };
 
 /* One entry per article: technologies, stack rows and assets of every
    company it matches, the best match score and the worst verdict. */
 export function mergeTenantNews(perTenant: Array<{ tenant: TenantRef; news: TenantNews[] }>): AllTenantsNews[] {
   const byId = new Map<string, AllTenantsNews>();
   for (const { tenant, news } of perTenant) {
-    for (const n of news) {
+    for (const raw of news) {
+      /* Assets carry their company so the UI can narrow them by company. */
+      const n = { ...raw, affectedAssets: raw.affectedAssets.map((a) => ({ ...a, tenantId: tenant.id })) };
       const seen = byId.get(n.id);
       const t = { ...tenant, status: n.vuln.status };
       if (!seen) {

@@ -37,6 +37,8 @@ function vulnGroup(status: VulnStatus | undefined): Exclude<VulnFilter, 'all'> {
   return 'unverified';
 }
 
+const VULN_RANK: Record<VulnStatus, number> = { affected: 4, unverified: 3, pending: 2, not_affected: 1, no_cve: 0 };
+
 const VULN_FILTERS: { key: VulnFilter; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'affected', label: 'Affects you (verified)' },
@@ -96,7 +98,24 @@ export default function MyStackTab({
   /* The company filter narrows every other filter's options and counts. */
   const scoped = useMemo(
     () => (selectedCompanies.length > 0
-      ? articles.filter((a) => (a.tenants ?? []).some((t) => selectedCompanies.includes(t.id)))
+      ? articles
+        .filter((a) => (a.tenants ?? []).some((t) => selectedCompanies.includes(t.id)))
+        .map((a) => {
+          const assets = (a.affectedAssets ?? []).filter((as) => as.tenantId === undefined || selectedCompanies.includes(as.tenantId));
+          const keep = new Set(assets.map((as) => as.id));
+          /* Verdict of the picked companies only (worst first). */
+          const status = (a.tenants ?? [])
+            .filter((t) => selectedCompanies.includes(t.id))
+            .map((t) => t.status)
+            .sort((x, y) => VULN_RANK[y] - VULN_RANK[x])[0];
+          return {
+            ...a,
+            affectedAssets: assets,
+            vuln: a.vuln && status
+              ? { ...a.vuln, status, units: a.vuln.units.filter((u) => u.assetId === null || keep.has(u.assetId)) }
+              : a.vuln,
+          };
+        })
       : articles),
     [articles, selectedCompanies]
   );
