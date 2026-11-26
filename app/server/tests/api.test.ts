@@ -1145,7 +1145,9 @@ describe('assets (what runs the stack)', () => {
     expect(withAssets.body.channel.includeAssets).toBe(true);
     received.length = 0;
     await admin.req('POST', `/api/channels/${withAssets.body.channel.id}/run`);
-    expect(received[0].body.text).toMatch(/activos: WEB01 · web01\.assetco\.local · 10\.0\.0\.10, 2001:db8::10 \\?\(alta\\?\)/);
+    expect(received[0].body.text).toMatch(/🖥 WEB01 · web01\.assetco\.local · 10\.0\.0\.10, 2001:db8::10 \\?\(alta\\?\)/);
+    /* Grouped by asset criticality, critical assets first. */
+    expect(received[0].body.text).toMatch(/ACTIVOS CRÍTICOS/);
 
     /* Only news affecting a high-criticality asset: Nginx (LB01, low) is dropped. */
     const critical = await admin.req('POST', '/api/channels', { name: 'crit', type: 'rocketchat', webhookUrl: hookUrl, minSeverity: 'low', verifiedOnly: false, minAssetCriticality: 'high', schedule: { type: 'interval', intervalHours: 6 } });
@@ -1286,7 +1288,10 @@ describe('version-verified vulnerabilities', () => {
       const text = received[0].body.text;
       expect(text).toContain('CVE-2024-7347');
       /* Rocket.Chat markdown escapes the parentheses. */
-      expect(text.replace(/\\/g, '')).toContain('nginx 1.22.1 (CVE-2024-7347, corregida en 1.27.1)');
+      expect(text.replace(/\\/g, '')).toContain('🔧 nginx 1.22.1 → actualizar a 1.27.1');
+      expect(text).toContain('CVE-2024-7347');
+      expect(text.replace(/\\/g, '')).toMatch(/ACTIVOS CRÍTICOS \(1\)/);
+      expect(text).toMatch(/1 alta/);
       expect(text).toContain('EDGE-OLD');
       expect(text).not.toContain('EDGE-NEW');
       expect(text).not.toContain('tuning');

@@ -1,17 +1,11 @@
 import { escapeHtml, fillPlaceholdersHtml } from './html';
+import { countLabel, groupByTier, severityCounts, type ReportItem, type ReportLabels, type Tier } from '../reportLayout';
 
 /* The digest as an email: a table layout that renders the same in Gmail,
    Outlook and Apple Mail, plus a plain-text alternative. Neutral styling,
    no product branding: the company's own header/footer carry that. */
 
-export interface EmailItem {
-  title: string;
-  url: string;
-  source: string;
-  severity: string;
-  matchedTech: string[];
-  assets?: string[];
-}
+export type EmailItem = ReportItem;
 
 export interface EmailDigest {
   subject: string;
@@ -26,11 +20,12 @@ export interface EmailDigest {
   items: EmailItem[];
   /* Free text shown instead of the item list (test message). */
   body?: string;
-  labels: { severity: Record<string, string>; affects: string; assets?: string; summary: string };
+  labels: ReportLabels & { summary: string };
 }
 
-const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low'];
 const SEVERITY_COLOR: Record<string, string> = { critical: '#b91c1c', high: '#c2410c', medium: '#a16207', low: '#15803d' };
+const TIER_COLOR: Record<Tier, string> = { high: '#b91c1c', medium: '#c2410c', low: '#2563eb', none: '#6b7280' };
+const CRIT_CHIP: Record<string, string> = { high: '#fee2e2;color:#991b1b', medium: '#ffedd5;color:#9a3412', low: '#e0e7ff;color:#3730a3' };
 const FONT = "-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 function safeUrl(u: string): string | null {
@@ -40,12 +35,6 @@ function safeUrl(u: string): string | null {
   } catch {
     return null;
   }
-}
-
-function grouped(items: EmailItem[]): Array<[string, EmailItem[]]> {
-  return SEVERITY_ORDER
-    .map((sev) => [sev, items.filter((i) => (i.severity || 'low').toLowerCase() === sev)] as [string, EmailItem[]])
-    .filter(([, list]) => list.length > 0);
 }
 
 const row = (inner: string, pad = '8px 28px') => `<tr><td style="padding:${pad};font-family:${FONT};">${inner}</td></tr>`;
@@ -73,30 +62,29 @@ export function renderEmailHtml(d: EmailDigest): string {
     ));
   }
 
-  for (const [sev, list] of grouped(d.items)) {
-    const color = SEVERITY_COLOR[sev] ?? '#374151';
-    const label = escapeHtml(d.labels.severity[sev] ?? sev.toUpperCase());
-    const items = list.map((it) => {
-      const url = safeUrl(it.url);
-      const title = escapeHtml(it.title);
-      const link = url
-        ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="color:#1d4ed8;text-decoration:none;font-weight:600;">${title}</a>`
-        : `<span style="font-weight:600;color:#111827;">${title}</span>`;
-      const tech = it.matchedTech.length
-        ? ` · ${escapeHtml(d.labels.affects)}: <span style="color:#111827;">${escapeHtml(it.matchedTech.join(', '))}</span>`
-        : '';
-      const assets = it.assets?.length
-        ? `<div style="font-size:12px;line-height:1.5;color:#6b7280;">${escapeHtml(d.labels.assets ?? 'assets')}: <span style="color:#111827;">${escapeHtml(it.assets.join(', '))}</span></div>`
-        : '';
-      return `<tr><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;font-family:${FONT};">` +
-        `<div style="font-size:15px;line-height:1.4;">${link}</div>` +
-        `<div style="font-size:12px;line-height:1.5;color:#6b7280;margin-top:2px;">${escapeHtml(it.source)}${tech}</div>${assets}</td></tr>`;
-    }).join('');
-    parts.push(row(
-      `<div style="margin-top:10px;"><span style="display:inline-block;background:${color};color:#ffffff;font-size:11px;font-weight:700;letter-spacing:.06em;border-radius:3px;padding:3px 8px;">${label}</span>` +
-      ` <span style="font-size:12px;color:#6b7280;">(${list.length})</span></div>` +
-      `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${items}</table>`,
-    ));
+  /* At a glance: counts per severity, and how many hit critical assets. */
+  const counts = severityCounts(d.items);
+  const critical = d.items.filter((i) => i.tier === 'high').length;
+  if (counts.length) {
+    const chips = counts.map(([sev, n]) =>
+      `<span style="display:inline-block;background:${SEVERITY_COLOR[sev] ?? '#374151'};color:#ffffff;font-size:12px;font-weight:700;border-radius:12px;padding:4px 10px;margin:0 6px 6px 0;">${escapeHtml(countLabel(d.labels, sev, n))}</span>`).join('');
+    const crit = critical && d.labels.inCritical
+      ? `<span style="display:inline-block;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;font-size:12px;font-weight:700;border-radius:12px;padding:3px 10px;margin:0 6px 6px 0;">&#9888; ${critical} ${escapeHtml(d.labels.inCritical)}</span>`
+      : '';
+    parts.splice(1, 0, row(`<div>${chips}${crit}</div>`, '4px 28px 8px'));
+  }
+
+  for (const group of groupByTier(d.items)) {
+    if (group.tier) {
+      const name = escapeHtml((d.labels.tiers?.[group.tier] ?? group.tier).toUpperCase());
+      parts.push(row(
+        `<div style="margin-top:14px;border-left:4px solid ${TIER_COLOR[group.tier]};padding:6px 12px;background:#f9fafb;border-radius:0 4px 4px 0;">` +
+        `<span style="font-size:13px;font-weight:800;letter-spacing:.06em;color:${TIER_COLOR[group.tier]};">${name}</span>` +
+        ` <span style="font-size:12px;color:#6b7280;">(${group.items.length})</span></div>`,
+        '8px 28px 4px',
+      ));
+    }
+    parts.push(row(group.items.map((it) => card(it, d.labels)).join(''), '4px 28px'));
   }
 
   const footer = d.footerHtml === null
@@ -114,16 +102,63 @@ export function renderEmailHtml(d: EmailDigest): string {
     '</table></td></tr></table></body></html>';
 }
 
+function card(it: EmailItem, labels: EmailDigest['labels']): string {
+  const sev = (it.severity || 'low').toLowerCase();
+  const color = SEVERITY_COLOR[sev] ?? '#374151';
+  const url = safeUrl(it.url);
+  const title = escapeHtml(it.title);
+  const link = url
+    ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="color:#111827;text-decoration:none;font-weight:700;">${title}</a>`
+    : `<span style="font-weight:700;color:#111827;">${title}</span>`;
+  const pills = `<span style="display:inline-block;background:${color};color:#ffffff;font-size:10px;font-weight:800;letter-spacing:.06em;border-radius:3px;padding:2px 7px;">${escapeHtml(labels.severity[sev] ?? sev.toUpperCase())}</span>` +
+    (typeof it.cvss === 'number' ? ` <span style="display:inline-block;border:1px solid ${color};color:${color};font-size:10px;font-weight:700;border-radius:3px;padding:1px 6px;">CVSS ${it.cvss.toFixed(1)}</span>` : '');
+  const meta = [...(it.cves ?? []).slice(0, 3), it.source].filter(Boolean).map(escapeHtml).join(' &middot; ');
+  let fix = '';
+  if (it.fixes?.length) {
+    fix = it.fixes.map((f) => {
+      const cur = escapeHtml(`${f.technology}${f.version ? ` ${f.version}` : ''}`);
+      return f.fixedIn
+        ? `<span style="color:#111827;font-weight:600;">${cur}</span> &rarr; <span style="color:#15803d;font-weight:700;">${escapeHtml(labels.updateTo ?? 'update to')} ${escapeHtml(f.fixedIn)}</span>`
+        : `<span style="color:#111827;font-weight:600;">${cur}</span>`;
+    }).join('<br>');
+  } else if (it.matchedTech.length) {
+    fix = `${escapeHtml(labels.affects)}: <span style="color:#111827;font-weight:600;">${escapeHtml(it.matchedTech.join(', '))}</span>`;
+  }
+  const assets = it.assets?.length
+    ? `<div style="margin-top:6px;">${it.assets.map((a) => {
+      const crit = /\((alta|high)\)$/i.test(a) ? 'high' : /\((media|medium)\)$/i.test(a) ? 'medium' : 'low';
+      return `<span style="display:inline-block;background:${CRIT_CHIP[crit]};font-size:11px;border-radius:3px;padding:2px 6px;margin:0 4px 4px 0;font-family:Menlo,Consolas,monospace;">${escapeHtml(a)}</span>`;
+    }).join('')}</div>`
+    : '';
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0;border:1px solid #e5e7eb;border-left:4px solid ${color};border-radius:4px;">` +
+    `<tr><td style="padding:10px 12px;font-family:${FONT};">` +
+    `<div>${pills}</div>` +
+    `<div style="font-size:15px;line-height:1.35;margin-top:6px;">${link}</div>` +
+    `<div style="font-size:12px;line-height:1.5;color:#6b7280;margin-top:2px;">${meta}</div>` +
+    (fix ? `<div style="font-size:13px;line-height:1.6;color:#374151;margin-top:6px;">&#128295; ${fix}</div>` : '') +
+    assets +
+    `</td></tr></table>`;
+}
+
 /* Plain-text alternative: same content, links spelled out. */
 export function renderEmailText(d: EmailDigest): string {
   const lines: string[] = [d.subject];
   if (d.body) lines.push('', d.body);
   if (d.summary) lines.push('', `${d.labels.summary}:`, d.summary);
-  for (const [sev, list] of grouped(d.items)) {
-    lines.push('', `${d.labels.severity[sev] ?? sev.toUpperCase()} (${list.length})`);
-    for (const it of list) {
-      const tech = it.matchedTech.length ? ` — ${d.labels.affects}: ${it.matchedTech.join(', ')}` : '';
-      lines.push(`- ${it.title} · ${it.source}${tech}`);
+  const counts = severityCounts(d.items).map(([sev, n]) => countLabel(d.labels, sev, n));
+  const critical = d.items.filter((i) => i.tier === 'high').length;
+  if (critical && d.labels.inCritical) counts.push(`${critical} ${d.labels.inCritical}`);
+  if (counts.length) lines.splice(1, 0, counts.join(' · '));
+  for (const group of groupByTier(d.items)) {
+    if (group.tier) lines.push('', `== ${(d.labels.tiers?.[group.tier] ?? group.tier).toUpperCase()} (${group.items.length}) ==`);
+    for (const it of group.items) {
+      const sev = (it.severity || 'low').toLowerCase();
+      lines.push('', `[${d.labels.severity[sev] ?? sev.toUpperCase()}] ${it.title}`);
+      const meta = [...(it.cves ?? []).slice(0, 3), ...(typeof it.cvss === 'number' ? [`CVSS ${it.cvss.toFixed(1)}`] : []), it.source];
+      lines.push(`  ${meta.join(' · ')}`);
+      if (it.fixes?.length) {
+        for (const f of it.fixes) lines.push(`  ${f.technology}${f.version ? ` ${f.version}` : ''}${f.fixedIn ? ` -> ${d.labels.updateTo ?? 'update to'} ${f.fixedIn}` : ''}`);
+      } else if (it.matchedTech.length) lines.push(`  ${d.labels.affects}: ${it.matchedTech.join(', ')}`);
       if (it.assets?.length) lines.push(`  ${d.labels.assets ?? 'assets'}: ${it.assets.join(', ')}`);
       const url = safeUrl(it.url);
       if (url) lines.push(`  ${url}`);

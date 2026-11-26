@@ -2,6 +2,7 @@ import type { ChannelType } from '../../db/schema';
 import { flags } from '../../config';
 import { postJson as realPostJson, WebhookError } from './http';
 import { parseStoredTelegramTarget, telegramApiUrl } from './telegram';
+import { countLabel, groupByTier, severityCounts, type ReportItem, type ReportLabels, type Tier } from '../reportLayout';
 
 /* Slack / Rocket.Chat / Discord incoming webhooks and Telegram bots: URL
    validation, message rendering and delivery. The SSRF-guarded transport
@@ -47,25 +48,16 @@ export function validateWebhookUrl(type: ChannelType, raw: unknown): { url: URL 
 /*  Message rendering                                                  */
 /* ------------------------------------------------------------------ */
 
-export interface DigestItem {
-  title: string;
-  url: string;
-  source: string;
-  severity: string;
-  matchedTech: string[];
-  /* Affected assets, already formatted; only on channels that include them. */
-  assets?: string[];
-}
+export type DigestItem = ReportItem;
 
 export interface DigestMessage {
   heading: string;
   summary?: string | null;
   items: DigestItem[];
   footer: string;
-  labels: { severity: Record<string, string>; affects: string; assets?: string };
+  labels: ReportLabels;
 }
 
-const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low'];
 const SEVERITY_UNICODE: Record<string, string> = { critical: '🔴', high: '🟠', medium: '🟡', low: '🟢' };
 const SEVERITY_EMOJI: Record<string, string> = {
   critical: ':red_circle:',
@@ -163,27 +155,63 @@ function safeUrl(u: string): string | null {
   }
 }
 
-function grouped(items: DigestItem[]): Array<[string, DigestItem[]]> {
-  return SEVERITY_ORDER
-    .map((sev) => [sev, items.filter((i) => (i.severity || 'low').toLowerCase() === sev)] as [string, DigestItem[]])
-    .filter(([, list]) => list.length > 0);
+const TIER_EMOJI: Record<Tier, string> = { high: '🚨', medium: '🔶', low: '🔹', none: '▫️' };
+const RULE = '━━━━━━━━';
+
+function severityEmoji(type: ChannelType, sev: string): string {
+  return type === 'slack' || type === 'rocketchat' ? SEVERITY_EMOJI[sev] ?? '' : SEVERITY_UNICODE[sev] ?? '';
+}
+
+/* One news item, three short lines at most:
+     🔴 CRÍTICA · <title link>
+        CVE-2026-1 · CVSS 9.8 · Source
+        🔧 nginx 1.22.1 → actualizar a 1.27.1
+        🖥 WEB01 · web01.local (alta)                                 */
+function renderItem(type: ChannelType, st: Style, it: DigestItem, labels: ReportLabels): string[] {
+  const sev = (it.severity || 'low').toLowerCase();
+  const url = safeUrl(it.url);
+  const title = st.esc(it.title);
+  const link = url ? st.link(title, url) : title;
+  const out = [`${severityEmoji(type, sev)} ${st.bold(st.esc(labels.severity[sev] ?? sev.toUpperCase()))} · ${link}`];
+  const meta = [...(it.cves ?? []).slice(0, 3), ...(typeof it.cvss === 'number' ? [`CVSS ${it.cvss.toFixed(1)}`] : []), it.source]
+    .filter(Boolean).map((m) => st.esc(m)).join(' · ');
+  out.push(`      ${st.italic(meta)}`);
+  if (it.fixes?.length) {
+    const fixes = it.fixes.map((f) => {
+      const cur = `${f.technology}${f.version ? ` ${f.version}` : ''}`;
+      return f.fixedIn ? `${cur} → ${labels.updateTo ?? 'update to'} ${f.fixedIn}` : cur;
+    });
+    out.push(`      🔧 ${st.esc(fixes.join(' | '))}`);
+  } else if (it.matchedTech.length) {
+    out.push(`      🔧 ${st.esc(`${labels.affects}: ${it.matchedTech.join(', ')}`)}`);
+  }
+  if (it.assets?.length) out.push(`      🖥 ${st.esc(it.assets.join(' | '))}`);
+  return out;
 }
 
 export function renderMessage(type: ChannelType, msg: DigestMessage): { text: string } {
   const st = styleFor(type);
   const lines: string[] = [st.bold(st.esc(msg.heading))];
+
+  /* At-a-glance line: counts per severity and how many hit critical assets. */
+  const counts = severityCounts(msg.items).map(([sev, n]) => `${severityEmoji(type, sev)} ${st.esc(countLabel(msg.labels, sev, n))}`);
+  const critical = msg.items.filter((i) => i.tier === 'high').length;
+  if (critical && msg.labels.inCritical) counts.push(`🚨 ${st.bold(st.esc(`${critical} ${msg.labels.inCritical}`))}`);
+  if (counts.length) lines.push(counts.join('  ·  '));
+
   if (msg.summary) lines.push('', st.esc(msg.summary));
-  for (const [sev, list] of grouped(msg.items)) {
-    const emoji = type === 'slack' || type === 'rocketchat' ? SEVERITY_EMOJI[sev] ?? '' : SEVERITY_UNICODE[sev] ?? '';
-    lines.push('', `${emoji} ${st.bold(st.esc(msg.labels.severity[sev] ?? sev.toUpperCase()))} (${list.length})`);
-    for (const it of list) {
-      const url = safeUrl(it.url);
-      const title = st.esc(it.title);
-      const link = url ? st.link(title, url) : title;
-      const tech = it.matchedTech.length ? ` — ${st.italic(`${st.esc(msg.labels.affects)}: ${st.esc(it.matchedTech.join(', '))}`)}` : '';
-      const assets = it.assets?.length ? ` — ${st.italic(`${st.esc(msg.labels.assets ?? 'assets')}: ${st.esc(it.assets.join(', '))}`)}` : '';
-      lines.push(`• ${link} · ${st.esc(it.source)}${tech}${assets}`);
+
+  for (const group of groupByTier(msg.items)) {
+    if (group.tier) {
+      const name = msg.labels.tiers?.[group.tier] ?? group.tier;
+      lines.push('', `${RULE} ${TIER_EMOJI[group.tier]} ${st.bold(st.esc(`${name.toUpperCase()} (${group.items.length})`))} ${RULE}`);
+    } else {
+      lines.push('');
     }
+    group.items.forEach((it, i) => {
+      if (i > 0) lines.push('');
+      lines.push(...renderItem(type, st, it, msg.labels));
+    });
   }
   lines.push(...footerLines(type, msg.footer));
   return { text: lines.join('\n') };

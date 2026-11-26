@@ -51,9 +51,9 @@ async function buildAndSend(channel: ChannelRow, tenant: TenantRow, now: Date): 
     return { status: 'skipped', articleCount: 0, detail: 'The company has no technology stack configured' };
   }
 
-  /* Assets are looked up only for channels that use them (LinkedIn returned
-     above and never sees them). */
-  const assetLinks = channel.includeAssets || channel.minAssetCriticality ? assetRepository.linksByStackItem(tenant.id) : undefined;
+  /* LinkedIn returned above and never sees assets. Always loaded for digest channels: items are grouped by the criticality
+     of the assets they affect. Asset NAMES only appear with include_assets. */
+  const assetLinks = assetRepository.linksByStackItem(tenant.id);
   const stats = emptyStats();
   const selected = await selectCandidates(channel, stack, now, assetLinks, stats);
   if (selected.length === 0) {
@@ -68,7 +68,7 @@ async function buildAndSend(channel: ChannelRow, tenant: TenantRow, now: Date): 
   }
   /* The AI summary below is given `selected`, which never carries assets:
      client asset names are not sent to the AI provider. */
-  const items = channel.includeAssets && assetLinks ? withAssets(selected, assetLinks) : selected;
+  const items = channel.includeAssets ? withAssets(selected, assetLinks) : selected;
 
   let summary: string | null = null;
   let aiNote = '';
