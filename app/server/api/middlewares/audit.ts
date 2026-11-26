@@ -52,7 +52,7 @@ const ACTIONS: Record<string, string> = {
 
 /* Generating text and previews change nothing: not worth an audit line. */
 /* Agent reports are audited by the controller (with company and host). */
-const SKIP = new Set(['POST /inventory/report', 'POST /auth/login', 'POST /generate', 'POST /digest', 'POST /generate-ai', 'POST /channels/preview-email']);
+const SKIP = new Set(['POST /assets/merge', 'POST /inventory/report', 'POST /auth/login', 'POST /generate', 'POST /digest', 'POST /generate-ai', 'POST /channels/preview-email']);
 
 export function auditTrail(req: express.Request, res: express.Response, next: express.NextFunction) {
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();

@@ -125,9 +125,22 @@ export const assetApi = {
   create: (a: AssetInput) => call<{ item: Asset }>('POST', '/api/assets', a).then((r) => r.item),
   update: (id: number, a: AssetInput) => call<{ item: Asset }>('PUT', `/api/assets/${id}`, a).then((r) => r.item),
   remove: (id: number) => call<{ success: true }>('DELETE', `/api/assets/${id}`),
+  duplicates: () => call<{ pairs: AssetDuplicate[] }>('GET', '/api/assets/duplicates').then((r) => r.pairs),
+  mergePreview: (targetId: number, sourceIds: number[]) =>
+    call<{ values: AssetMergeValues }>('POST', '/api/assets/merge', { targetId, sourceIds, preview: true }).then((r) => r.values),
+  merge: (targetId: number, sourceIds: number[], values: Partial<AssetMergeValues>) =>
+    call<{ item: Asset }>('POST', '/api/assets/merge', { targetId, sourceIds, values }).then((r) => r.item),
   importCsv: (csv: string, mode: 'merge' | 'replace', dryRun: boolean) =>
     call<AssetImportSummary>('POST', `/api/assets/import?mode=${mode}&dryRun=${dryRun}`, undefined, { raw: csv, contentType: 'text/csv' }),
 };
+
+export interface AssetDuplicate {
+  ids: [number, number];
+  reason: 'same-hostname' | 'name-is-hostname' | 'notes-mention-container' | 'similar-name';
+}
+
+export const MERGE_FIELDS = ['name', 'type', 'criticality', 'environment', 'hostname', 'ip', 'brand', 'model', 'owner', 'notes'] as const;
+export type AssetMergeValues = Record<(typeof MERGE_FIELDS)[number], string | null>;
 
 export interface AssetImportSummary {
   dryRun: boolean;

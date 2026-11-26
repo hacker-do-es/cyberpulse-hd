@@ -84,6 +84,8 @@ export function apiRouter(appVersion: string): express.Router {
     express.text({ type: 'text/csv', limit: CSV_MAX_BYTES + 1024, inflate: false }), handle(assetController.import));
   api.post('/assets', ...requireTenantAdmin, writeLimiter, handle(assetController.create));
   api.put('/assets/:id', ...requireTenantAdmin, writeLimiter, handle(assetController.update));
+  api.get('/assets/duplicates', requireTenant, handle(assetController.duplicates));
+  api.post('/assets/merge', ...requireTenantAdmin, writeLimiter, handle(assetController.merge));
   api.delete('/assets/:id', ...requireTenantAdmin, writeLimiter, handle(assetController.remove));
 
   /* Inventory agents: tokens (admins) and the hosts that report. */

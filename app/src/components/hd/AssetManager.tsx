@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Download, FileUp, HardDrive, Pencil, Plus, Trash2, Upload } from 'lucide-react';
+import { ChevronDown, Combine, Download, FileUp, HardDrive, Pencil, Plus, Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,7 @@ import { Panel, EmptyState, Field, Badge } from './ui';
 import { inputCls, selectCls, notifyError } from './helpers';
 import { tr, trMessage } from '@/lib/i18n';
 import { assetTypeLabel, criticalityLabel } from './assetLabels';
+import { DuplicateSuggestions, MergeDialog } from './AssetMerge';
 
 /* ------------------------------------------------------------------ */
 /*  Labels and small shared pieces (also used by the stack, My Stack   */
@@ -124,12 +125,17 @@ export default function AssetManager({ canEdit, refreshKey, onChanged }: { canEd
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Asset | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [picked, setPicked] = useState<number[]>([]);
+  const [mergeIds, setMergeIds] = useState<number[] | null>(null);
+  const [version, setVersion] = useState(0);
 
   const load = useCallback(async () => {
     try {
       const [a, s] = await Promise.all([assetApi.list(), fetchTechStack()]);
       setAssets(a);
       setStack(s);
+      setPicked((p) => p.filter((id) => a.some((x) => x.id === id)));
+      setVersion((v) => v + 1);
     } catch (err) {
       notifyError(err, tr('Could not load the assets'));
     } finally {
@@ -194,6 +200,11 @@ export default function AssetManager({ canEdit, refreshKey, onChanged }: { canEd
               <FileUp size={14} /> {tr('Import CSV')}
             </Button>
           )}
+          {canEdit && picked.length >= 2 && (
+            <Button variant="outline" size="sm" className="border-accent/50 bg-transparent text-accent" onClick={() => setMergeIds(picked)}>
+              <Combine size={14} /> {tr('Merge {n}', { n: picked.length })}
+            </Button>
+          )}
           {canEdit && (
             <Button size="sm" onClick={() => setEditing({ id: null, values: { ...EMPTY } })}>
               <Plus size={14} /> {tr('Add asset')}
@@ -202,6 +213,8 @@ export default function AssetManager({ canEdit, refreshKey, onChanged }: { canEd
         </>
       }
     >
+      {canEdit && <DuplicateSuggestions assets={assets} refreshKey={version} onReview={(ids) => setMergeIds(ids)} />}
+
       {assets.length > 8 && (
         <Input placeholder={tr('Filter {n} assets…', { n: assets.length })} value={filter} onChange={(e) => setFilter(e.target.value)} className={`${inputCls} mb-3 max-w-xs`} />
       )}
@@ -217,6 +230,7 @@ export default function AssetManager({ canEdit, refreshKey, onChanged }: { canEd
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-[10px] font-jetbrains uppercase tracking-[0.08em] text-text-tertiary bg-bg-elevated">
+                {canEdit && <th className="px-2 py-2 w-8"><span className="sr-only">{tr('Select')}</span></th>}
                 <th className="px-3 py-2 font-medium">{tr('Asset')}</th>
                 <th className="px-3 py-2 font-medium">{tr('Criticality')}</th>
                 <th className="px-3 py-2 font-medium">{tr('Hostname / IP')}</th>
@@ -228,6 +242,16 @@ export default function AssetManager({ canEdit, refreshKey, onChanged }: { canEd
             <tbody>
               {visible.map((a) => (
                 <tr key={a.id} className="border-t border-border-default hover:bg-bg-elevated/50 align-top">
+                  {canEdit && (
+                    <td className="px-2 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={picked.includes(a.id)}
+                        onChange={(e) => setPicked((p) => (e.target.checked ? [...p, a.id] : p.filter((x) => x !== a.id)))}
+                        aria-label={tr('Select {name}', { name: a.name })}
+                      />
+                    </td>
+                  )}
                   <td className="px-3 py-2">
                     <div className="text-text-primary font-medium">{a.name}</div>
                     <div className="text-[11px] text-text-tertiary">
@@ -368,6 +392,15 @@ export default function AssetManager({ canEdit, refreshKey, onChanged }: { canEd
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {canEdit && (
+        <MergeDialog
+          assets={assets}
+          ids={mergeIds}
+          onClose={() => setMergeIds(null)}
+          onMerged={async () => { setPicked([]); await load(); onChanged?.(); }}
+        />
+      )}
 
       {canEdit && (
         <AssetCsvImportDialog

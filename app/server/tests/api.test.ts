@@ -1523,3 +1523,82 @@ describe('inventory agents: containers', () => {
     expect(agents.find((a: any) => a.name === 'api (docker01)')).toMatchObject({ type: 'container', parentAssetId: host.id });
   });
 });
+
+describe('merging duplicate assets', () => {
+  const root = new Client();
+  const admin = new Client();
+  let token = '';
+  const post = (body: string) => fetch(`${base}/api/inventory/report`, {
+    method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'text/plain' }, body,
+  });
+  const report = (plexVersion: string) => [
+    'agent\t1.1.0', 'host\tnas01', `machine\t${'e'.repeat(64)}`, 'type\tserver',
+    'os\tdebian\t\t13\tDebian GNU/Linux 13 (trixie)',
+    `container\tplex\tlscr.io/linuxserver/plex:latest\t${plexVersion}\taaa`,
+    'container\tdb\tpostgres:17.5\t\tbbb',
+  ].join('\n');
+
+  it('suggests duplicates and merges them into one asset that keeps the agent identity', async () => {
+    await root.login('root', PW);
+    expect((await root.req('POST', '/api/admin/tenants', { name: 'Mergeco', language: 'es', admin: { username: 'mgad', password: PW } })).status).toBe(201);
+    await admin.login('mgad', PW);
+    token = (await admin.req('POST', '/api/inventory/tokens', { name: 't' })).body.token;
+
+    /* Hand-made records first, with data the agent cannot know. */
+    const custom = (await admin.req('POST', '/api/tech-stack', { technology: 'Custom Plugin', version: '1.0' })).body.item;
+    const manual = (await admin.req('POST', '/api/assets', {
+      name: 'Plex Media Server', type: 'application', criticality: 'low', environment: 'production', owner: 'Gastón',
+      notes: 'Biblioteca en la NAS.', stackItemIds: [custom.id],
+    })).body.item;
+    const db = (await admin.req('POST', '/api/assets', { name: 'PostgreSQL prod', type: 'database', notes: 'Contenedor db; base de la app.' })).body.item;
+    const site = (await admin.req('POST', '/api/assets', { name: 'Sitio', type: 'application', hostname: 'site.mergeco.example' })).body.item;
+    const dnsOnly = (await admin.req('POST', '/api/assets', { name: 'site.mergeco.example', type: 'other' })).body.item;
+
+    await post(report('1.43.5.11079-ls333'));
+    let assets = (await admin.req('GET', '/api/assets')).body.assets;
+    const plexC = assets.find((a: any) => a.name === 'plex (nas01)');
+    const dbC = assets.find((a: any) => a.name === 'db (nas01)');
+    const host = assets.find((a: any) => a.name === 'nas01');
+
+    const pairs = (await admin.req('GET', '/api/assets/duplicates')).body.pairs;
+    const has = (a: number, b: number, reason: string) => pairs.some((p: any) => p.ids.join() === [Math.min(a, b), Math.max(a, b)].join() && p.reason === reason);
+    expect(has(plexC.id, manual.id, 'similar-name')).toBe(true);
+    expect(has(dbC.id, db.id, 'notes-mention-container')).toBe(true);
+    expect(has(site.id, dnsOnly.id, 'name-is-hostname')).toBe(true);
+    expect(pairs.some((p: any) => p.ids.includes(host.id))).toBe(false);
+
+    /* Two agent-reported assets cannot be merged. */
+    expect((await admin.req('POST', '/api/assets/merge', { targetId: plexC.id, sourceIds: [dbC.id] })).status).toBe(400);
+
+    const preview = await admin.req('POST', '/api/assets/merge', { targetId: manual.id, sourceIds: [plexC.id], preview: true });
+    expect(preview.body.values).toMatchObject({ name: 'Plex Media Server', criticality: 'low', owner: 'Gastón', brand: 'Docker', model: 'lscr.io/linuxserver/plex:latest' });
+
+    const merged = await admin.req('POST', '/api/assets/merge', { targetId: manual.id, sourceIds: [plexC.id], values: { type: 'container' } });
+    expect(merged.status).toBe(200);
+    expect(merged.body.item).toMatchObject({ id: manual.id, name: 'Plex Media Server', type: 'container', criticality: 'low', owner: 'Gastón', agent: true, parentAssetId: host.id });
+    expect(merged.body.item.notes).toBe('Biblioteca en la NAS.');
+
+    assets = (await admin.req('GET', '/api/assets')).body.assets;
+    expect(assets.find((a: any) => a.id === plexC.id)).toBeUndefined();
+    const stack = (await admin.req('GET', '/api/tech-stack')).body.stack;
+    const on = (tech: string) => (stack.find((s: any) => s.technology === tech)?.assets ?? []).map((a: any) => `${a.name}@${a.version ?? ''}`);
+    expect(on('Plex Media Server')).toEqual(['Plex Media Server@1.43.5.11079']);
+    expect(on('Custom Plugin')).toEqual(['Plex Media Server@']);
+
+    /* The next agent report updates the merged asset instead of re-creating the container. */
+    const r = await (await post(report('1.43.6.12000-ls340'))).json();
+    expect(r.containers).toBe(2);
+    assets = (await admin.req('GET', '/api/assets')).body.assets;
+    expect(assets.filter((a: any) => /plex/i.test(a.name)).map((a: any) => a.name)).toEqual(['Plex Media Server']);
+    const stack2 = (await admin.req('GET', '/api/tech-stack')).body.stack;
+    expect(stack2.find((s: any) => s.technology === 'Plex Media Server').assets[0]).toMatchObject({ name: 'Plex Media Server', version: '1.43.6.12000' });
+    expect(assets.find((a: any) => a.id === manual.id).owner).toBe('Gastón');
+
+    /* Merging a host's duplicate keeps its containers attached. */
+    const hostCopy = (await admin.req('POST', '/api/assets', { name: 'NAS (manual)', type: 'server', criticality: 'high' })).body.item;
+    const m2 = await admin.req('POST', '/api/assets/merge', { targetId: hostCopy.id, sourceIds: [host.id] });
+    expect(m2.body.item).toMatchObject({ name: 'NAS (manual)', criticality: 'high', agent: true });
+    assets = (await admin.req('GET', '/api/assets')).body.assets;
+    expect(assets.filter((a: any) => a.parentAssetId === hostCopy.id).length).toBe(2);
+  });
+});

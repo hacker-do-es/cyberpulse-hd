@@ -6,6 +6,8 @@ import { parseHostname, parseIps } from '../services/assetValidation';
 import { ASSET_CSV_TEMPLATE, toAssetCsv } from '../services/assetCsv';
 import { importAssets } from '../useCases/importAssets';
 import { stackRepository } from '../repositories/stackRepository';
+import { defaultMergedValues, findDuplicates, FIELDS, loadMerge, mergeAssets } from '../useCases/mergeAssets';
+import { audit } from '../services/logs/logStore';
 
 function csvDownload(res: express.Response, filename: string, body: string) {
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -153,6 +155,40 @@ export const assetController = {
 
   template(_req: express.Request, res: express.Response) {
     csvDownload(res, 'assets-template.csv', ASSET_CSV_TEMPLATE);
+  },
+
+  /* Likely duplicates, for the "review and merge" list. */
+  duplicates(req: express.Request, res: express.Response) {
+    res.json({ pairs: findDuplicates(assetRepository.listByTenant(tenantOf(req))) });
+  },
+
+  /* POST /assets/merge {targetId, sourceIds, values?, preview?}: with
+     preview, returns the default merged values without changing anything. */
+  merge(req: express.Request, res: express.Response) {
+    const tid = tenantOf(req);
+    const targetId = Number(req.body?.targetId);
+    const sourceIds = Array.isArray(req.body?.sourceIds) ? req.body.sourceIds.map(Number).filter((n: number) => Number.isInteger(n) && n > 0) : [];
+    if (!Number.isInteger(targetId) || targetId <= 0) throw badRequest('targetId is required');
+    const plan = loadMerge(tid, targetId, sourceIds);
+    const defaults = defaultMergedValues(plan.target, plan.sources);
+    if (req.body?.preview === true) {
+      res.json({ values: defaults, fields: FIELDS });
+      return;
+    }
+    const chosen = req.body?.values && typeof req.body.values === 'object' ? req.body.values : {};
+    const merged: Record<string, unknown> = { ...defaults };
+    for (const f of FIELDS) if (Object.prototype.hasOwnProperty.call(chosen, f)) merged[f] = chosen[f];
+    const values = parseAssetValues(merged);
+    const row = save(() => mergeAssets(tid, plan, values));
+    audit({
+      action: 'asset.merge',
+      detail: `ok into #${row.id} "${row.name}" from ${plan.sources.map((s) => `#${s.id} "${s.name}"`).join(', ')}`,
+      userId: req.auth?.user.id ?? null,
+      username: req.auth?.user.username ?? null,
+      tenantId: tid,
+      ip: req.ip ?? null,
+    });
+    res.json({ item: assetItem(row, assetRepository.stackItemsByAsset(tid).get(row.id) ?? [], assetRepository.versionsByAsset(tid).get(row.id)) });
   },
 
   remove(req: express.Request, res: express.Response) {
