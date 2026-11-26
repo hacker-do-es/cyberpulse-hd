@@ -5,13 +5,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { authApi } from '@/services/hdApi';
-import { useAuth } from '@/lib/auth';
+import { useAuth, useCan } from '@/lib/auth';
 import { Field } from './ui';
 import { inputCls, notifyError } from './helpers';
 import { tr } from '@/lib/i18n';
 import { LinkedInAccountSection } from './LinkedIn';
 
+/* Connecting LinkedIn is an integration: company admins only. */
 function LinkedInSectionWithRule() {
+  if (!useCan()('linkedin.connect')) return null;
   return (
     <>
       <hr className="border-border-default my-2" />

@@ -1,15 +1,14 @@
-import { useAuth } from '@/lib/auth';
+import { useAuth, useCan } from '@/lib/auth';
 import StackManager from './StackManager';
 import AssetManager from './AssetManager';
 import { PageHeader } from './ui';
 import { tr } from '@/lib/i18n';
 
 /* The company's technology stack and its assets, each on its own tab (they
-   grow long once populated). Members see both read-only. */
+   grow long once populated). Read-only users see both without edit controls. */
 
 function useCanEdit(): boolean {
-  const { me } = useAuth();
-  return me?.user.role === 'admin' || me?.user.role === 'superadmin';
+  return useCan()('inventory.write');
 }
 
 export function TechnologiesTab({ onChanged }: { onChanged?: () => void }) {

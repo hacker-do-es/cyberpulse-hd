@@ -11,9 +11,10 @@ import { assetController } from '../controllers/assetController';
 import { inventoryController } from '../controllers/inventoryController';
 import { tenantSettingsController } from '../controllers/tenantSettingsController';
 import { userController } from '../controllers/userController';
+import { platformUserController } from '../controllers/platformUserController';
 import { handle } from '../lib/http';
 import { CSV_MAX_BYTES } from '../services/csv';
-import { requireAuth, requireRole, requireTenant, requireTenantAdmin } from './middlewares/auth';
+import { requireAuth, requirePermission, tenantCan } from './middlewares/auth';
 import { auditTrail } from './middlewares/audit';
 import { logsController } from '../controllers/logsController';
 import { linkedinQueueController } from '../controllers/linkedinQueueController';
@@ -50,99 +51,106 @@ export function apiRouter(appVersion: string): express.Router {
   api.use(requireAuth);
 
   api.get('/auth/me', handle(authController.me));
-  api.post('/auth/active-tenant', requireRole('superadmin'), handle(authController.setActiveTenant));
+  api.post('/auth/active-tenant', requirePermission('platform.switchTenant'), handle(authController.setActiveTenant));
   api.post('/auth/password', writeLimiter, handle(authController.changePassword));
   api.post('/auth/totp/setup', writeLimiter, handle(authController.totpSetup));
   api.post('/auth/totp/enable', writeLimiter, handle(authController.totpEnable));
   api.post('/auth/totp/disable', writeLimiter, handle(authController.totpDisable));
 
   /* Superadmin: companies */
-  api.get('/admin/tenants', requireRole('superadmin'), handle(adminController.list));
-  api.get('/admin/logs', requireRole('superadmin'), handle(logsController.list));
-  api.get('/admin/logs/sources', requireRole('superadmin'), handle(logsController.sources));
-  api.get('/admin/logs/export.txt', requireRole('superadmin'), handle(logsController.exportTxt));
-  api.post('/admin/tenants', requireRole('superadmin'), writeLimiter, handle(adminController.create));
-  api.patch('/admin/tenants/:id', requireRole('superadmin'), writeLimiter, handle(adminController.update));
-  api.delete('/admin/tenants/:id', requireRole('superadmin'), writeLimiter, handle(adminController.remove));
+  api.get('/admin/tenants', requirePermission('platform.tenants'), handle(adminController.list));
+  api.get('/admin/logs', requirePermission('platform.logs'), handle(logsController.list));
+  api.get('/admin/logs/sources', requirePermission('platform.logs'), handle(logsController.sources));
+  api.get('/admin/logs/export.txt', requirePermission('platform.logs'), handle(logsController.exportTxt));
+  api.post('/admin/tenants', requirePermission('platform.tenants'), writeLimiter, handle(adminController.create));
+  api.patch('/admin/tenants/:id', requirePermission('platform.tenants'), writeLimiter, handle(adminController.update));
+  api.delete('/admin/tenants/:id', requirePermission('platform.tenants'), writeLimiter, handle(adminController.remove));
 
   /* Company: technology stack */
-  api.get('/tech-stack', requireTenant, handle(stackController.list));
-  api.get('/tech-stack/news', requireTenant, handle(stackController.news));
-  api.get('/tech-stack/export.csv', requireTenant, handle(stackController.exportCsv));
+  api.get('/tech-stack', ...tenantCan('inventory.read'), handle(stackController.list));
+  api.get('/tech-stack/news', ...tenantCan('inventory.read'), handle(stackController.news));
+  api.get('/tech-stack/export.csv', ...tenantCan('inventory.read'), handle(stackController.exportCsv));
   api.get('/tech-stack/template.csv', handle(stackController.template));
-  api.post('/tech-stack', ...requireTenantAdmin, writeLimiter, handle(stackController.create));
-  api.post('/tech-stack/import', ...requireTenantAdmin, writeLimiter,
+  api.post('/tech-stack', ...tenantCan('inventory.write'), writeLimiter, handle(stackController.create));
+  api.post('/tech-stack/import', ...tenantCan('inventory.write'), writeLimiter,
     express.text({ type: 'text/csv', limit: CSV_MAX_BYTES + 1024, inflate: false }), handle(stackController.import));
-  api.put('/tech-stack/:id', ...requireTenantAdmin, writeLimiter, handle(stackController.update));
-  api.delete('/tech-stack/:id', ...requireTenantAdmin, writeLimiter, handle(stackController.remove));
+  api.put('/tech-stack/:id', ...tenantCan('inventory.write'), writeLimiter, handle(stackController.update));
+  api.delete('/tech-stack/:id', ...tenantCan('inventory.write'), writeLimiter, handle(stackController.remove));
 
   /* Company: assets (what runs the stack) */
-  api.get('/assets', requireTenant, handle(assetController.list));
-  api.get('/assets/export.csv', requireTenant, handle(assetController.exportCsv));
+  api.get('/assets', ...tenantCan('inventory.read'), handle(assetController.list));
+  api.get('/assets/export.csv', ...tenantCan('inventory.read'), handle(assetController.exportCsv));
   api.get('/assets/template.csv', handle(assetController.template));
-  api.post('/assets/import', ...requireTenantAdmin, writeLimiter,
+  api.post('/assets/import', ...tenantCan('inventory.write'), writeLimiter,
     express.text({ type: 'text/csv', limit: CSV_MAX_BYTES + 1024, inflate: false }), handle(assetController.import));
-  api.post('/assets', ...requireTenantAdmin, writeLimiter, handle(assetController.create));
-  api.put('/assets/:id', ...requireTenantAdmin, writeLimiter, handle(assetController.update));
-  api.get('/assets/duplicates', requireTenant, handle(assetController.duplicates));
-  api.post('/assets/merge', ...requireTenantAdmin, writeLimiter, handle(assetController.merge));
-  api.delete('/assets/:id', ...requireTenantAdmin, writeLimiter, handle(assetController.remove));
+  api.post('/assets', ...tenantCan('inventory.write'), writeLimiter, handle(assetController.create));
+  api.put('/assets/:id', ...tenantCan('inventory.write'), writeLimiter, handle(assetController.update));
+  api.get('/assets/duplicates', ...tenantCan('inventory.read'), handle(assetController.duplicates));
+  api.post('/assets/merge', ...tenantCan('inventory.write'), writeLimiter, handle(assetController.merge));
+  api.delete('/assets/:id', ...tenantCan('inventory.write'), writeLimiter, handle(assetController.remove));
 
   /* Inventory agents: tokens (admins) and the hosts that report. */
-  api.get('/inventory/agents', requireTenant, handle(inventoryController.agents));
-  api.get('/inventory/tokens', ...requireTenantAdmin, handle(inventoryController.listTokens));
-  api.post('/inventory/tokens', ...requireTenantAdmin, writeLimiter, handle(inventoryController.createToken));
-  api.delete('/inventory/tokens/:id', ...requireTenantAdmin, writeLimiter, handle(inventoryController.revokeToken));
+  api.get('/inventory/agents', ...tenantCan('inventory.read'), handle(inventoryController.agents));
+  api.get('/inventory/tokens', ...tenantCan('agents.tokens'), handle(inventoryController.listTokens));
+  api.post('/inventory/tokens', ...tenantCan('agents.tokens'), writeLimiter, handle(inventoryController.createToken));
+  api.delete('/inventory/tokens/:id', ...tenantCan('agents.tokens'), writeLimiter, handle(inventoryController.revokeToken));
 
   /* Company: settings and AI provider */
-  api.get('/tenant/settings', ...requireTenantAdmin, handle(tenantSettingsController.get));
-  api.put('/tenant/settings', ...requireTenantAdmin, writeLimiter, handle(tenantSettingsController.update));
-  api.post('/tenant/ai/test', ...requireTenantAdmin, writeLimiter, handle(tenantSettingsController.testAi));
+  api.get('/tenant/settings', ...tenantCan('settings.manage'), handle(tenantSettingsController.get));
+  api.put('/tenant/settings', ...tenantCan('settings.manage'), writeLimiter, handle(tenantSettingsController.update));
+  api.post('/tenant/ai/test', ...tenantCan('settings.manage'), writeLimiter, handle(tenantSettingsController.testAi));
 
   /* Company: delivery channels */
-  api.get('/channels', ...requireTenantAdmin, handle(channelController.list));
-  api.post('/channels', ...requireTenantAdmin, writeLimiter, handle(channelController.create));
-  api.post('/channels/preview-email', ...requireTenantAdmin, writeLimiter, handle(channelController.previewEmail));
-  api.put('/channels/:id', ...requireTenantAdmin, writeLimiter, handle(channelController.update));
-  api.delete('/channels/:id', ...requireTenantAdmin, writeLimiter, handle(channelController.remove));
-  api.post('/channels/:id/test', ...requireTenantAdmin, sendLimiter, handle(channelController.test));
-  api.post('/channels/:id/run', ...requireTenantAdmin, sendLimiter, handle(channelController.run));
-  api.get('/channels/:id/deliveries', ...requireTenantAdmin, handle(channelController.deliveries));
+  api.get('/channels', ...tenantCan('channels.read'), handle(channelController.list));
+  api.post('/channels', ...tenantCan('channels.manage'), writeLimiter, handle(channelController.create));
+  api.post('/channels/preview-email', ...tenantCan('channels.manage'), writeLimiter, handle(channelController.previewEmail));
+  api.put('/channels/:id', ...tenantCan('channels.manage'), writeLimiter, handle(channelController.update));
+  api.delete('/channels/:id', ...tenantCan('channels.manage'), writeLimiter, handle(channelController.remove));
+  api.post('/channels/:id/test', ...tenantCan('channels.run'), sendLimiter, handle(channelController.test));
+  api.post('/channels/:id/run', ...tenantCan('channels.run'), sendLimiter, handle(channelController.run));
+  api.get('/channels/:id/deliveries', ...tenantCan('channels.read'), handle(channelController.deliveries));
 
   /* Company: users */
-  api.get('/users', ...requireTenantAdmin, handle(userController.list));
-  api.post('/users', ...requireTenantAdmin, writeLimiter, handle(userController.create));
-  api.patch('/users/:id', ...requireTenantAdmin, writeLimiter, handle(userController.update));
-  api.delete('/users/:id', ...requireTenantAdmin, writeLimiter, handle(userController.remove));
+  api.get('/users', ...tenantCan('users.manage'), handle(userController.list));
+  api.post('/users', ...tenantCan('users.manage'), writeLimiter, handle(userController.create));
+  api.patch('/users/:id', ...tenantCan('users.manage'), writeLimiter, handle(userController.update));
+  api.delete('/users/:id', ...tenantCan('users.manage'), writeLimiter, handle(userController.remove));
+
+  /* Superadmin: Hacker-Do support accounts */
+  api.get('/admin/users', requirePermission('platform.users'), handle(platformUserController.list));
+  api.post('/admin/users', requirePermission('platform.users'), writeLimiter, handle(platformUserController.create));
+  api.patch('/admin/users/:id', requirePermission('platform.users'), writeLimiter, handle(platformUserController.update));
+  api.delete('/admin/users/:id', requirePermission('platform.users'), writeLimiter, handle(platformUserController.remove));
 
   /* Shared news corpus and feeds */
   api.get('/news', handle(newsController.list));
   api.get('/news/:id', handle(newsController.get));
   api.get('/stats', handle(newsController.stats));
   api.get('/sources', handle(sourceController.list));
-  api.post('/sources', writeLimiter, requireRole('superadmin'), handle(sourceController.create));
-  api.patch('/sources/:id', writeLimiter, requireRole('superadmin'), handle(sourceController.setActive));
-  api.delete('/sources/:id', writeLimiter, requireRole('superadmin'), handle(sourceController.remove));
+  api.post('/sources', writeLimiter, requirePermission('platform.feeds'), handle(sourceController.create));
+  api.patch('/sources/:id', writeLimiter, requirePermission('platform.feeds'), handle(sourceController.setActive));
+  api.delete('/sources/:id', writeLimiter, requirePermission('platform.feeds'), handle(sourceController.remove));
   api.get('/scrape/status', handle(scrapeController.status));
-  api.post('/scrape', writeLimiter, requireRole('superadmin'), handle(scrapeController.start));
+  api.post('/scrape', writeLimiter, requirePermission('platform.feeds'), handle(scrapeController.start));
 
   /* LinkedIn publishing, per user */
   api.get('/linkedin', handle(linkedinController.status));
-  api.get('/linkedin/connect', writeLimiter, handle(linkedinController.connect));
+  api.get('/linkedin/connect', requirePermission('linkedin.connect'), writeLimiter, handle(linkedinController.connect));
   api.delete('/linkedin', writeLimiter, handle(linkedinController.disconnect));
-  api.post('/linkedin/organizations/refresh', sendLimiter, handle(linkedinController.refreshOrganizations));
-  api.post('/linkedin/posts', sendLimiter, handle(linkedinController.publish));
-  api.get('/linkedin/queue', requireTenant, handle(linkedinQueueController.list));
-  api.post('/linkedin/queue', requireTenant, writeLimiter, handle(linkedinQueueController.schedule));
-  api.put('/linkedin/queue/:id', requireTenant, writeLimiter, handle(linkedinQueueController.update));
-  api.post('/linkedin/queue/:id/approve', requireTenant, sendLimiter, handle(linkedinQueueController.approve));
-  api.post('/linkedin/queue/:id/reject', requireTenant, writeLimiter, handle(linkedinQueueController.reject));
-  api.post('/linkedin/queue/:id/cancel', requireTenant, writeLimiter, handle(linkedinQueueController.cancel));
+  api.post('/linkedin/organizations/refresh', requirePermission('linkedin.connect'), sendLimiter, handle(linkedinController.refreshOrganizations));
+  api.post('/linkedin/posts', requirePermission('linkedin.approve'), sendLimiter, handle(linkedinController.publish));
+  api.get('/linkedin/queue', ...tenantCan('content.generate'), handle(linkedinQueueController.list));
+  /* Scheduling a post by hand publishes it without review: approvers only. */
+  api.post('/linkedin/queue', ...tenantCan('linkedin.approve'), writeLimiter, handle(linkedinQueueController.schedule));
+  api.put('/linkedin/queue/:id', ...tenantCan('content.generate'), writeLimiter, handle(linkedinQueueController.update));
+  api.post('/linkedin/queue/:id/approve', ...tenantCan('linkedin.approve'), sendLimiter, handle(linkedinQueueController.approve));
+  api.post('/linkedin/queue/:id/reject', ...tenantCan('linkedin.approve'), writeLimiter, handle(linkedinQueueController.reject));
+  api.post('/linkedin/queue/:id/cancel', ...tenantCan('content.generate'), writeLimiter, handle(linkedinQueueController.cancel));
 
   /* Post generation */
-  api.post('/generate', writeLimiter, handle(generateController.template));
-  api.post('/digest', writeLimiter, handle(generateController.digest));
-  api.post('/generate-ai', writeLimiter, requireTenant, handle(generateController.ai));
+  api.post('/generate', requirePermission('content.generate'), writeLimiter, handle(generateController.template));
+  api.post('/digest', requirePermission('content.generate'), writeLimiter, handle(generateController.digest));
+  api.post('/generate-ai', writeLimiter, ...tenantCan('content.generate'), handle(generateController.ai));
 
   return api;
 }

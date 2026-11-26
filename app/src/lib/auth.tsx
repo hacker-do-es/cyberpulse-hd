@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { authApi, type Me } from '@/services/hdApi';
+import { authApi, type Me, type Permission } from '@/services/hdApi';
 
 interface AuthState {
   me: Me | null;
@@ -62,6 +62,14 @@ export function useAuth(): AuthState {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>');
   return ctx;
+}
+
+/* What the signed-in user may do (buttons and tabs only; the server checks
+   every request again). */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useCan(): (perm: Permission) => boolean {
+  const { me } = useAuth();
+  return useCallback((perm: Permission) => Boolean(me?.permissions?.includes(perm)), [me]);
 }
 
 /* Wraps window.fetch once so a 401 from any /api call (other than the login

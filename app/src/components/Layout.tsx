@@ -14,8 +14,9 @@ const HistoryTab = lazy(() => import('./HistoryTab'));
 const LogsTab = lazy(() => import('./hd/LogsTab'));
 import type { SourceInfo } from '@/hooks/useRSSFeeds';
 import { Menu, LogOut, UserCog, Building2, ChevronDown } from 'lucide-react';
-import { useAuth } from '@/lib/auth';
-import { tabsForRole } from './Navbar';
+import { useAuth, useCan } from '@/lib/auth';
+import { tabsFor } from './Navbar';
+import { roleLabel } from './hd/roleLabels';
 import ChannelsTab from './hd/ChannelsTab';
 import SettingsTab from './hd/SettingsTab';
 import { AssetsTab, TechnologiesTab } from './hd/InventoryTabs';
@@ -49,12 +50,12 @@ const tabContentVariants = {
   exit: { opacity: 0 },
 };
 
-function NeedsCompany({ onPick }: { onPick: () => void }) {
+function NeedsCompany({ onPick }: { onPick?: () => void }) {
   return (
     <div className="h-full flex flex-col items-center justify-center text-center gap-3">
       <Building2 size={28} className="text-accent" />
       <p className="text-text-secondary text-sm max-w-sm">{tr("Pick a company in the selector at the top right (or in Companies) to see its stack, channels and settings.")}</p>
-      <button onClick={onPick} className="text-accent text-sm hover:underline cursor-pointer">{tr("Go to Companies")}</button>
+      {onPick && <button onClick={onPick} className="text-accent text-sm hover:underline cursor-pointer">{tr("Go to Companies")}</button>}
     </div>
   );
 }
@@ -63,13 +64,15 @@ export default function Layout() {
   const { me, logout, switchTenant } = useAuth();
   /* Subscribes the whole shell to language changes: every screen below re-renders with it. */
   useI18n();
-  const role = me?.user.role;
+  const can = useCan();
+  const permissions = useMemo(() => me?.permissions ?? [], [me]);
   const hasTenant = Boolean(me?.activeTenant);
   const [accountOpen, setAccountOpen] = useState(false);
-  const [activeTab, setActiveTabRaw] = useState<TabId>(role === 'superadmin' && !hasTenant ? 'admin' : 'news');
+  const [activeTab, setActiveTabRaw] = useState<TabId>(can('platform.tenants') && !hasTenant ? 'admin' : 'news');
   const setActiveTab = useCallback((t: TabId) => {
-    setActiveTabRaw(tabsForRole(role).includes(t) ? t : 'news');
-  }, [role]);
+    setActiveTabRaw(tabsFor(permissions).includes(t) ? t : 'news');
+  }, [permissions]);
+  const pickCompany = can('platform.tenants') ? () => setActiveTab('admin') : undefined;
   const { articles, sources, loading, refreshing, syncing, lastUpdated, lastSyncResult, refresh, forceReload, reloadSources, syncFeeds } = useRSSFeeds();
   const [localSources, setLocalSources] = useState<SourceInfo[]>(sources);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
@@ -253,7 +256,7 @@ export default function Layout() {
             lastSyncResult={lastSyncResult}
             onRefresh={refresh}
             onForceReload={forceReload}
-            onSyncFeeds={role === 'superadmin' ? syncFeeds : undefined}
+            onSyncFeeds={can('platform.feeds') ? syncFeeds : undefined}
             activeSources={effectiveSources
               .filter((s) => s.active)
               .map((s) => s.name)}
@@ -264,7 +267,7 @@ export default function Layout() {
           />
         );
       case 'my-stack':
-        if (!hasTenant) return <NeedsCompany onPick={() => setActiveTab('admin')} />;
+        if (!hasTenant) return <NeedsCompany onPick={pickCompany} />;
         return (
           <MyStackTab
             key="my-stack"
@@ -298,24 +301,25 @@ export default function Layout() {
           </Suspense>
         );
       case 'channels':
-        if (!hasTenant) return <NeedsCompany onPick={() => setActiveTab('admin')} />;
+        if (!hasTenant) return <NeedsCompany onPick={pickCompany} />;
         return <ChannelsTab key={`channels-${me?.activeTenant?.id}`} />;
       case 'technologies':
-        if (!hasTenant) return <NeedsCompany onPick={() => setActiveTab('admin')} />;
+        if (!hasTenant) return <NeedsCompany onPick={pickCompany} />;
         return <TechnologiesTab key={`tech-${me?.activeTenant?.id}`} onChanged={refreshStackNews} />;
       case 'assets':
-        if (!hasTenant) return <NeedsCompany onPick={() => setActiveTab('admin')} />;
+        if (!hasTenant) return <NeedsCompany onPick={pickCompany} />;
         return <AssetsTab key={`assets-${me?.activeTenant?.id}`} onChanged={refreshStackNews} />;
       case 'agents':
-        if (!hasTenant) return <NeedsCompany onPick={() => setActiveTab('admin')} />;
+        if (!hasTenant) return <NeedsCompany onPick={pickCompany} />;
         return <AgentsTab key={`agents-${me?.activeTenant?.id}`} />;
       case 'settings':
-        if (!hasTenant) return <NeedsCompany onPick={() => setActiveTab('admin')} />;
+        if (!hasTenant) return <NeedsCompany onPick={pickCompany} />;
         return <SettingsTab key={`settings-${me?.activeTenant?.id}`} />;
       case 'admin':
+        if (!can('platform.tenants')) return null;
         return <AdminTab onEnterTenant={() => setActiveTab('technologies')} />;
       case 'logs':
-        if (role !== 'superadmin') return null;
+        if (!can('platform.logs')) return null;
         return (
           <Suspense key="logs" fallback={<TabLoading />}>
             <LogsTab />
@@ -349,8 +353,8 @@ export default function Layout() {
           onToggleSource={handleToggleSource}
           onToggleAll={handleToggleAllSources}
           onClose={() => setSidebarOpen(false)}
-          onAddSource={role === 'superadmin' ? handleAddSource : undefined}
-          onDeleteSource={role === 'superadmin' ? handleDeleteSource : undefined}
+          onAddSource={can('platform.feeds') ? handleAddSource : undefined}
+          onDeleteSource={can('platform.feeds') ? handleDeleteSource : undefined}
         />
       </aside>
 
@@ -365,9 +369,9 @@ export default function Layout() {
           >
             <Menu size={20} />
           </button>
-          <Navbar activeTab={activeTab} onTabChange={setActiveTab} role={role} />
+          <Navbar activeTab={activeTab} onTabChange={setActiveTab} permissions={permissions} />
           <div className="ml-auto flex items-center gap-2 pl-3 shrink-0">
-            {role === 'superadmin' ? (
+            {can('platform.switchTenant') ? (
               <select
                 aria-label={tr("Active company")}
                 value={me?.activeTenant?.id ?? ''}
@@ -394,7 +398,7 @@ export default function Layout() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="bg-bg-card border-border-default text-text-primary">
                 <DropdownMenuLabel className="text-xs text-text-tertiary font-normal">
-                  {me?.user.role === 'superadmin' ? tr('Hacker-Do superadmin') : me?.user.role === 'admin' ? tr('Company admin') : tr('Member')}
+                  {roleLabel(me?.user.role)}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator className="bg-border-default" />
                 <DropdownMenuItem onClick={() => setAccountOpen(true)} className="cursor-pointer"><UserCog size={14} /> {tr("My account")}</DropdownMenuItem>

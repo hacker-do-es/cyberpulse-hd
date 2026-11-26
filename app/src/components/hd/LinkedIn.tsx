@@ -1,3 +1,4 @@
+import { useCan } from '@/lib/auth';
 import { useState } from 'react';
 import { Building2, ExternalLink, Linkedin, Loader2, RefreshCw, Unlink } from 'lucide-react';
 import { toast } from 'sonner';
@@ -150,8 +151,13 @@ export function LinkedInPublishDialog({ text, open, onClose, status, onStatusCha
   );
 }
 
-/* Button for the post generator; hidden when the server has no LinkedIn app. */
+/* Button for the post generator; hidden when the server has no LinkedIn app
+   and for users who cannot publish without review. */
 export function LinkedInPublishButton({ content, className = '' }: { content: string; className?: string }) {
+  return useCan()('linkedin.approve') ? <PublishButton content={content} className={className} /> : null;
+}
+
+function PublishButton({ content, className }: { content: string; className: string }) {
   const { status, reload } = useLinkedInStatus();
   const [open, setOpen] = useState(false);
   if (!status?.configured) return null;

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { inventoryApi, type InventoryAgent, type InventoryToken } from '@/services/hdApi';
-import { useAuth } from '@/lib/auth';
+import { useAuth, useCan } from '@/lib/auth';
 import { timeAgo } from '@/lib/dateUtils';
 import { tr, useI18n } from '@/lib/i18n';
 import { Badge, EmptyState, Field, PageHeader, Panel } from './ui';
@@ -148,7 +148,7 @@ function AgentRow({ a, nested, extra }: { a: InventoryAgent; nested?: boolean; e
 export default function AgentsTab() {
   useI18n();
   const { me } = useAuth();
-  const canEdit = me?.user.role === 'admin' || me?.user.role === 'superadmin';
+  const canEdit = useCan()('agents.tokens');
   const [agents, setAgents] = useState<InventoryAgent[]>([]);
   const [staleDays, setStaleDays] = useState(7);
   const [tokens, setTokens] = useState<InventoryToken[]>([]);

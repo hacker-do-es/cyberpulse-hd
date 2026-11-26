@@ -1,5 +1,6 @@
 import type express from 'express';
-import { loadSession, type Role } from '../../services/auth/userService';
+import { can, type Permission } from '../../shared/permissions';
+import { loadSession } from '../../services/auth/userService';
 
 /* Every state-changing request from the browser must carry this header.
    Cross-site forms cannot set custom headers, and the cookie is SameSite=Strict
@@ -17,16 +18,17 @@ export function requireAuth(req: express.Request, res: express.Response, next: e
   next();
 }
 
-export function requireRole(...roles: Role[]) {
+/* Every guard below goes through the permission map in shared/permissions.ts. */
+export function requirePermission(perm: Permission) {
   return (req: express.Request, res: express.Response, next: express.NextFunction) => {
     if (!req.auth) return res.status(401).json({ error: 'Authentication required' });
-    if (!roles.includes(req.auth.user.role)) return res.status(403).json({ error: 'Insufficient permissions' });
+    if (!can(req.auth.user.role, perm)) return res.status(403).json({ error: 'Insufficient permissions' });
     next();
   };
 }
 
-/* Tenant-scoped endpoints: the superadmin counts as an admin of whichever
-   company it has selected. */
+/* Tenant-scoped endpoints: platform users (superadmin, support) work on
+   whichever company they selected for the session. */
 export function requireTenant(req: express.Request, res: express.Response, next: express.NextFunction) {
   if (!req.auth) return res.status(401).json({ error: 'Authentication required' });
   if (req.auth.tenantId === null) {
@@ -35,4 +37,5 @@ export function requireTenant(req: express.Request, res: express.Response, next:
   next();
 }
 
-export const requireTenantAdmin = [requireTenant, requireRole('superadmin', 'admin')];
+/* A company endpoint that needs a permission. */
+export const tenantCan = (perm: Permission) => [requireTenant, requirePermission(perm)];

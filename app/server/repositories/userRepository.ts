@@ -18,6 +18,14 @@ export const userRepository = {
     return getDb().select().from(users).where(and(eq(users.id, id), eq(users.tenantId, tenantId))).get();
   },
 
+  findWithRole(id: number, role: Role): UserRow | undefined {
+    return getDb().select().from(users).where(and(eq(users.id, id), eq(users.role, role))).get();
+  },
+
+  listByRole(role: Role): UserRow[] {
+    return getDb().select().from(users).where(eq(users.role, role)).orderBy(asc(sql`${users.username} COLLATE NOCASE`)).all();
+  },
+
   findByUsername(username: string): UserRow | undefined {
     return getDb().select().from(users).where(usernameIs(username)).get();
   },

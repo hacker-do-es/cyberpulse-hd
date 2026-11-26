@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { channelsApi, type Channel, type ChannelInput, type ChannelType, type Delivery, type LinkedInChannelSettings, type Severity, type SmtpSettings } from '@/services/hdApi';
 import { LinkedInQueuePanel } from './LinkedInQueue';
 import { authorOptions, useLinkedInStatus } from './linkedinHelpers';
-import { useAuth } from '@/lib/auth';
+import { useAuth, useCan } from '@/lib/auth';
 import { Panel, PageHeader, Field, Badge, EmptyState } from './ui';
 import { criticalityLabel } from './assetLabels';
 import { inputCls, selectCls, notifyError, formatDateTime, WEEKDAYS } from './helpers';
@@ -36,6 +36,9 @@ function describeSchedule(c: Channel['schedule']): string {
 
 export default function ChannelsTab() {
   const { me } = useAuth();
+  const can = useCan();
+  /* Operators run the existing channels; only admins configure them. */
+  const canManage = can('channels.manage');
   const tz = me?.activeTenant?.timezone;
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -87,7 +90,7 @@ export default function ChannelsTab() {
         title={tr("Channels")}
         icon={<Radio size={18} />}
         description={tr("Slack, Rocket.Chat and Discord webhooks, a Telegram bot, or email through your own SMTP server. Articles are never sent twice to the same channel; when nothing new matches, nothing is sent.")}
-        actions={<Button size="sm" onClick={() => setEditing('new')}><Plus size={14} /> {tr("New channel")}</Button>}
+        actions={canManage ? <Button size="sm" onClick={() => setEditing('new')}><Plus size={14} /> {tr("New channel")}</Button> : undefined}
       >
         {loading ? (
           <p className="text-sm text-text-tertiary">{tr("Loading…")}</p>
@@ -117,7 +120,7 @@ export default function ChannelsTab() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
-                    <Switch checked={c.active} onCheckedChange={() => void toggle(c)} aria-label={c.active ? tr('Pause channel') : tr('Resume channel')} disabled={busyId === c.id} />
+                    <Switch checked={c.active} onCheckedChange={() => void toggle(c)} aria-label={c.active ? tr('Pause channel') : tr('Resume channel')} disabled={busyId === c.id || !canManage} />
                     <Button size="sm" variant="ghost" className="h-8 text-text-secondary" disabled={busyId === c.id}
                       onClick={() => void act(c, () => channelsApi.test(c.id), c.type === 'linkedin' ? tr('The LinkedIn connection works') : tr('Test message sent'))} title={c.type === 'linkedin' ? tr('Check the LinkedIn connection (publishes nothing)') : tr("Send a test message")}>
                       <Send size={14} /> {tr("Test")}
@@ -128,8 +131,8 @@ export default function ChannelsTab() {
                       <Zap size={14} /> {tr("Send now")}
                     </Button>
                     <Button size="icon-sm" variant="ghost" className="text-text-secondary" onClick={() => setHistoryFor(c)} aria-label={tr("Delivery history")}><History size={14} /></Button>
-                    <Button size="icon-sm" variant="ghost" className="text-text-secondary" onClick={() => setEditing(c)} aria-label={tr("Edit channel")}><Pencil size={14} /></Button>
-                    <Button size="icon-sm" variant="ghost" className="text-text-tertiary hover:text-critical" onClick={() => remove(c)} aria-label={tr("Delete channel")}><Trash2 size={14} /></Button>
+                    {canManage && <Button size="icon-sm" variant="ghost" className="text-text-secondary" onClick={() => setEditing(c)} aria-label={tr("Edit channel")}><Pencil size={14} /></Button>}
+                    {canManage && <Button size="icon-sm" variant="ghost" className="text-text-tertiary hover:text-critical" onClick={() => remove(c)} aria-label={tr("Delete channel")}><Trash2 size={14} /></Button>}
                   </div>
                 </div>
               </li>

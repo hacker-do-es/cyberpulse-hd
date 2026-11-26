@@ -6,6 +6,9 @@ import { sessionRepository } from '../repositories/sessionRepository';
 import { userRepository, type UserUpdate } from '../repositories/userRepository';
 import { validatePasswordStrength } from '../services/auth/password';
 import { USERNAME_RE, createUser, setUserPassword } from '../services/auth/userService';
+import { COMPANY_ROLES, isCompanyRole } from '../shared/permissions';
+
+const ROLE_ERROR = `role must be one of: ${COMPANY_ROLES.join(', ')}`;
 
 function userOut(u: UserRow) {
   return {
@@ -45,7 +48,7 @@ export const userController = {
     if (typeof username !== 'string' || !USERNAME_RE.test(username)) {
       throw badRequest('Username: 3-64 characters, letters, digits and . _ @ -');
     }
-    if (role !== 'admin' && role !== 'member') throw badRequest('role must be admin or member');
+    if (!isCompanyRole(role)) throw badRequest(ROLE_ERROR);
     const weak = validatePasswordStrength(password);
     if (weak) throw badRequest(weak);
     try {
@@ -62,8 +65,8 @@ export const userController = {
     const { role, active, displayName, password, resetTotp } = req.body ?? {};
 
     if (role !== undefined) {
-      if (role !== 'admin' && role !== 'member') throw badRequest('role must be admin or member');
-      if (role === 'member') guardLastAdmin(req, user);
+      if (!isCompanyRole(role)) throw badRequest(ROLE_ERROR);
+      if (role !== 'admin') guardLastAdmin(req, user);
     }
     if (active === false && user.id === req.auth!.user.id) throw conflict('You cannot disable your own account');
     if (active === false) guardLastAdmin(req, user);

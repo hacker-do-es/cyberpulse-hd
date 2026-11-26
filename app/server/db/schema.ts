@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { ROLES, type Role } from '../shared/permissions';
 import { sqliteTable, integer, text, index, uniqueIndex, primaryKey, check, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 
 /* Single source of truth for the database structure. Changes here are turned
@@ -79,8 +80,8 @@ export const tenants = sqliteTable('tenants', {
   check('tenants_language_check', sql`${t.language} IN ('en', 'es')`),
 ]);
 
-export const ROLES = ['superadmin', 'admin', 'member'] as const;
-export type Role = (typeof ROLES)[number];
+/* Roles and what each may do live in shared/permissions.ts. */
+export { ROLES, type Role };
 
 export const users = sqliteTable('users', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -101,9 +102,9 @@ export const users = sqliteTable('users', {
   /* Usernames are unique and matched regardless of case. */
   uniqueIndex('users_username_nocase').on(sql`lower(${t.username})`),
   index('idx_users_tenant').on(t.tenantId),
-  check('users_role_check', sql`${t.role} IN ('superadmin', 'admin', 'member')`),
-  /* A superadmin belongs to no company; everyone else to exactly one. */
-  check('users_tenant_check', sql`(${t.role} = 'superadmin' AND ${t.tenantId} IS NULL) OR (${t.role} <> 'superadmin' AND ${t.tenantId} IS NOT NULL)`),
+  check('users_role_check', sql`${t.role} IN ('superadmin', 'support', 'admin', 'operator', 'member')`),
+  /* Platform roles (superadmin, support) belong to no company; everyone else to exactly one. */
+  check('users_tenant_check', sql`(${t.role} IN ('superadmin', 'support') AND ${t.tenantId} IS NULL) OR (${t.role} NOT IN ('superadmin', 'support') AND ${t.tenantId} IS NOT NULL)`),
 ]);
 
 export const sessions = sqliteTable('sessions', {

@@ -93,6 +93,9 @@ describe('multitenant API', () => {
   const adminA = new Client();
   const adminB = new Client();
   const memberA = new Client();
+  const operatorA = new Client();
+  const liAdmin = new Client();
+  const support = new Client();
   let tenantA = 0;
   let tenantB = 0;
 
@@ -221,6 +224,111 @@ describe('multitenant API', () => {
     expect((await memberA.req('PUT', `/api/tech-stack/${anyItem.id}`, { technology: 'X' })).status).toBe(403);
     expect((await memberA.req('GET', '/api/channels')).status).toBe(403);
     expect((await memberA.req('GET', '/api/tenant/settings')).status).toBe(403);
+    /* Read-only: no AI generation (spends the company's key), no LinkedIn. */
+    expect((await memberA.req('POST', '/api/generate-ai', {})).status).toBe(403);
+    expect((await memberA.req('POST', '/api/digest', {})).status).toBe(403);
+    expect((await memberA.req('GET', '/api/linkedin/queue')).status).toBe(403);
+    expect((await memberA.req('GET', '/api/linkedin/connect')).status).toBe(403);
+    expect((await memberA.req('GET', '/api/assets')).status).toBe(200);
+    expect((await memberA.req('POST', '/api/assets', { name: 'X', type: 'server' })).status).toBe(403);
+    const me = (await memberA.req('GET', '/api/auth/me')).body;
+    expect(me.user.role).toBe('member');
+    expect(me.permissions).toEqual(['inventory.read']);
+
+    /* A second admin for the per-user LinkedIn tests (connecting is admin-only). */
+    expect((await adminA.req('POST', '/api/users', { username: 'lia', password: PW, role: 'admin' })).status).toBe(201);
+    await liAdmin.login('lia', PW);
+  });
+
+  it('lets operators work with the stack and assets but not users or integrations', async () => {
+    expect((await adminA.req('POST', '/api/users', { username: 'olga', password: PW, role: 'operator' })).status).toBe(201);
+    expect((await adminA.req('POST', '/api/users', { username: 'bad', password: PW, role: 'support' })).status).toBe(400);
+    expect((await adminA.req('POST', '/api/users', { username: 'bad', password: PW, role: 'superadmin' })).status).toBe(400);
+    await operatorA.login('olga', PW);
+    const me = (await operatorA.req('GET', '/api/auth/me')).body;
+    expect(me.user.role).toBe('operator');
+    expect(me.permissions).toContain('inventory.write');
+    expect(me.permissions).not.toContain('users.manage');
+
+    /* Any operation on the stack and the assets, including delete. */
+    const t = await operatorA.req('POST', '/api/tech-stack', { technology: 'OperatorTech' });
+    expect(t.status).toBe(201);
+    const a = await operatorA.req('POST', '/api/assets', { name: 'OP-SRV', type: 'server' });
+    expect(a.status).toBe(201);
+    expect((await operatorA.req('PUT', `/api/assets/${a.body.item.id}`, { name: 'OP-SRV2', type: 'server' })).status).toBe(200);
+    expect((await operatorA.req('DELETE', `/api/assets/${a.body.item.id}`)).status).toBe(200);
+    expect((await operatorA.req('DELETE', `/api/tech-stack/${t.body.item.id}`)).status).toBe(200);
+    expect((await operatorA.req('GET', '/api/assets/duplicates')).status).toBe(200);
+
+    /* Channels: sees them, cannot configure them. */
+    expect((await operatorA.req('GET', '/api/channels')).status).toBe(200);
+    expect((await operatorA.req('POST', '/api/channels', { name: 'x', type: 'slack', webhookUrl: 'https://hooks.slack.com/services/T/B/C' })).status).toBe(403);
+    expect((await operatorA.req('POST', '/api/channels/preview-email', {})).status).toBe(403);
+
+    /* Users and integrations: company admins only. */
+    expect((await operatorA.req('GET', '/api/users')).status).toBe(403);
+    expect((await operatorA.req('POST', '/api/users', { username: 'x2', password: PW, role: 'admin' })).status).toBe(403);
+    expect((await operatorA.req('GET', '/api/tenant/settings')).status).toBe(403);
+    expect((await operatorA.req('PUT', '/api/tenant/settings', { language: 'en' })).status).toBe(403);
+    expect((await operatorA.req('GET', '/api/inventory/tokens')).status).toBe(403);
+    expect((await operatorA.req('POST', '/api/inventory/tokens', { name: 'x' })).status).toBe(403);
+    expect((await operatorA.req('GET', '/api/inventory/agents')).status).toBe(200);
+    expect((await operatorA.req('GET', '/api/linkedin/connect')).status).toBe(403);
+    expect((await operatorA.req('POST', '/api/linkedin/posts', { text: 'x' })).status).toBe(403);
+    expect((await operatorA.req('POST', '/api/linkedin/queue', { text: 'x', author: 'member', scheduledFor: new Date(Date.now() + 3600_000).toISOString() })).status).toBe(403);
+    expect((await operatorA.req('GET', '/api/admin/tenants')).status).toBe(403);
+    expect((await operatorA.req('GET', '/api/admin/logs')).status).toBe(403);
+    expect((await operatorA.req('POST', '/api/auth/active-tenant', { tenantId: tenantB })).status).toBe(403);
+
+    /* Company admins change roles among the three company roles. */
+    const users = (await adminA.req('GET', '/api/users')).body.users;
+    const olga = users.find((u: any) => u.username === 'olga');
+    expect((await adminA.req('PATCH', `/api/users/${olga.id}`, { role: 'member' })).body.user.role).toBe('member');
+    expect((await adminA.req('PATCH', `/api/users/${olga.id}`, { role: 'operator' })).body.user.role).toBe('operator');
+  });
+
+  it('lets Hacker-Do support work inside any company as an operator', async () => {
+    expect((await adminA.req('GET', '/api/admin/users')).status).toBe(403);
+    const c = await root.req('POST', '/api/admin/users', { username: 'sam', password: PW, displayName: 'Sam' });
+    expect(c.status).toBe(201);
+    expect(c.body.user).toMatchObject({ username: 'sam', role: 'support' });
+    expect((await root.req('POST', '/api/admin/users', { username: 'sam', password: PW })).status).toBe(409);
+    expect((await root.req('GET', '/api/admin/users')).body.users.map((u: any) => u.username)).toEqual(['sam']);
+    await support.login('sam', PW);
+
+    let me = (await support.req('GET', '/api/auth/me')).body;
+    expect(me.user.role).toBe('support');
+    expect(me.activeTenant).toBeNull();
+    expect(me.tenants.length).toBeGreaterThanOrEqual(2);
+    expect((await support.req('GET', '/api/tech-stack')).status).toBe(409);
+    expect((await support.req('POST', '/api/auth/active-tenant', { tenantId: tenantB })).status).toBe(200);
+    me = (await support.req('GET', '/api/auth/me')).body;
+    expect(me.activeTenant.id).toBe(tenantB);
+
+    expect((await support.req('GET', '/api/tech-stack')).status).toBe(200);
+    const a = await support.req('POST', '/api/assets', { name: 'SUPPORT-SRV', type: 'server' });
+    expect(a.status).toBe(201);
+    expect((await support.req('DELETE', `/api/assets/${a.body.item.id}`)).status).toBe(200);
+    expect((await support.req('GET', '/api/channels')).status).toBe(200);
+    expect((await support.req('GET', '/api/admin/logs')).status).toBe(200);
+
+    /* Not a superadmin: no companies, feeds, users, settings or tokens. */
+    expect((await support.req('GET', '/api/admin/tenants')).status).toBe(403);
+    expect((await support.req('POST', '/api/admin/tenants', { name: 'Evil' })).status).toBe(403);
+    expect((await support.req('POST', '/api/sources', { name: 'x', url: 'https://x.example/rss' })).status).toBe(403);
+    expect((await support.req('POST', '/api/scrape')).status).toBe(403);
+    expect((await support.req('GET', '/api/users')).status).toBe(403);
+    expect((await support.req('GET', '/api/admin/users')).status).toBe(403);
+    expect((await support.req('GET', '/api/tenant/settings')).status).toBe(403);
+    expect((await support.req('POST', '/api/inventory/tokens', { name: 'x' })).status).toBe(403);
+    expect((await support.req('POST', '/api/channels', { name: 'x', type: 'slack', webhookUrl: 'https://hooks.slack.com/services/T/B/C' })).status).toBe(403);
+
+    /* Disabling a support user ends their sessions. */
+    const id = c.body.user.id;
+    expect((await root.req('PATCH', `/api/admin/users/${id}`, { active: false })).body.user.active).toBe(false);
+    expect((await support.req('GET', '/api/auth/me')).status).toBe(401);
+    expect((await root.req('DELETE', `/api/admin/users/${id}`)).status).toBe(200);
+    expect((await root.req('PATCH', `/api/admin/users/${id}`, { active: true })).status).toBe(404);
   });
 
   it('never returns stored secrets', async () => {
@@ -472,9 +580,11 @@ describe('multitenant API', () => {
       expect(q.body.posts[0]).toMatchObject({ status: 'pending', author: 'urn:li:organization:777', authorLabel: 'Acme Corp', channel: { name: 'LI page' } });
       const [p1, p2] = q.body.posts;
 
-      /* Members neither see nor approve them. */
-      expect((await memberA.req('GET', '/api/linkedin/queue')).body.posts).toHaveLength(0);
-      expect((await memberA.req('POST', `/api/linkedin/queue/${p1.id}/approve`)).status).toBe(403);
+      /* Operators neither see others' posts nor approve them; read-only users see no queue at all. */
+      expect((await operatorA.req('GET', '/api/linkedin/queue')).body.posts).toHaveLength(0);
+      expect((await operatorA.req('POST', `/api/linkedin/queue/${p1.id}/approve`)).status).toBe(403);
+      expect((await operatorA.req('POST', `/api/linkedin/queue/${p1.id}/reject`)).status).toBe(403);
+      expect((await memberA.req('GET', '/api/linkedin/queue')).status).toBe(403);
 
       /* Approve with an edit: published right away as the Page. */
       const ok = await adminA.req('POST', `/api/linkedin/queue/${p1.id}/approve`, { text: 'Edited by a human 🔍' });
@@ -486,7 +596,7 @@ describe('multitenant API', () => {
       expect((await adminA.req('POST', `/api/linkedin/queue/${p2.id}/reject`)).body.post.status).toBe('rejected');
 
       /* Generate Post → Schedule: future only, published by the worker when due. */
-      expect((await memberA.req('POST', '/api/linkedin/queue', { text: 'x', author: 'member', scheduledFor: new Date(Date.now() + 3600_000).toISOString() })).status).toBe(409);
+      expect((await liAdmin.req('POST', '/api/linkedin/queue', { text: 'x', author: 'member', scheduledFor: new Date(Date.now() + 3600_000).toISOString() })).status).toBe(409);
       expect((await adminA.req('POST', '/api/linkedin/queue', { text: 'x', author: 'member', scheduledFor: '2020-01-01T00:00:00Z' })).status).toBe(400);
       const when = new Date(Date.now() + 3600_000).toISOString();
       const sch = await adminA.req('POST', '/api/linkedin/queue', { text: 'Scheduled post 🛡️', author: 'member', scheduledFor: when });
@@ -666,7 +776,7 @@ describe('multitenant API', () => {
       expect((await adminA.req('GET', '/api/linkedin')).body).toMatchObject({ configured: true, connected: false });
 
       /* Connect: redirect to LinkedIn with our state and the three scopes. */
-      const r = await fetch(base + '/api/linkedin/connect?return=account', { headers: { cookie: memberA.cookie }, redirect: 'manual' });
+      const r = await fetch(base + '/api/linkedin/connect?return=account', { headers: { cookie: liAdmin.cookie }, redirect: 'manual' });
       expect(r.status).toBe(302);
       const loc = new URL(r.headers.get('location')!);
       expect(loc.origin + loc.pathname).toBe('https://www.linkedin.com/oauth/v2/authorization');
@@ -691,7 +801,7 @@ describe('multitenant API', () => {
       /* State is single use. */
       expect(await (await fetch(base + `/api/linkedin/callback?code=authcode1&state=${encodeURIComponent(state)}`)).text()).toContain('reason=expired');
 
-      const st = await memberA.req('GET', '/api/linkedin');
+      const st = await liAdmin.req('GET', '/api/linkedin');
       expect(st.body).toMatchObject({ connected: true, name: 'Alice Example' });
       expect(JSON.stringify(st.body)).not.toContain('li-token');
       /* Stored encrypted. */
@@ -702,10 +812,10 @@ describe('multitenant API', () => {
       expect((await adminA.req('GET', '/api/linkedin')).body.connected).toBe(false);
 
       /* Publish: escaped little-text, hashtags, versioned Posts API, CSRF required. */
-      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'x' }, { csrf: false })).status).toBe(403);
-      expect((await memberA.req('POST', '/api/linkedin/posts', { text: '   ' })).status).toBe(400);
-      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'a'.repeat(3001) })).status).toBe(400);
-      const pub = await memberA.req('POST', '/api/linkedin/posts', { text: 'Patch FortiOS (CVE-2026-1) now @team #CyberSecurity #FortiOS' });
+      expect((await liAdmin.req('POST', '/api/linkedin/posts', { text: 'x' }, { csrf: false })).status).toBe(403);
+      expect((await liAdmin.req('POST', '/api/linkedin/posts', { text: '   ' })).status).toBe(400);
+      expect((await liAdmin.req('POST', '/api/linkedin/posts', { text: 'a'.repeat(3001) })).status).toBe(400);
+      const pub = await liAdmin.req('POST', '/api/linkedin/posts', { text: 'Patch FortiOS (CVE-2026-1) now @team #CyberSecurity #FortiOS' });
       expect(pub.status).toBe(201);
       expect(pub.body.url).toBe('https://www.linkedin.com/feed/update/urn:li:share:7212345678901234567/');
       const post = calls.find((c) => c.url.endsWith('/rest/posts'))!;
@@ -718,13 +828,13 @@ describe('multitenant API', () => {
 
       /* LinkedIn revoked the token: the connection is dropped and the user asked to reconnect. */
       postStatus = 401;
-      const gone = await memberA.req('POST', '/api/linkedin/posts', { text: 'again' });
+      const gone = await liAdmin.req('POST', '/api/linkedin/posts', { text: 'again' });
       expect(gone.status).toBe(409);
       expect(gone.body.code).toBe('LINKEDIN_RECONNECT');
-      expect((await memberA.req('GET', '/api/linkedin')).body.connected).toBe(false);
+      expect((await liAdmin.req('GET', '/api/linkedin')).body.connected).toBe(false);
 
       /* Disconnect is idempotent. */
-      expect((await memberA.req('DELETE', '/api/linkedin')).status).toBe(200);
+      expect((await liAdmin.req('DELETE', '/api/linkedin')).status).toBe(200);
     } finally {
       setLinkedInFetch(null);
       delete process.env.LINKEDIN_CLIENT_ID;
@@ -755,7 +865,7 @@ describe('multitenant API', () => {
       return new Response('nope', { status: 404 });
     }) as typeof fetch);
     const connect = async () => {
-      const r = await fetch(base + '/api/linkedin/connect?return=generate', { headers: { cookie: memberA.cookie }, redirect: 'manual' });
+      const r = await fetch(base + '/api/linkedin/connect?return=generate', { headers: { cookie: liAdmin.cookie }, redirect: 'manual' });
       const loc = new URL(r.headers.get('location')!);
       const cb = await fetch(base + `/api/linkedin/callback?code=c&state=${encodeURIComponent(loc.searchParams.get('state')!)}`);
       expect(await cb.text()).toContain('linkedin=connected');
@@ -767,17 +877,17 @@ describe('multitenant API', () => {
       process.env.LINKEDIN_REDIRECT_URI = 'https://cyberpulse.example/api/linkedin/callback';
 
       /* Off by default: the Page scopes are not requested. */
-      expect((await memberA.req('GET', '/api/linkedin')).body.orgPosting).toBe(false);
+      expect((await liAdmin.req('GET', '/api/linkedin')).body.orgPosting).toBe(false);
       process.env.LINKEDIN_ORG_POSTING = '1';
       expect(await connect()).toBe('openid profile w_member_social w_organization_social r_organization_admin');
 
       /* Only Pages with a posting role, with their names. */
-      const st = (await memberA.req('GET', '/api/linkedin')).body;
+      const st = (await liAdmin.req('GET', '/api/linkedin')).body;
       expect(st).toMatchObject({ orgPosting: true, connected: true, canPostAsMember: true, canPostAsOrganization: true });
       expect(st.organizations).toEqual([{ urn: 'urn:li:organization:111', name: 'Hacker-Do', role: 'ADMINISTRATOR' }]);
 
       /* Post as the Page; the audit row records the author. */
-      const pub = await memberA.req('POST', '/api/linkedin/posts', { text: 'Hello from the Page', author: 'urn:li:organization:111' });
+      const pub = await liAdmin.req('POST', '/api/linkedin/posts', { text: 'Hello from the Page', author: 'urn:li:organization:111' });
       expect(pub.status).toBe(201);
       const post = calls.filter((c) => c.url.endsWith('/rest/posts')).pop()!;
       expect(JSON.parse(post.init.body).author).toBe('urn:li:organization:111');
@@ -786,25 +896,25 @@ describe('multitenant API', () => {
 
       /* A Page the member does not hold a posting role on is refused locally. */
       const before = calls.length;
-      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'x', author: 'urn:li:organization:222' })).status).toBe(400);
-      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'x', author: 'urn:li:person:someoneElse' })).status).toBe(400);
+      expect((await liAdmin.req('POST', '/api/linkedin/posts', { text: 'x', author: 'urn:li:organization:222' })).status).toBe(400);
+      expect((await liAdmin.req('POST', '/api/linkedin/posts', { text: 'x', author: 'urn:li:person:someoneElse' })).status).toBe(400);
       expect(calls.length).toBe(before);
       /* Still possible as the member. */
-      const asMe = await memberA.req('POST', '/api/linkedin/posts', { text: 'Me', author: 'member' });
+      const asMe = await liAdmin.req('POST', '/api/linkedin/posts', { text: 'Me', author: 'member' });
       expect(asMe.status).toBe(201);
       expect(JSON.parse(calls.filter((c) => c.url.endsWith('/rest/posts')).pop()!.init.body).author).toBe('urn:li:person:abc123XYZ');
 
       /* LinkedIn refuses the Page (role removed): clear 403, connection kept. */
       postStatus = 403;
-      const denied = await memberA.req('POST', '/api/linkedin/posts', { text: 'x', author: 'urn:li:organization:111' });
+      const denied = await liAdmin.req('POST', '/api/linkedin/posts', { text: 'x', author: 'urn:li:organization:111' });
       expect(denied.status).toBe(403);
       expect(denied.body.error).toContain('admin');
-      expect((await memberA.req('GET', '/api/linkedin')).body.connected).toBe(true);
+      expect((await liAdmin.req('GET', '/api/linkedin')).body.connected).toBe(true);
       postStatus = 201;
 
       /* Refresh picks up a new Page. */
       acls = [...acls, { roleAssignee: 'urn:li:person:abc123XYZ', role: 'CONTENT_ADMINISTRATOR', state: 'APPROVED', organization: 'urn:li:organization:333' }];
-      const ref = await memberA.req('POST', '/api/linkedin/organizations/refresh');
+      const ref = await liAdmin.req('POST', '/api/linkedin/organizations/refresh');
       expect(ref.status).toBe(200);
       expect(ref.body.organizations.map((o: any) => o.name)).toEqual(['Hacker-Do', 'Other Page']);
 
@@ -813,20 +923,20 @@ describe('multitenant API', () => {
       process.env.LINKEDIN_SCOPES = 'w_organization_social r_organization_admin';
       grantedScope = 'w_organization_social,r_organization_admin';
       expect(await connect()).toBe('w_organization_social r_organization_admin');
-      const st2 = (await memberA.req('GET', '/api/linkedin')).body;
+      const st2 = (await liAdmin.req('GET', '/api/linkedin')).body;
       expect(st2).toMatchObject({ canPostAsMember: false, canPostAsOrganization: true, name: null });
       expect(st2.organizations).toHaveLength(2);
-      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'x', author: 'member' })).status).toBe(400);
-      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'x', author: 'urn:li:organization:333' })).status).toBe(201);
+      expect((await liAdmin.req('POST', '/api/linkedin/posts', { text: 'x', author: 'member' })).status).toBe(400);
+      expect((await liAdmin.req('POST', '/api/linkedin/posts', { text: 'x', author: 'urn:li:organization:333' })).status).toBe(201);
 
       /* A token without the Page scope never exposes Pages. */
       delete process.env.LINKEDIN_SCOPES;
       grantedScope = 'openid,profile,w_member_social';
       await connect();
-      const st3 = (await memberA.req('GET', '/api/linkedin')).body;
+      const st3 = (await liAdmin.req('GET', '/api/linkedin')).body;
       expect(st3).toMatchObject({ canPostAsOrganization: false, organizations: [] });
-      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'x', author: 'urn:li:organization:111' })).status).toBe(400);
-      expect((await memberA.req('DELETE', '/api/linkedin')).status).toBe(200);
+      expect((await liAdmin.req('POST', '/api/linkedin/posts', { text: 'x', author: 'urn:li:organization:111' })).status).toBe(400);
+      expect((await liAdmin.req('DELETE', '/api/linkedin')).status).toBe(200);
     } finally {
       setLinkedInFetch(null);
       for (const k of ['LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET', 'LINKEDIN_REDIRECT_URI', 'LINKEDIN_ORG_POSTING', 'LINKEDIN_SCOPES']) delete process.env[k];
@@ -853,7 +963,7 @@ describe('multitenant API', () => {
       return new Response('nope', { status: 404 });
     }) as typeof fetch);
     const connect = async (app: string) => {
-      const r = await fetch(base + `/api/linkedin/connect?return=account&app=${app}`, { headers: { cookie: memberA.cookie }, redirect: 'manual' });
+      const r = await fetch(base + `/api/linkedin/connect?return=account&app=${app}`, { headers: { cookie: liAdmin.cookie }, redirect: 'manual' });
       const loc = new URL(r.headers.get('location')!);
       const cb = await fetch(base + `/api/linkedin/callback?code=c&state=${encodeURIComponent(loc.searchParams.get('state')!)}`);
       expect(await cb.text()).toContain('linkedin=connected');
@@ -866,51 +976,51 @@ describe('multitenant API', () => {
       process.env.LINKEDIN_PAGES_CLIENT_SECRET = 'pagesSecret';
       process.env.LINKEDIN_REDIRECT_URI = 'https://cyberpulse.example/api/linkedin/callback';
 
-      let st = (await memberA.req('GET', '/api/linkedin')).body;
+      let st = (await liAdmin.req('GET', '/api/linkedin')).body;
       expect(st).toMatchObject({ configured: true, orgPosting: true, memberPosting: true, pagesApp: true, connected: false, pagesConnection: { connected: false } });
 
       /* Each app asks only for its own permissions. */
       expect(await connect('main')).toEqual({ clientId: 'mainApp', scope: 'openid profile w_member_social' });
-      st = (await memberA.req('GET', '/api/linkedin')).body;
+      st = (await liAdmin.req('GET', '/api/linkedin')).body;
       expect(st).toMatchObject({ connected: true, canPostAsMember: true, canPostAsOrganization: false, organizations: [], pagesConnection: { connected: false } });
       expect(await connect('pages')).toEqual({ clientId: 'pagesApp', scope: 'w_organization_social r_organization_admin' });
       expect(calls.filter((c) => c.url.endsWith('/accessToken')).pop()!.init.body).toContain('client_secret=pagesSecret');
-      st = (await memberA.req('GET', '/api/linkedin')).body;
+      st = (await liAdmin.req('GET', '/api/linkedin')).body;
       expect(st).toMatchObject({ canPostAsMember: true, canPostAsOrganization: true, name: 'Alice Example', pagesConnection: { connected: true } });
       expect(st.organizations).toEqual([{ urn: 'urn:li:organization:111', name: 'Example Corp', role: 'ADMINISTRATOR' }]);
 
       /* Each author uses the token of its own connection. */
-      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'Page post', author: 'urn:li:organization:111' })).status).toBe(201);
+      expect((await liAdmin.req('POST', '/api/linkedin/posts', { text: 'Page post', author: 'urn:li:organization:111' })).status).toBe(201);
       let post = calls.filter((c) => c.url.endsWith('/rest/posts')).pop()!;
       expect(post.init.headers.Authorization).toBe('Bearer tok-pages');
       expect(JSON.parse(post.init.body).author).toBe('urn:li:organization:111');
-      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'My post', author: 'member' })).status).toBe(201);
+      expect((await liAdmin.req('POST', '/api/linkedin/posts', { text: 'My post', author: 'member' })).status).toBe(201);
       post = calls.filter((c) => c.url.endsWith('/rest/posts')).pop()!;
       expect(post.init.headers.Authorization).toBe('Bearer tok-main');
       expect(JSON.parse(post.init.body).author).toBe('urn:li:person:abc123XYZ');
 
       /* Refresh goes through the pages connection. */
-      expect((await memberA.req('POST', '/api/linkedin/organizations/refresh')).body.organizations).toHaveLength(1);
+      expect((await liAdmin.req('POST', '/api/linkedin/organizations/refresh')).body.organizations).toHaveLength(1);
 
       /* Disconnecting the pages app keeps the profile connection, and revokes with the right app. */
-      expect((await memberA.req('DELETE', '/api/linkedin?app=pages')).status).toBe(200);
+      expect((await liAdmin.req('DELETE', '/api/linkedin?app=pages')).status).toBe(200);
       expect(calls.filter((c) => c.url.endsWith('/revoke')).pop()!.init.body).toContain('client_id=pagesApp');
-      st = (await memberA.req('GET', '/api/linkedin')).body;
+      st = (await liAdmin.req('GET', '/api/linkedin')).body;
       expect(st).toMatchObject({ connected: true, canPostAsMember: true, canPostAsOrganization: false, organizations: [], pagesConnection: { connected: false } });
-      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'x', author: 'urn:li:organization:111' })).status).toBe(400);
+      expect((await liAdmin.req('POST', '/api/linkedin/posts', { text: 'x', author: 'urn:li:organization:111' })).status).toBe(400);
 
       /* Only the pages app configured: no personal posting offered. */
       await connect('pages');
       delete process.env.LINKEDIN_CLIENT_ID;
-      st = (await memberA.req('GET', '/api/linkedin')).body;
+      st = (await liAdmin.req('GET', '/api/linkedin')).body;
       expect(st).toMatchObject({ memberPosting: false, canPostAsMember: false, canPostAsOrganization: true });
-      expect((await memberA.req('POST', '/api/linkedin/posts', { text: 'x', author: 'member' })).status).toBe(409);
-      expect((await memberA.req('GET', '/api/linkedin/connect?app=main')).status).toBe(400);
+      expect((await liAdmin.req('POST', '/api/linkedin/posts', { text: 'x', author: 'member' })).status).toBe(409);
+      expect((await liAdmin.req('GET', '/api/linkedin/connect?app=main')).status).toBe(400);
 
       /* Disconnect without ?app clears everything. */
       process.env.LINKEDIN_CLIENT_ID = 'mainApp';
-      expect((await memberA.req('DELETE', '/api/linkedin')).status).toBe(200);
-      expect((await memberA.req('GET', '/api/linkedin')).body).toMatchObject({ connected: false, pagesConnection: { connected: false } });
+      expect((await liAdmin.req('DELETE', '/api/linkedin')).status).toBe(200);
+      expect((await liAdmin.req('GET', '/api/linkedin')).body).toMatchObject({ connected: false, pagesConnection: { connected: false } });
     } finally {
       setLinkedInFetch(null);
       for (const k of ['LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET', 'LINKEDIN_PAGES_CLIENT_ID', 'LINKEDIN_PAGES_CLIENT_SECRET', 'LINKEDIN_REDIRECT_URI']) delete process.env[k];

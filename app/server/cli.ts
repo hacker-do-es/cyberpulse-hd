@@ -1,5 +1,6 @@
 /* Operator CLI. In Docker:
      docker exec -it cyberpulse npx tsx server/cli.ts create-superadmin <username>
+     docker exec -it cyberpulse npx tsx server/cli.ts create-support <username>
      docker exec -it cyberpulse npx tsx server/cli.ts set-password <username>
      docker exec -it cyberpulse npx tsx server/cli.ts reset-totp <username>
      docker exec -it cyberpulse npx tsx server/cli.ts list-users
@@ -61,6 +62,13 @@ async function main() {
       console.log(`Superadmin "${username}" created.`);
       break;
     }
+    case 'create-support': {
+      if (!username || !USERNAME_RE.test(username)) throw new Error('Usage: create-support <username> (3-64 chars: letters, digits, . _ @ -)');
+      const password = await askNewPassword();
+      await createUser({ username, password, role: 'support', tenantId: null });
+      console.log(`Support user "${username}" created.`);
+      break;
+    }
     case 'set-password': {
       if (!username) throw new Error('Usage: set-password <username>');
       const user = findUser(username);
@@ -81,7 +89,7 @@ async function main() {
       break;
     }
     default:
-      console.log('Commands: create-superadmin <username> | set-password <username> | reset-totp <username> | list-users');
+      console.log('Commands: create-superadmin <username> | create-support <username> | set-password <username> | reset-totp <username> | list-users');
       process.exitCode = cmd ? 1 : 0;
   }
 }

@@ -1,6 +1,6 @@
 import { Newspaper, FileText, History, Server, Radio, Settings, Building2, ScrollText, Layers, HardDrive, Bot } from 'lucide-react';
 import type { ReactNode } from 'react';
-import type { Role } from '@/services/hdApi';
+import type { Permission } from '@/services/hdApi';
 import { tr } from '@/lib/i18n';
 
 export type TabId = 'news' | 'my-stack' | 'technologies' | 'assets' | 'agents' | 'generate' | 'history' | 'channels' | 'settings' | 'admin' | 'logs';
@@ -9,7 +9,8 @@ interface TabConfig {
   id: TabId;
   label: string;
   icon: ReactNode;
-  roles?: Role[];
+  /* Shown when the user has any of these. */
+  needs?: Permission[];
 }
 
 const tabs: TabConfig[] = [
@@ -18,27 +19,29 @@ const tabs: TabConfig[] = [
   { id: 'technologies', label: 'Technologies', icon: <Layers size={16} /> },
   { id: 'assets', label: 'Assets', icon: <HardDrive size={16} /> },
   { id: 'agents', label: 'Agents', icon: <Bot size={16} /> },
-  { id: 'generate', label: 'Generate Post', icon: <FileText size={16} /> },
-  { id: 'history', label: 'History', icon: <History size={16} /> },
-  { id: 'channels', label: 'Channels', icon: <Radio size={16} />, roles: ['admin', 'superadmin'] },
-  /* Company, AI and users only: members have nothing to see there. */
-  { id: 'settings', label: 'Settings', icon: <Settings size={16} />, roles: ['admin', 'superadmin'] },
-  { id: 'admin', label: 'Companies', icon: <Building2 size={16} />, roles: ['superadmin'] },
-  { id: 'logs', label: 'Logs', icon: <ScrollText size={16} />, roles: ['superadmin'] },
+  { id: 'generate', label: 'Generate Post', icon: <FileText size={16} />, needs: ['content.generate'] },
+  { id: 'history', label: 'History', icon: <History size={16} />, needs: ['content.generate'] },
+  { id: 'channels', label: 'Channels', icon: <Radio size={16} />, needs: ['channels.read'] },
+  /* Company, AI and users only. */
+  { id: 'settings', label: 'Settings', icon: <Settings size={16} />, needs: ['settings.manage', 'users.manage'] },
+  { id: 'admin', label: 'Companies', icon: <Building2 size={16} />, needs: ['platform.tenants'] },
+  { id: 'logs', label: 'Logs', icon: <ScrollText size={16} />, needs: ['platform.logs'] },
 ];
 
-export function tabsForRole(role: Role | undefined): TabId[] {
-  return tabs.filter((t) => !t.roles || (role && t.roles.includes(role))).map((t) => t.id);
+const allowed = (t: TabConfig, perms: readonly Permission[]) => !t.needs || t.needs.some((p) => perms.includes(p));
+
+export function tabsFor(perms: readonly Permission[]): TabId[] {
+  return tabs.filter((t) => allowed(t, perms)).map((t) => t.id);
 }
 
 interface NavbarProps {
   activeTab: TabId;
   onTabChange: (tab: TabId) => void;
-  role?: Role;
+  permissions: readonly Permission[];
 }
 
-export default function Navbar({ activeTab, onTabChange, role }: NavbarProps) {
-  const visible = tabs.filter((t) => !t.roles || (role && t.roles.includes(role)));
+export default function Navbar({ activeTab, onTabChange, permissions }: NavbarProps) {
+  const visible = tabs.filter((t) => allowed(t, permissions));
   return (
     <nav className="flex items-center h-14 min-w-0 overflow-x-auto bg-bg-primary shrink" aria-label={tr("Main")}>
       <div className="flex items-center gap-0.5">

@@ -11,12 +11,14 @@ import { MAX_POST_CHARS } from '../services/linkedin/text';
 import { toSqlUtc } from '../services/schedule';
 import { publishDuePosts } from '../services/linkedin/queueWorker';
 import { publishHttpError } from './linkedinController';
+import { can } from '../shared/permissions';
 
 /* The LinkedIn publishing queue of a company: posts from LinkedIn channels
    waiting for approval, posts scheduled by hand, and their outcome.
-   Admins see and decide on everything; members see and manage their own. */
+   Approvers (company admins) see and decide on everything; operators see and
+   manage their own. */
 
-const isAdmin = (req: express.Request) => req.auth!.user.role === 'admin' || req.auth!.user.role === 'superadmin';
+const isAdmin = (req: express.Request) => can(req.auth!.user.role, 'linkedin.approve');
 const MAX_AHEAD_MS = 90 * 86_400_000;
 
 function canManage(req: express.Request, row: LinkedinQueueRow): boolean {

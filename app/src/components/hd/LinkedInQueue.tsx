@@ -1,3 +1,4 @@
+import { useCan } from '@/lib/auth';
 import { useCallback, useEffect, useState } from 'react';
 import { Building2, Check, Clock, ExternalLink, Linkedin, Pencil, RefreshCw, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -213,8 +214,13 @@ export function LinkedInQueuePanel({ timeZone }: { timeZone?: string }) {
   );
 }
 
-/* Generate Post: schedule the current text for a time, as one of my authors. */
+/* Generate Post: schedule the current text for a time, as one of my authors.
+   Goes out without review, so only approvers (company admins) get it. */
 export function LinkedInSchedulePanel({ content }: { content: string }) {
+  return useCan()('linkedin.approve') ? <SchedulePanel content={content} /> : null;
+}
+
+function SchedulePanel({ content }: { content: string }) {
   useI18n();
   const { status } = useLinkedInStatus();
   const [when, setWhen] = useState('');

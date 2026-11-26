@@ -35,10 +35,20 @@ async function call<T>(method: string, url: string, body?: unknown, opts: { raw?
 /*  Auth                                                               */
 /* ------------------------------------------------------------------ */
 
-export type Role = 'superadmin' | 'admin' | 'member';
+/* Mirrors server/shared/permissions.ts; the server enforces it, the UI only
+   hides what would be refused. */
+export type Role = 'superadmin' | 'support' | 'admin' | 'operator' | 'member';
+export type CompanyRole = 'admin' | 'operator' | 'member';
+export const COMPANY_ROLES: CompanyRole[] = ['admin', 'operator', 'member'];
+export type Permission =
+  | 'platform.tenants' | 'platform.feeds' | 'platform.logs' | 'platform.switchTenant' | 'platform.users'
+  | 'inventory.read' | 'inventory.write' | 'channels.read' | 'channels.run' | 'channels.manage'
+  | 'settings.manage' | 'agents.tokens' | 'users.manage' | 'content.generate'
+  | 'linkedin.connect' | 'linkedin.approve';
 
 export interface Me {
   user: { id: number; username: string; displayName: string | null; role: Role; totpEnabled: boolean };
+  permissions: Permission[];
   tenants: Array<{ id: number; name: string; active: boolean }>;
   activeTenant: null | {
     id: number;
@@ -319,7 +329,7 @@ export interface TenantUser {
   id: number;
   username: string;
   displayName: string | null;
-  role: 'admin' | 'member';
+  role: CompanyRole;
   active: boolean;
   totpEnabled: boolean;
   lastLoginAt: string | null;
@@ -328,11 +338,26 @@ export interface TenantUser {
 
 export const usersApi = {
   list: () => call<{ users: TenantUser[] }>('GET', '/api/users').then((r) => r.users),
-  create: (u: { username: string; password: string; role: 'admin' | 'member'; displayName?: string }) =>
+  create: (u: { username: string; password: string; role: CompanyRole; displayName?: string }) =>
     call<{ user: TenantUser }>('POST', '/api/users', u).then((r) => r.user),
-  update: (id: number, u: Partial<{ role: 'admin' | 'member'; active: boolean; displayName: string; password: string; resetTotp: boolean }>) =>
+  update: (id: number, u: Partial<{ role: CompanyRole; active: boolean; displayName: string; password: string; resetTotp: boolean }>) =>
     call<{ user: TenantUser }>('PATCH', `/api/users/${id}`, u).then((r) => r.user),
   remove: (id: number) => call<{ success: true }>('DELETE', `/api/users/${id}`),
+};
+
+/* ------------------------------------------------------------------ */
+/*  Hacker-Do support accounts (superadmin)                            */
+/* ------------------------------------------------------------------ */
+
+export type SupportUser = Omit<TenantUser, 'role'> & { role: 'support' };
+
+export const supportUsersApi = {
+  list: () => call<{ users: SupportUser[] }>('GET', '/api/admin/users').then((r) => r.users),
+  create: (u: { username: string; password: string; displayName?: string }) =>
+    call<{ user: SupportUser }>('POST', '/api/admin/users', u).then((r) => r.user),
+  update: (id: number, u: Partial<{ active: boolean; displayName: string; password: string; resetTotp: boolean }>) =>
+    call<{ user: SupportUser }>('PATCH', `/api/admin/users/${id}`, u).then((r) => r.user),
+  remove: (id: number) => call<{ success: true }>('DELETE', `/api/admin/users/${id}`),
 };
 
 /* ------------------------------------------------------------------ */

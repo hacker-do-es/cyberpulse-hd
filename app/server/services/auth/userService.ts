@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import type express from 'express';
 import { config, flags } from '../../config';
 import type { Role, UserRow } from '../../db/schema';
+import { isPlatformRole } from '../../shared/permissions';
 import { decryptSecret, encryptSecret } from '../../lib/crypto';
 import { sessionRepository } from '../../repositories/sessionRepository';
 import { userRepository } from '../../repositories/userRepository';
@@ -23,7 +24,7 @@ export interface AuthContext {
   user: SessionUser;
   sessionId: string;
   /* The company every tenant-scoped endpoint acts on. Regular users are pinned
-     to their own; the superadmin picks one per session. */
+     to their own; platform users (superadmin, support) pick one per session. */
   tenantId: number | null;
 }
 
@@ -81,8 +82,8 @@ function hashToken(token: string): string {
 /* Returns the cookie token; only its SHA-256 is stored. */
 export function createSession(user: SessionUser): string {
   const token = crypto.randomBytes(32).toString('base64url');
-  /* Superadmins start without a company selected; everyone else is pinned. */
-  const activeTenant = user.role === 'superadmin' ? null : user.tenantId;
+  /* Platform users start without a company selected; everyone else is pinned. */
+  const activeTenant = isPlatformRole(user.role) ? null : user.tenantId;
   sessionRepository.create(hashToken(token), user.id, activeTenant, config.sessionHours);
   sessionRepository.purgeExpired();
   return token;
@@ -120,7 +121,7 @@ export function loadSession(req: express.Request): AuthContext | null {
   return {
     user,
     sessionId: row.sessionId,
-    tenantId: user.role === 'superadmin' ? row.activeTenantId : user.tenantId,
+    tenantId: isPlatformRole(user.role) ? row.activeTenantId : user.tenantId,
   };
 }
 

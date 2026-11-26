@@ -5,13 +5,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { adminApi, type TenantSummary } from '@/services/hdApi';
-import { useAuth } from '@/lib/auth';
+import { useAuth, useCan } from '@/lib/auth';
+import SupportUsersPanel from './SupportUsersPanel';
 import { Panel, PageHeader, Field, Badge, EmptyState } from './ui';
 import { inputCls, selectCls, notifyError, formatDateTime, TIMEZONES } from './helpers';
 import { tr } from '@/lib/i18n';
 
 export default function AdminTab({ onEnterTenant }: { onEnterTenant: () => void }) {
   const { me, switchTenant, refresh } = useAuth();
+  const can = useCan();
   const [tenants, setTenants] = useState<TenantSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -107,6 +109,8 @@ export default function AdminTab({ onEnterTenant }: { onEnterTenant: () => void 
           </div>
         )}
       </Panel>
+
+      {can('platform.users') && <div className="mt-6"><SupportUsersPanel /></div>}
 
       <CreateTenantDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={async () => { await load(); await refresh(); }} />
       <RenameDialog tenant={renaming} onClose={() => setRenaming(null)} onSaved={async () => { await load(); await refresh(); }} />

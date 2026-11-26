@@ -12,6 +12,7 @@ import {
   sessionCookieOptions, setUserPassword, startTotpEnrolment,
 } from '../services/auth/userService';
 import { login } from '../useCases/login';
+import { ROLE_PERMISSIONS, isPlatformRole } from '../shared/permissions';
 
 const TOTP_ISSUER = 'Hacker-Do CyberPulse';
 
@@ -46,10 +47,12 @@ export const authController = {
 
   me(req: express.Request, res: express.Response) {
     const { user, tenantId: activeId } = req.auth!;
-    const tenants = tenantRepository.listBasic(user.role === 'superadmin' ? undefined : user.tenantId);
+    const tenants = tenantRepository.listBasic(isPlatformRole(user.role) ? undefined : user.tenantId);
     const t = activeId ? tenantRepository.findById(activeId) : undefined;
     res.json({
       user: { id: user.id, username: user.username, displayName: user.displayName, role: user.role, totpEnabled: user.totpEnabled },
+      /* What the UI may offer; the server enforces the same map on every endpoint. */
+      permissions: ROLE_PERMISSIONS[user.role],
       tenants: tenants.map((x) => ({ id: x.id, name: x.name, active: x.active })),
       activeTenant: t
         ? {

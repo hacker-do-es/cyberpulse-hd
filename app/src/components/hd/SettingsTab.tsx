@@ -4,15 +4,16 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { settingsApi, usersApi, type TenantSettings, type TenantUser } from '@/services/hdApi';
-import { useAuth } from '@/lib/auth';
+import { COMPANY_ROLES, settingsApi, usersApi, type CompanyRole, type TenantSettings, type TenantUser } from '@/services/hdApi';
+import { useAuth, useCan } from '@/lib/auth';
+import { companyRoleHint, roleLabel } from './roleLabels';
 import { Panel, PageHeader, Field, Badge, EmptyState } from './ui';
 import { inputCls, selectCls, notifyError, formatDateTime, TIMEZONES } from './helpers';
 import { tr } from '@/lib/i18n';
 
 export default function SettingsTab() {
   const { me } = useAuth();
-  const isAdmin = me?.user.role === 'admin' || me?.user.role === 'superadmin';
+  const can = useCan();
 
   return (
     <div className="max-w-5xl mx-auto pb-12">
@@ -21,8 +22,8 @@ export default function SettingsTab() {
         subtitle={tr('Language, time zone, AI provider and users of this company.')}
       />
       <div className="space-y-6">
-        {isAdmin && <CompanyAndAi />}
-        {isAdmin && <UsersPanel />}
+        {can('settings.manage') && <CompanyAndAi />}
+        {can('users.manage') && <UsersPanel />}
       </div>
     </div>
   );
@@ -278,14 +279,14 @@ function UsersPanel() {
                     </td>
                     <td className="px-3 py-2">
                       <select
-                        className={`${selectCls} h-8 w-28 text-xs`}
+                        className={`${selectCls} h-8 w-36 text-xs`}
                         value={u.role}
                         disabled={self}
-                        onChange={(e) => void update(u, { role: e.target.value as 'admin' | 'member' }, tr('Role updated'))}
+                        onChange={(e) => void update(u, { role: e.target.value as CompanyRole }, tr('Role updated'))}
                         aria-label={tr('Role of {name}', { name: u.username })}
+                        title={companyRoleHint(u.role)}
                       >
-                        <option value="admin">{tr("Admin")}</option>
-                        <option value="member">{tr("Member")}</option>
+                        {COMPANY_ROLES.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
                       </select>
                     </td>
                     <td className="px-3 py-2 space-x-1">
@@ -330,7 +331,7 @@ function UsersPanel() {
 }
 
 function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (o: boolean) => void; onCreated: () => Promise<void> }) {
-  const [f, setF] = useState({ username: '', displayName: '', password: '', role: 'member' as 'admin' | 'member' });
+  const [f, setF] = useState({ username: '', displayName: '', password: '', role: 'member' as CompanyRole });
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     setBusy(true);
@@ -360,10 +361,9 @@ function CreateUserDialog({ open, onOpenChange, onCreated }: { open: boolean; on
           <Field label={tr("Initial password")} htmlFor="nu-pw" hint={tr("At least 12 characters. Share it securely; they can change it after logging in.")}>
             <Input id="nu-pw" type="password" autoComplete="new-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} className={inputCls} required minLength={12} />
           </Field>
-          <Field label={tr("Role")} htmlFor="nu-role">
-            <select id="nu-role" className={selectCls} value={f.role} onChange={(e) => setF({ ...f, role: e.target.value as 'admin' | 'member' })}>
-              <option value="member">{tr("Member (read-only)")}</option>
-              <option value="admin">{tr("Admin")}</option>
+          <Field label={tr("Role")} htmlFor="nu-role" hint={companyRoleHint(f.role)}>
+            <select id="nu-role" className={selectCls} value={f.role} onChange={(e) => setF({ ...f, role: e.target.value as CompanyRole })}>
+              {[...COMPANY_ROLES].reverse().map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}
             </select>
           </Field>
           <DialogFooter>

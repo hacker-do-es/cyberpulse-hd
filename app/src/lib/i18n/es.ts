@@ -974,6 +974,26 @@ export const ES: Record<string, string> = {
   'Inventoried by agent ({n})': 'Inventariados por agente ({n})',
   'Added by hand ({n})': 'Cargados a mano ({n})',
   '{n} shown': '{n} mostrados',
+
+  // Roles and support users
+  '2FA reset': '2FA restablecido',
+  'At least 12 characters. Their open sessions are closed.': 'Al menos 12 caracteres. Se cierran sus sesiones abiertas.',
+  'Delete support user "{name}"?': '¿Eliminar el usuario de soporte "{name}"?',
+  'Disable {name}': 'Desactivar a {name}',
+  'Enable {name}': 'Activar a {name}',
+  'Everything, including users and integrations (channels, AI, agent tokens, LinkedIn).': 'Todo, incluidos usuarios e integraciones (canales, IA, tokens de agentes, LinkedIn).',
+  'Hacker-Do staff. They pick a company and work there as operators (stack, assets, running channels) and can read the logs. They cannot manage companies, feeds, users or integrations.': 'Personal de Hacker-Do. Eligen una empresa y trabajan en ella como operadores (stack, activos, ejecutar canales) y pueden leer los logs. No gestionan empresas, fuentes, usuarios ni integraciones.',
+  'Hacker-Do support': 'Soporte de Hacker-Do',
+  'New password for {name}': 'Nueva contraseña para {name}',
+  'New support user': 'Nuevo usuario de soporte',
+  'No support users yet.': 'Todavía no hay usuarios de soporte.',
+  'Operator': 'Operador',
+  'Password updated': 'Contraseña actualizada',
+  'Read only': 'Lector',
+  'Sees the stack, assets, agents and news. Cannot change anything.': 'Ve el stack, los activos, los agentes y las noticias. No puede cambiar nada.',
+  'Support users': 'Usuarios de soporte',
+  'User deleted': 'Usuario eliminado',
+  'Works with the stack and assets and runs the existing channels. No users or integrations.': 'Gestiona el stack y los activos y ejecuta los canales existentes. Sin usuarios ni integraciones.',
 };
 
 /* Server messages with values in them. */
